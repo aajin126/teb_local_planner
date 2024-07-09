@@ -222,7 +222,6 @@ bool TebLocalPlannerROS::setPlan(const std::vector<geometry_msgs::PoseStamped>& 
   return true;
 }
 
-
 bool TebLocalPlannerROS::computeVelocityCommands(geometry_msgs::Twist& cmd_vel)
 {
   std::string dummy_message;
@@ -370,6 +369,8 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
     return mbf_msgs::ExePathResult::NO_VALID_CMD;
   }
 
+  ROS_DEBUG("teb_local_planner was able to obtain a local plan for the current setting.");
+
   // Check for divergence
   if (planner_->hasDiverged())
   {
@@ -384,6 +385,8 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
     last_cmd_ = cmd_vel.twist;
     return mbf_msgs::ExePathResult::NO_VALID_CMD;
   }
+
+  ROS_DEBUG("the trajectory has not diverged.");
          
   // Check feasibility (but within the first few states only)
   if(cfg_.robot.is_footprint_dynamic)
@@ -740,6 +743,8 @@ bool TebLocalPlannerROS::transformGlobalPlan(const tf2_ros::Buffer& tf, const st
     bool robot_reached = false;
     for(int j=0; j < (int)global_plan.size(); ++j)
     {
+      ROS_DEBUG("global_plan size : %d", global_plan.size());
+
       double x_diff = robot_pose.pose.position.x - global_plan[j].pose.position.x;
       double y_diff = robot_pose.pose.position.y - global_plan[j].pose.position.y;
       double new_sq_dist = x_diff * x_diff + y_diff * y_diff;
@@ -752,7 +757,12 @@ bool TebLocalPlannerROS::transformGlobalPlan(const tf2_ros::Buffer& tf, const st
         sq_dist = new_sq_dist;
         i = j;
         if (sq_dist < 0.05)      // 2.5 cm to the robot; take the immediate local minima; if it's not the global
-          robot_reached = true;  // minima, probably means that there's a loop in the path, and so we prefer this
+        {
+          robot_reached = true;  // minima, probably means that there's a loop in the path, and so we prefer this'
+          ROS_DEBUG("find cloest pose robot_pose : (%d, %d), global_plan : (%d, %d)", robot_pose.pose.position.x, robot_pose.pose.position.y, global_plan[j].pose.position.x, global_plan[j].pose.position.y);
+        }
+
+
       }
     }
     

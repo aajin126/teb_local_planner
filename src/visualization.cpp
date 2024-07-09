@@ -66,6 +66,11 @@ void TebVisualization::initialize(ros::NodeHandle& nh, const TebConfig& cfg)
   teb_poses_pub_ = nh.advertise<geometry_msgs::PoseArray>("teb_poses", 100);
   teb_marker_pub_ = nh.advertise<visualization_msgs::Marker>("teb_markers", 1000);
   feedback_pub_ = nh.advertise<teb_local_planner::FeedbackMsg>("teb_feedback", 10);  
+  footprint_pub_ = nh.advertise<visualization_msgs::Marker>("footprint_markers", 1000);
+  footprintmodel_pub_ = nh.advertise<visualization_msgs::Marker>("footprintmodel_markers", 1000);
+  infeasiblefootprint_pub_ = nh.advertise<visualization_msgs::Marker>("infeasiblefootprint_markers", 1000);
+  infeasiblefootprintmodel_pub_ = nh.advertise<visualization_msgs::Marker>("infeasiblefootprintmodel_markers", 1000);
+
   
   initialized_ = true; 
 }
@@ -132,21 +137,21 @@ void TebVisualization::publishRobotFootprintModel(const PoseSE2& current_pose, c
 
   int idx = 0;
   for (std::vector<visualization_msgs::Marker>::iterator marker_it = markers.begin(); marker_it != markers.end(); ++marker_it, ++idx)
-  {
+  { //square
     marker_it->header.frame_id = cfg_->map_frame;
     marker_it->header.stamp = ros::Time::now();
     marker_it->action = visualization_msgs::Marker::ADD;
     marker_it->ns = ns;
     marker_it->id = idx;
     marker_it->lifetime = ros::Duration(2.0);
-    teb_marker_pub_.publish(*marker_it);
+    footprintmodel_pub_.publish(*marker_it);
   }
   
 }
 
 void TebVisualization::publishRobotFootprint(const PoseSE2& current_pose, const std::vector<geometry_msgs::Point>& footprint,
                                              const std::string& ns, const std_msgs::ColorRGBA &color)
-{
+{ // circle 
   if ( printErrorWhenNotInitialized() || footprint.empty() )
     return;
 
@@ -162,16 +167,109 @@ void TebVisualization::publishRobotFootprint(const PoseSE2& current_pose, const 
   vertex_marker.points = footprint;
   vertex_marker.points.push_back(footprint.front());  // close the polygon
   current_pose.toPoseMsg(vertex_marker.pose);
-  teb_marker_pub_.publish(vertex_marker);
+  footprint_pub_.publish(vertex_marker);
 }
 
+void TebVisualization::publishInfeasibleRobotFootprintModel(const PoseSE2& current_pose, const BaseRobotFootprintModel& robot_model,
+                                                  const std::string& ns, const std_msgs::ColorRGBA &color)
+{
+  if ( printErrorWhenNotInitialized() )
+    return;
+  
+  std::vector<visualization_msgs::Marker> markers;
+  robot_model.visualizeRobot(current_pose, markers, color);
+  if (markers.empty())
+    return;
+
+  int idx = 0;
+  for (std::vector<visualization_msgs::Marker>::iterator marker_it = markers.begin(); marker_it != markers.end(); ++marker_it, ++idx)
+  { //square
+    marker_it->header.frame_id = cfg_->map_frame;
+    marker_it->header.stamp = ros::Time::now();
+    marker_it->action = visualization_msgs::Marker::ADD;
+    marker_it->ns = ns;
+    marker_it->id = idx;
+    marker_it->lifetime = ros::Duration(2.0);
+    infeasiblefootprintmodel_pub_.publish(*marker_it);
+  }
+  
+}
+
+void TebVisualization::publishInfeasibleRobotFootprint(const PoseSE2& current_pose, const std::vector<geometry_msgs::Point>& footprint,
+                                             const std::string& ns, const std_msgs::ColorRGBA &color)
+{ // circle 
+  if ( printErrorWhenNotInitialized() || footprint.empty() )
+    return;
+
+  visualization_msgs::Marker vertex_marker;
+  vertex_marker.header.frame_id = cfg_->map_frame;
+  vertex_marker.header.stamp = ros::Time::now();
+  vertex_marker.ns = ns;
+  vertex_marker.type = visualization_msgs::Marker::LINE_STRIP;
+  vertex_marker.action = visualization_msgs::Marker::ADD;
+  vertex_marker.color = color;
+  vertex_marker.scale.x = 0.01;
+  vertex_marker.lifetime = ros::Duration(2.0);
+  vertex_marker.points = footprint;
+  vertex_marker.points.push_back(footprint.front());  // close the polygon
+  current_pose.toPoseMsg(vertex_marker.pose);
+  infeasiblefootprint_pub_.publish(vertex_marker);
+}
 void TebVisualization::publishInfeasibleRobotPose(const PoseSE2& infeasible_pose,
                                                   const BaseRobotFootprintModel& robot_model,
                                                   const std::vector<geometry_msgs::Point>& footprint)
 {
-  publishRobotFootprintModel(infeasible_pose, robot_model, "InfeasibleRobotPose/model", toColorMsg(0.5, 0.8, 0.0, 0.0));
-  publishRobotFootprint(infeasible_pose, footprint, "InfeasibleRobotPose/footprint", toColorMsg(0.5, 0.9, 0.7, 0.0));
+  publishInfeasibleRobotFootprintModel(infeasible_pose, robot_model, "InfeasibleRobotPose/model", toColorMsg(0.5, 0.8, 0.0, 0.0)); //red
+  publishInfeasibleRobotFootprint(infeasible_pose, footprint, "InfeasibleRobotPose/footprint", toColorMsg(0.5, 0.9, 0.7, 0.0)); //yellow
 }
+
+void TebVisualization::publishRobotPose(const PoseSE2& pose,
+                                                  const BaseRobotFootprintModel& robot_model,
+                                                  const std::vector<geometry_msgs::Point>& footprint)
+{
+  publishRobotFootprintModel(pose, robot_model, "RobotPose/model", toColorMsg(1.0, 0.0, 0.0, 0.0)); //black
+  publishRobotFootprint(pose, footprint, "RobotPose/footprint", toColorMsg(1.0, 0.0, 0.0, 0.0)); // black 
+}
+
+void TebVisualization::visualizeIntermediatePoint(const PoseSE2& pose, const std::string& ns)
+{
+  if ( printErrorWhenNotInitialized())
+    return;
+
+  geometry_msgs::Point point_msg;
+  point_msg.x = pose.x();  // x coordinate of the point
+  point_msg.y = pose.y();  // y coordinate of the point
+  point_msg.z = 0.0;  // assuming a 2D plane, so z coordinate is 0
+
+  visualization_msgs::Marker marker;
+  marker.header.frame_id = cfg_->map_frame; // map frame
+  marker.header.stamp = ros::Time::now();  // current time
+  marker.ns = ns;
+  marker.type = visualization_msgs::Marker::POINTS;  // marker type
+  marker.action = visualization_msgs::Marker::ADD;  // add marker action
+
+  // Set the scale of the marker
+  marker.scale.x = 0.05;  // x scale (width)
+  marker.scale.y = 0.05;  // y scale (height)
+
+  // Set the color of the marker
+  marker.color.a = 1.0;  // alpha (transparency)
+  marker.color.r = 0.0;  // red component
+  marker.color.g = 0.0;  // green component
+  marker.color.b = 1.0;  // blue component
+
+  marker.points.push_back(point_msg);
+
+  // Check if the points list is empty
+  if (marker.points.empty()) {
+    ROS_WARN("Points list is empty for visualization marker. Skipping visualization.");
+    return;
+  }
+
+  // Publish the marker
+  teb_marker_pub_.publish(marker);
+}
+
 
 void TebVisualization::publishObstacles(const ObstContainer& obstacles, double scale) const
 {
@@ -392,53 +490,72 @@ void TebVisualization::publishViaPoints(const std::vector< Eigen::Vector2d, Eige
 
 void TebVisualization::publishTebContainer(const TebOptPlannerContainer& teb_planner, const std::string& ns)
 {
-if ( printErrorWhenNotInitialized() )
-    return;
-  
-  visualization_msgs::Marker marker;
-  marker.header.frame_id = cfg_->map_frame;
-  marker.header.stamp = ros::Time::now();
-  marker.ns = ns;
-  marker.id = 0;
-  marker.type = visualization_msgs::Marker::LINE_LIST;
-  marker.action = visualization_msgs::Marker::ADD;
-  
-  // Iterate through teb pose sequence
-  for( TebOptPlannerContainer::const_iterator it_teb = teb_planner.begin(); it_teb != teb_planner.end(); ++it_teb )
-  {	  
-    // iterate single poses
-    PoseSequence::const_iterator it_pose = it_teb->get()->teb().poses().begin();
-    TimeDiffSequence::const_iterator it_timediff = it_teb->get()->teb().timediffs().begin();
-    PoseSequence::const_iterator it_pose_end = it_teb->get()->teb().poses().end();
-    std::advance(it_pose_end, -1); // since we are interested in line segments, reduce end iterator by one.
-    double time = 0;
+  if (printErrorWhenNotInitialized())
+      return;
 
-    while (it_pose != it_pose_end)
-    {
-      geometry_msgs::Point point_start;
-      point_start.x = (*it_pose)->x();
-      point_start.y = (*it_pose)->y();
-      point_start.z = cfg_->hcp.visualize_with_time_as_z_axis_scale*time;
-      marker.points.push_back(point_start);
+  visualization_msgs::Marker line_marker;
+  line_marker.header.frame_id = cfg_->map_frame;
+  line_marker.header.stamp = ros::Time::now();
+  line_marker.ns = ns;
+  line_marker.id = 0;
+  line_marker.type = visualization_msgs::Marker::LINE_LIST;
+  line_marker.action = visualization_msgs::Marker::ADD;
 
-      time += (*it_timediff)->dt();
+  visualization_msgs::Marker point_marker;
+  point_marker.header.frame_id = cfg_->map_frame;
+  point_marker.header.stamp = ros::Time::now();
+  point_marker.ns = ns;
+  point_marker.id = 1; // unique id for the point marker
+  point_marker.type = visualization_msgs::Marker::POINTS;
+  point_marker.action = visualization_msgs::Marker::ADD;
+  point_marker.scale.x = 0.05; // scale for the points
+  point_marker.scale.y = 0.05;
+  point_marker.color.a = 1.0;  // alpha
+  point_marker.color.r = 1.0;  // red
+  point_marker.color.g = 0.0;  // green
+  point_marker.color.b = 0.0;  // blue
 
-      geometry_msgs::Point point_end;
-      point_end.x = (*boost::next(it_pose))->x();
-      point_end.y = (*boost::next(it_pose))->y();
-      point_end.z = cfg_->hcp.visualize_with_time_as_z_axis_scale*time;
-      marker.points.push_back(point_end);
-      ++it_pose;
-      ++it_timediff;
-    }
+    // Iterate through teb pose sequence
+  for (TebOptPlannerContainer::const_iterator it_teb = teb_planner.begin(); it_teb != teb_planner.end(); ++it_teb)
+  {
+      // iterate single poses
+      PoseSequence::const_iterator it_pose = it_teb->get()->teb().poses().begin();
+      TimeDiffSequence::const_iterator it_timediff = it_teb->get()->teb().timediffs().begin();
+      PoseSequence::const_iterator it_pose_end = it_teb->get()->teb().poses().end();
+      std::advance(it_pose_end, -1); // since we are interested in line segments, reduce end iterator by one.
+      double time = 0;
+
+      while (it_pose != it_pose_end)
+      {
+          geometry_msgs::Point point_start;
+          point_start.x = (*it_pose)->x();
+          point_start.y = (*it_pose)->y();
+          point_start.z = cfg_->hcp.visualize_with_time_as_z_axis_scale * time;
+          line_marker.points.push_back(point_start);
+          point_marker.points.push_back(point_start); // Add the point to the point marker
+
+          time += (*it_timediff)->dt();
+
+          geometry_msgs::Point point_end;
+          point_end.x = (*boost::next(it_pose))->x();
+          point_end.y = (*boost::next(it_pose))->y();
+          point_end.z = cfg_->hcp.visualize_with_time_as_z_axis_scale * time;
+          line_marker.points.push_back(point_end);
+          point_marker.points.push_back(point_end); // Add the point to the point marker
+
+          ++it_pose;
+          ++it_timediff;
+      }
   }
-  marker.scale.x = 0.01;
-  marker.color.a = 1.0;
-  marker.color.r = 0.5;
-  marker.color.g = 1.0;
-  marker.color.b = 0.0;
 
-  teb_marker_pub_.publish( marker );
+  line_marker.scale.x = 0.01;
+  line_marker.color.a = 1.0;
+  line_marker.color.r = 0.5;
+  line_marker.color.g = 1.0;
+  line_marker.color.b = 0.0;
+
+  teb_marker_pub_.publish(line_marker);
+  teb_marker_pub_.publish(point_marker); // Publish the point marker
 }
 
 void TebVisualization::publishFeedbackMessage(const std::vector< boost::shared_ptr<TebOptimalPlanner> >& teb_planners,

@@ -399,7 +399,11 @@ bool TimedElasticBand::initTrajectoryToGoal(const std::vector<geometry_msgs::Pos
 
     bool backwards = false;
     if (guess_backwards_motion && (goal.position()-start.position()).dot(start.orientationUnitVec()) < 0) // check if the goal is behind the start pose (w.r.t. start orientation)
-        backwards = true;
+    {
+      backwards = true;
+      ROS_DEBUG("goal pose is behind start pose");
+    }
+    
     // TODO: dt ~ max_vel_x_backwards for backwards motions
     
     for (int i=1; i<(int)plan.size()-1; ++i)

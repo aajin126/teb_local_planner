@@ -669,14 +669,23 @@ protected:
    * @return shared pointer to the g2o::SparseOptimizer instance
    */
   boost::shared_ptr<g2o::SparseOptimizer> initOptimizer();
-    
+
+  //new  
+  //std::vector<geometry_msgs::Point> footprint_spec_; //!< Store the footprint of the robot 
+  //double robot_inscribed_radius_; //!< The radius of the inscribed circle of the robot (collision possible)
+  //double robot_circumscribed_radius; //!< The radius of the circumscribed circle of the robot
 
   // external objects (store weak pointers)
   const TebConfig* cfg_; //!< Config class that stores and manages all related parameters
   ObstContainer* obstacles_; //!< Store obstacles that are relevant for planning
   const ViaPointContainer* via_points_; //!< Store via points for planning
   std::vector<ObstContainer> obstacles_per_vertex_; //!< Store the obstacles associated with the n-1 initial vertices
-  
+
+  //new 
+  //costmap_2d::Costmap2DROS* costmap_ros_; //!< Pointer to the costmap ros wrapper, received from the navigation stack
+  //costmap_2d::Costmap2D* costmap_; //!< Pointer to the 2d costmap (obtained from the costmap ros wrapper)
+  //tf2_ros::Buffer* tf_; //!< pointer to tf buffer
+
   double cost_; //!< Store cost value of the current hyper-graph
   RotType prefer_rotdir_; //!< Store whether to prefer a specific initial rotation in optimization (might be activated in case the robot oscillates)
   

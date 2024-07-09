@@ -136,8 +136,15 @@ public:
    * @param ns Namespace for the marker objects
    * @param color Color of the footprint
    */
-  void publishRobotFootprintModel(const PoseSE2& current_pose, const BaseRobotFootprintModel& robot_model, const std::string& ns = "RobotFootprintModel",
+
+  void publishInfeasibleRobotFootprintModel(const PoseSE2& current_pose, const BaseRobotFootprintModel& robot_model, const std::string& ns = "RobotInfeasibleFootprintModel",
                                   const std_msgs::ColorRGBA& color = toColorMsg(0.5, 0.0, 0.8, 0.0));
+
+  void publishInfeasibleRobotFootprint(const PoseSE2& current_pose, const std::vector<geometry_msgs::Point>& footprint,
+                             const std::string& ns, const std_msgs::ColorRGBA &color);
+
+  void publishRobotFootprintModel(const PoseSE2& current_pose, const BaseRobotFootprintModel& robot_model, const std::string& ns = "RobotFootprintModel",
+                                  const std_msgs::ColorRGBA& color = toColorMsg(1.0, 0.0, 0.0, 0.0));
 
   void publishRobotFootprint(const PoseSE2& current_pose, const std::vector<geometry_msgs::Point>& footprint,
                              const std::string& ns, const std_msgs::ColorRGBA &color);
@@ -152,6 +159,11 @@ public:
   void publishInfeasibleRobotPose(const PoseSE2& infeasible_pose, const BaseRobotFootprintModel& robot_model,
                                   const std::vector<geometry_msgs::Point>& footprint);
 
+  void publishRobotPose(const PoseSE2& pose, const BaseRobotFootprintModel& robot_model,
+                                  const std::vector<geometry_msgs::Point>& footprint);
+
+  void visualizeIntermediatePoint(const PoseSE2& pose, const std::string& ns = "IntermediatePoints");
+  
   /**
    * @brief Publish obstacle positions to the ros topic \e ../../teb_markers
    * @todo Move filling of the marker message to polygon class in order to avoid checking types.
@@ -261,6 +273,10 @@ protected:
   ros::Publisher teb_poses_pub_; //!< Publisher for the trajectory pose sequence
   ros::Publisher teb_marker_pub_; //!< Publisher for visualization markers
   ros::Publisher feedback_pub_; //!< Publisher for the feedback message for analysis and debug purposes
+  ros::Publisher footprint_pub_; //!< Publisher for the local plan
+  ros::Publisher footprintmodel_pub_; //!< Publisher for the trajectory pose sequence
+  ros::Publisher infeasiblefootprint_pub_; //!< Publisher for visualization markers
+  ros::Publisher infeasiblefootprintmodel_pub_; //!< Publisher for the feedback message for analysis and debug purposes
   
   const TebConfig* cfg_; //!< Config class that stores and manages all related parameters
   
