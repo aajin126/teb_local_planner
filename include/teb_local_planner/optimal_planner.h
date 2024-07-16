@@ -672,7 +672,7 @@ protected:
 
   //new  
   //std::vector<geometry_msgs::Point> footprint_spec_; //!< Store the footprint of the robot 
-  //double robot_inscribed_radius_; //!< The radius of the inscribed circle of the robot (collision possible)
+  double robot_inscribed_radius_; //!< The radius of the inscribed circle of the robot (collision possible)
   //double robot_circumscribed_radius; //!< The radius of the circumscribed circle of the robot
 
   // external objects (store weak pointers)

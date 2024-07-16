@@ -224,6 +224,7 @@ bool TebLocalPlannerROS::setPlan(const std::vector<geometry_msgs::PoseStamped>& 
 
 bool TebLocalPlannerROS::computeVelocityCommands(geometry_msgs::Twist& cmd_vel)
 {
+  ROS_DEBUG("computeVelocityCommands");
   std::string dummy_message;
   geometry_msgs::PoseStamped dummy_pose;
   geometry_msgs::TwistStamped dummy_velocity, cmd_vel_stamped;
@@ -237,6 +238,8 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
                                                      geometry_msgs::TwistStamped &cmd_vel,
                                                      std::string &message)
 {
+
+  ROS_DEBUG("computeVelocityCommands for real plan");
   // check if plugin initialized
   if(!initialized_)
   {
@@ -353,10 +356,60 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
     
   // Do not allow config changes during the following optimization step
   boost::mutex::scoped_lock cfg_lock(cfg_.configMutex());
+
+    int look_ahead_idx = cfg_.trajectory.feasibility_check_no_poses;
+  double inscribed_radius = robot_inscribed_radius_;
+
+  ROS_DEBUG("transformed plan size : %d", transformed_plan.size());
+
+  if (look_ahead_idx < 0 || look_ahead_idx >= transformed_plan.size())
+      look_ahead_idx = transformed_plan.size() - 1;
+
+  ROS_DEBUG("look ahead idx : %d", look_ahead_idx);
+
+  for (int i=0; i <= look_ahead_idx; ++i)
+  {           
+      if (i<look_ahead_idx)
+      {
+        // Quaternion을 Yaw 값으로 변환
+        double yaw1 = tf2::getYaw(transformed_plan[i].pose.orientation);
+        double yaw2 = tf2::getYaw(transformed_plan[i + 1].pose.orientation);
+
+        ROS_DEBUG("yaw[%d] : %d , yaw[%d] : %d", i, yaw1, i+1, yaw2);
+
+        double delta_rot = g2o::normalize_theta(yaw2) - g2o::normalize_theta(yaw1);
+
+        ROS_DEBUG("delta_rot : %d", delta_rot);
+
+        // Point를 Eigen::Vector2d로 변환
+        Eigen::Vector2d pos1(transformed_plan[i].pose.position.x, transformed_plan[i].pose.position.y);
+        Eigen::Vector2d pos2(transformed_plan[i + 1].pose.position.x, transformed_plan[i + 1].pose.position.y);
+
+        Eigen::Vector2d delta_dist = pos2 - pos1;
+
+        if(fabs(delta_rot) > cfg_.trajectory.min_resolution_collision_check_angular || delta_dist.norm() > inscribed_radius)
+       {
+          int n_additional_samples = std::max(std::ceil(fabs(delta_rot) / cfg_.trajectory.min_resolution_collision_check_angular), std::ceil(delta_dist.norm() / inscribed_radius)) - 1;
+
+          ROS_DEBUG("initial planning -> additional_samples number : %d", n_additional_samples);
+          PoseSE2 intermediate_pose = transformed_plan[i].pose;
+          visualization_->visualizeIntermediatePoint(intermediate_pose);
+          ROS_DEBUG("pose %d turn into intermediate_pose 0", i);
+
+          std::cout << "Press Enter to continue..." << std::endl;
+          std::cin.get();
+        }
+      }
+  }
     
   // Now perform the actual planning
-//   bool success = planner_->plan(robot_pose_, robot_goal_, robot_vel_, cfg_.goal_tolerance.free_goal_vel); // straight line init
+  // bool success = planner_->plan(robot_pose_, robot_goal_, robot_vel_, cfg_.goal_tolerance.free_goal_vel); // straight line init
+  ROS_DEBUG("planning based transformed plan");
+
   bool success = planner_->plan(transformed_plan, &robot_vel_, cfg_.goal_tolerance.free_goal_vel);
+  
+  ROS_DEBUG("Plan result: %s", success ? "successful" : "failed");
+
   if (!success)
   {
     planner_->clearPlanner(); // force reinitialization for next time
@@ -369,9 +422,11 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
     return mbf_msgs::ExePathResult::NO_VALID_CMD;
   }
 
-  ROS_DEBUG("teb_local_planner was able to obtain a local plan for the current setting.");
+  ROS_DEBUG("teb_local_planner was able to obtain a local plan for the current setting.");  
 
   // Check for divergence
+  ROS_DEBUG("Check for divergence");
+
   if (planner_->hasDiverged())
   {
     cmd_vel.twist.linear.x = cmd_vel.twist.linear.y = cmd_vel.twist.angular.z = 0;
@@ -389,12 +444,14 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
   ROS_DEBUG("the trajectory has not diverged.");
          
   // Check feasibility (but within the first few states only)
+
   if(cfg_.robot.is_footprint_dynamic)
   {
     // Update footprint of the robot and minimum and maximum distance from the center of the robot to its footprint vertices.
     footprint_spec_ = costmap_ros_->getRobotFootprint();
     costmap_2d::calculateMinAndMaxDistances(footprint_spec_, robot_inscribed_radius_, robot_circumscribed_radius);
   }
+  ROS_DEBUG("Check for feasibility");
 
   bool feasible = planner_->isTrajectoryFeasible(costmap_model_.get(), footprint_spec_, robot_inscribed_radius_, robot_circumscribed_radius, cfg_.trajectory.feasibility_check_no_poses, cfg_.trajectory.feasibility_check_lookahead_distance);
   if (!feasible)
@@ -413,6 +470,7 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
   }
 
   // Get the velocity command for this sampling interval
+  ROS_DEBUG("Get the velocity command");
   if (!planner_->getVelocityCommand(cmd_vel.twist.linear.x, cmd_vel.twist.linear.y, cmd_vel.twist.angular.z, cfg_.trajectory.control_look_ahead_poses))
 
   {
@@ -659,6 +717,7 @@ Eigen::Vector2d TebLocalPlannerROS::tfPoseToEigenVector2dTransRot(const tf::Pose
       
 bool TebLocalPlannerROS::pruneGlobalPlan(const tf2_ros::Buffer& tf, const geometry_msgs::PoseStamped& global_pose, std::vector<geometry_msgs::PoseStamped>& global_plan, double dist_behind_robot)
 {
+  ROS_DEBUG("Prune Global Plan");
   if (global_plan.empty())
     return true;
   
@@ -827,7 +886,8 @@ bool TebLocalPlannerROS::transformGlobalPlan(const tf2_ros::Buffer& tf, const st
 
     return false;
   }
-
+  
+  ROS_DEBUG("Successfully transform global plan");
   return true;
 }
 
