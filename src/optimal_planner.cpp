@@ -1393,7 +1393,7 @@ for (int i=0; i <= look_ahead_idx; ++i)
         }
         return false;
     }
-  /*
+  
     // Checks if the distance between two poses is higher than the robot radius or the orientation diff is bigger than the specified threshold
     // and interpolates in that case.
     // (if obstacles are pushing two consecutive poses away, the center between two consecutive poses might coincide with the obstacle ;-)!
@@ -1432,10 +1432,10 @@ for (int i=0; i <= look_ahead_idx; ++i)
                 
                 visualization_->visualizeIntermediatePoint(intermediate_pose); 
 
-                ROS_DEBUG("Footprint cost at intermediate step %d: %f", step, intermediate_cost);
+                // ROS_DEBUG("Footprint cost at intermediate step %d: %f", step, intermediate_cost);
 
-                std::cout << "Press Enter to continue..." << std::endl;
-                std::cin.get();
+                // std::cout << "Press Enter to continue..." << std::endl;
+                // std::cin.get();
 
                 // Implement optimization part when adding intermediate pose 
 
@@ -1468,7 +1468,7 @@ for (int i=0; i <= look_ahead_idx; ++i)
             }
         }
     }
-    */
+    
 }
 return true;
 }

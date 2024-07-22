@@ -176,8 +176,8 @@ private:
         ROS_INFO("Robot position (x, y): (%f, %f)", x, y);
 
         // Convert robot position to map coordinates if necessary
-        float map_x = x / map_resolution_ + map_width_ / 2;
-        float map_y = y / map_resolution_ + map_height_ / 2;
+        int map_x = static_cast<int>(x / map_resolution_ + map_width_ / 2);
+        int map_y = static_cast<int>(y / map_resolution_ + map_height_ / 2);
 
         // Calculate distances from the robot to all obstacles in the map
         float min_distance = std::numeric_limits<float>::max();

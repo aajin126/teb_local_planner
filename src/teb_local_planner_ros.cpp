@@ -356,8 +356,8 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
     
   // Do not allow config changes during the following optimization step
   boost::mutex::scoped_lock cfg_lock(cfg_.configMutex());
-
-    int look_ahead_idx = cfg_.trajectory.feasibility_check_no_poses;
+/*
+  int look_ahead_idx = cfg_.trajectory.feasibility_check_no_poses;
   double inscribed_radius = robot_inscribed_radius_;
 
   ROS_DEBUG("transformed plan size : %d", transformed_plan.size());
@@ -375,7 +375,7 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
         double yaw1 = tf2::getYaw(transformed_plan[i].pose.orientation);
         double yaw2 = tf2::getYaw(transformed_plan[i + 1].pose.orientation);
 
-        ROS_DEBUG("yaw[%d] : %d , yaw[%d] : %d", i, yaw1, i+1, yaw2);
+        ROS_DEBUG("yaw[i] : %d , yaw[i+1] : %d", yaw1, yaw2);
 
         double delta_rot = g2o::normalize_theta(yaw2) - g2o::normalize_theta(yaw1);
 
@@ -388,7 +388,7 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
         Eigen::Vector2d delta_dist = pos2 - pos1;
 
         if(fabs(delta_rot) > cfg_.trajectory.min_resolution_collision_check_angular || delta_dist.norm() > inscribed_radius)
-       {
+        {
           int n_additional_samples = std::max(std::ceil(fabs(delta_rot) / cfg_.trajectory.min_resolution_collision_check_angular), std::ceil(delta_dist.norm() / inscribed_radius)) - 1;
 
           ROS_DEBUG("initial planning -> additional_samples number : %d", n_additional_samples);
@@ -398,10 +398,10 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
 
           std::cout << "Press Enter to continue..." << std::endl;
           std::cin.get();
-        }
+         }
       }
   }
-    
+  */
   // Now perform the actual planning
   // bool success = planner_->plan(robot_pose_, robot_goal_, robot_vel_, cfg_.goal_tolerance.free_goal_vel); // straight line init
   ROS_DEBUG("planning based transformed plan");
