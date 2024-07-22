@@ -1,5 +1,15 @@
 #include "ros/ros.h"
-#include "nav_msgs/OccupancyGrid.h"
+
+// messages
+#include <nav_msgs/Path.h>
+#include <geometry_msgs/PoseStamped.h>
+#include <nav_msgs/OccupancyGrid.h>
+#include <tf/transform_datatypes.h>
+#include <teb_local_planner/TrajectoryMsg.h>
+#include <sensor_msgs/Image.h>
+
+#include <nav_msgs/Odometry.h>
+#include <limits.h>
 
 void sdt_dead_reckoning(unsigned int width, unsigned int height, unsigned char threshold,  const unsigned char* image, float* distance_field) {
 	// The internal buffers have a 1px padding around them so we can avoid border checks in the loops below
@@ -133,60 +143,43 @@ void sdt_dead_reckoning(unsigned int width, unsigned int height, unsigned char t
 
 class DistanceFieldUpdater {
 public:
-    DistanceFieldUpdater(ros::NodeHandle& nh) {
-        // Subscribe to the map topic
-        map_sub_ = nh.subscribe("/map", 1, &DistanceFieldUpdater::mapCallback, this);
-        // Subscribe to the robot's pose topic
-        pose_sub_ = nh.subscribe("/odom", 1, &DistanceFieldUpdater::poseCallback, this);
-        // Publisher for the distance field
-        distance_pub_ = nh.advertise<sensor_msgs::Image>("distance_field", 1);
-        // Publisher for robot distance info
-        robot_distance_pub_ = nh.advertise<sensor_msgs::Image>("robot_distance_field", 1);
+    DistanceFieldUpdater(ros::NodeHandle& nh) : nh_(nh), map_received_(false) {
+        // Subscribe to the Odometry topic
+        pose_sub_ = nh_.subscribe("/odom", 1, &DistanceFieldUpdater::poseCallback, this);
+        // Subscribe to the local costmap topic
+        costmap_sub_ = nh_.subscribe("/move_base/local_costmap/costmap", 1, &DistanceFieldUpdater::costmapCallback, this);
+        // Publisher for the minimum distance to obstacles
+        robot_distance_pub_ = nh_.advertise<sensor_msgs::Image>("/robot_distance", 1);
+        ROS_INFO("DistanceFieldUpdater initialized");
     }
 
 private:
-    void mapCallback(const nav_msgs::OccupancyGrid::ConstPtr& msg) {
-        const unsigned char* binary_map = msg->data.data();
-        unsigned int width = msg->info.width;
-        unsigned int height = msg->info.height;
-        unsigned char threshold = 50; // Threshold for binary conversion
+    ros::NodeHandle nh_;
+    ros::Subscriber pose_sub_;
+    ros::Subscriber costmap_sub_;
+    ros::Publisher robot_distance_pub_;
 
-        float* distance_field = new float[width * height];
-        sdt_dead_reckoning(width, height, threshold, binary_map, distance_field);
+    bool map_received_; // Variable to track if the map has been received
+    unsigned int map_width_;
+    unsigned int map_height_;
+    float map_resolution_;
+    std::vector<float> distance_field_;
 
-        // Create and publish the distance field image
-        sensor_msgs::Image img_msg;
-        img_msg.header.frame_id = "map";
-        img_msg.height = height;
-        img_msg.width = width;
-        img_msg.encoding = "32FC1";
-        img_msg.step = width * sizeof(float);
-        img_msg.data.resize(img_msg.step * height);
-        memcpy(&img_msg.data[0], distance_field, img_msg.step * height);
+    // Callback function to handle incoming odometry messages
+    void poseCallback(const nav_msgs::Odometry::ConstPtr& msg) {
+        if (!map_received_) return;  // Ensure that the map is received
 
-        distance_pub_.publish(img_msg);
-
-        delete[] distance_field;
-    }
-
-    void poseCallback(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr& msg) {
-        if (!map_received_) return;
-
-        // Convert pose to map coordinates
+        // Extract robot position from the odometry message
         float x = msg->pose.pose.position.x;
         float y = msg->pose.pose.position.y;
+
+        ROS_INFO("Robot position (x, y): (%f, %f)", x, y);
+
+        // Convert robot position to map coordinates if necessary
         float map_x = x / map_resolution_ + map_width_ / 2;
         float map_y = y / map_resolution_ + map_height_ / 2;
 
         // Calculate distances from the robot to all obstacles in the map
-        sensor_msgs::Image robot_distance_msg;
-        robot_distance_msg.header.frame_id = "base_link";
-        robot_distance_msg.height = 1;
-        robot_distance_msg.width = 1;
-        robot_distance_msg.encoding = "32FC1";
-        robot_distance_msg.step = sizeof(float);
-        robot_distance_msg.data.resize(sizeof(float));
-
         float min_distance = std::numeric_limits<float>::max();
         for (unsigned int j = 0; j < map_height_; ++j) {
             for (unsigned int i = 0; i < map_width_; ++i) {
@@ -196,30 +189,52 @@ private:
                 }
             }
         }
+
+        // Create and publish the robot distance message
+        sensor_msgs::Image robot_distance_msg;
+        robot_distance_msg.header.frame_id = "map";
+        robot_distance_msg.height = 1;
+        robot_distance_msg.width = 1;
+        robot_distance_msg.encoding = "32FC1";
+        robot_distance_msg.step = sizeof(float);
+        robot_distance_msg.data.resize(sizeof(float));
+
         memcpy(&robot_distance_msg.data[0], &min_distance, sizeof(float));
 
         robot_distance_pub_.publish(robot_distance_msg);
-		// Print the minimum distance to ROS_DEBUG
-        ROS_DEBUG("Robot position (x, y): (%f, %f)", x, y);
-        ROS_DEBUG("Minimum distance to an obstacle: %f", min_distance);
+
+        // Print the minimum distance to ROS_DEBUG
+        ROS_INFO("Robot position (x, y): (%f, %f)", x, y);
+        ROS_INFO("Minimum distance to an obstacle: %f", min_distance);
     }
 
-    ros::Subscriber map_sub_;
-    ros::Subscriber pose_sub_;
-    ros::Publisher distance_pub_;
-    ros::Publisher robot_distance_pub_;
+    // Callback function to handle incoming costmap messages
+    void costmapCallback(const nav_msgs::OccupancyGrid::ConstPtr& msg) {
+    map_width_ = msg->info.width;
+    map_height_ = msg->info.height;
+    map_resolution_ = msg->info.resolution;
+    map_received_ = true;
 
-    bool map_received_ = false;
-    float map_resolution_;
-    unsigned int map_width_;
-    unsigned int map_height_;
-    float* distance_field_;
+    // Update distance field size
+    distance_field_.resize(map_width_ * map_height_);
+
+    // Extract costmap data and convert to unsigned char
+    std::vector<unsigned char> unsigned_costmap_data(msg->data.size());
+    for (size_t i = 0; i < msg->data.size(); ++i) {
+        unsigned_costmap_data[i] = static_cast<unsigned char>(msg->data[i]);
+    }
+    
+    sdt_dead_reckoning(map_width_, map_height_, 0, unsigned_costmap_data.data(), distance_field_.data());
+
+    ROS_DEBUG("Costmap received and distance field updated.");
+	}
 };
-
 int main(int argc, char** argv) {
     ros::init(argc, argv, "distance_field_updater");
     ros::NodeHandle nh;
+
     DistanceFieldUpdater updater(nh);
+
     ros::spin();
     return 0;
 }
