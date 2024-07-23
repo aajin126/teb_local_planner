@@ -49,6 +49,21 @@
 #include <teb_local_planner/g2o_types/edge_dynamic_obstacle.h>
 #include <teb_local_planner/g2o_types/edge_via_point.h>
 #include <teb_local_planner/g2o_types/edge_prefer_rotdir.h>
+#include <costmap_2d/costmap_2d_ros.h>
+#include <costmap_2d/costmap_2d.h>
+#include <costmap_2d/layered_costmap.h>
+
+#define SDT_DEAD_RECKONING_IMPLEMENTATION
+#include "teb_local_planner/sdt_dead_reckoning.h"
+
+#include <nav_msgs/Path.h>
+#include <geometry_msgs/PoseStamped.h>
+#include <nav_msgs/OccupancyGrid.h>
+#include <tf/transform_datatypes.h>
+#include <teb_local_planner/TrajectoryMsg.h>
+#include <sensor_msgs/Image.h>
+
+#include <nav_msgs/Odometry.h>
 
 #include <memory>
 #include <limits>
@@ -1357,6 +1372,66 @@ void TebOptimalPlanner::getFullTrajectory(std::vector<TrajectoryPointMsg>& traje
   goal.time_from_start.fromSec(curr_time);
 }
 
+// 장애물까지의 거리와 방향을 출력하는 함수
+void printDistanceAndDirection(const float* distance_field, unsigned int width, unsigned int height, float x, float y) {
+    // x와 y를 정수 좌표로 변환
+    int xi = static_cast<int>(x);
+    int yi = static_cast<int>(y);
+
+    // 유효한 좌표인지 확인
+    if (xi >= 0 && xi < width && yi >= 0 && yi < height) {
+        // 거리 필드에서 거리 값을 가져오기
+        float distance = distance_field[xi + yi * width];
+
+        if (distance != -1) {
+            ROS_DEBUG("Distance to obstacle at (%f, %f): %f", x, y, distance);
+
+            // 장애물까지의 방향 계산
+            float dx = xi - x;
+            float dy = yi - y;
+            float angle = atan2(dy, dx) * 180.0 / M_PI; // 라디안을 도로 변환
+
+            ROS_DEBUG("Direction to obstacle: %f degrees", angle);
+        } else {
+            ROS_DEBUG("No obstacle detected at (%f, %f).", x, y);
+        }
+    } else {
+        ROS_DEBUG("Invalid position (%f, %f).", x, y);
+    }
+}
+
+// Global variables
+nav_msgs::OccupancyGrid::ConstPtr global_map;
+
+
+// 지도 콜백 함수
+void mapCallback(const nav_msgs::OccupancyGrid::ConstPtr& msg) {
+    global_map = msg;
+}
+
+void processIntermediatePose(const PoseSE2& intermediate_pose) {
+    if (!global_map) {
+        ROS_ERROR("No map data available.");
+        return;
+    }
+
+    unsigned int width = global_map->info.width;
+    unsigned int height = global_map->info.height;
+    unsigned char threshold = 50; // 예시 임계값, 실제 값으로 교체
+    std::vector<unsigned char> image(global_map->data.begin(), global_map->data.end());
+    float* distance_field = new float[width * height];
+
+    // Generate distance field
+    sdt_dead_reckoning(width, height, threshold, image.data(), distance_field);
+
+    // Output distance and direction to the obstacle
+    printDistanceAndDirection(distance_field, width, height, intermediate_pose.x(), intermediate_pose.y());
+
+    // Cleanup
+    delete[] distance_field;
+}
+
+
 
 bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
                                              double inscribed_radius, double circumscribed_radius, int look_ahead_idx, double feasibility_check_lookahead_distance)
@@ -1376,8 +1451,8 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
     }
   }
 
-for (int i=0; i <= look_ahead_idx; ++i)
-{           
+  for (int i=0; i <= look_ahead_idx; ++i)
+  {           
     double cost = costmap_model->footprintCost(teb().Pose(i).x(), teb().Pose(i).y(), teb().Pose(i).theta(), footprint_spec, inscribed_radius, circumscribed_radius);
     ROS_DEBUG("Footprint cost at pose %d: %f", i, cost);
     if (visualization_)
@@ -1462,52 +1537,15 @@ for (int i=0; i <= look_ahead_idx; ++i)
                         std::cout << "Press Enter to continue..." << std::endl;
                         std::cin.get();
                     }
-                    
-                    // SDT dead reckoning을 위한 이미지를 생성합니다.
-                    unsigned int width = costmap->getSizeInCellsX();
-                    unsigned int height = costmap->getSizeInCellsY();
-                    unsigned char* image = new unsigned char[width * height];
-                    float* distance_field = new float[width * height];
 
-                    // Costmap에서 데이터를 가져옵니다.
-                    for (unsigned int y = 0; y < height; ++y)
-                    {
-                      for (unsigned int x = 0; x < width; ++x)
-                      {
-                        unsigned char cost = static_cast<unsigned char>(costmap->getCost(x, y));
-                        image[y * width + x] = (cost == costmap_2d::FREE_SPACE) ? 0 : 255; // 0은 빈 공간, 255는 장애물
-                      }
-                    }
-
-                    // SDT dead reckoning 함수 호출
-                    sdt_dead_reckoning(width, height, 127, image, distance_field);
-
-                    // intermediate_pose의 위치를 확인하여 거리와 방향을 계산
-                    unsigned int pose_x = static_cast<unsigned int>(intermediate_pose.x());
-                    unsigned int pose_y = static_cast<unsigned int>(intermediate_pose.y());
-                    float distance = distance_field[pose_y * width + pose_x];
-
-                    // 가장 가까운 장애물까지의 방향을 계산
-                    float obstacle_direction_x = PX(pose_x + 1, pose_y + 1) - (pose_x + 1);
-                    float obstacle_direction_y = PY(pose_x + 1, pose_y + 1) - (pose_y + 1);
-
-                    ROS_DEBUG("Obstacle distance: %f", distance);
-                    ROS_DEBUG("Obstacle direction: (%f, %f)", obstacle_direction_x, obstacle_direction_y);
-
-                    delete[] image;
-                    delete[] distance_field;
-
-
-
-                    return false;
+                    processIntermediatePose(intermediate_pose);
                 }
-                
             }
         }
     }
     
-}
-return true;
+  }
+  return true;
 }
 
 } // namespace teb_local_planner

@@ -215,6 +215,7 @@ target_link_libraries(test_optim_node
    ${EXTERNAL_LIBS}
    ${catkin_LIBRARIES}
 )
+
 target_link_libraries(distance_map ${catkin_LIBRARIES})
 
 
