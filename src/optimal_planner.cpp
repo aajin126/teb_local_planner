@@ -1452,6 +1452,7 @@ for (int i=0; i <= look_ahead_idx; ++i)
 
                 if (intermediate_cost == -1)
                 {
+
                     if (visualization_)
                     {
                         visualization_->publishInfeasibleRobotPose(intermediate_pose, *cfg_->robot_model, footprint_spec);
@@ -1461,6 +1462,42 @@ for (int i=0; i <= look_ahead_idx; ++i)
                         std::cout << "Press Enter to continue..." << std::endl;
                         std::cin.get();
                     }
+                    
+                    // SDT dead reckoning을 위한 이미지를 생성합니다.
+                    unsigned int width = costmap->getSizeInCellsX();
+                    unsigned int height = costmap->getSizeInCellsY();
+                    unsigned char* image = new unsigned char[width * height];
+                    float* distance_field = new float[width * height];
+
+                    // Costmap에서 데이터를 가져옵니다.
+                    for (unsigned int y = 0; y < height; ++y)
+                    {
+                      for (unsigned int x = 0; x < width; ++x)
+                      {
+                        unsigned char cost = static_cast<unsigned char>(costmap->getCost(x, y));
+                        image[y * width + x] = (cost == costmap_2d::FREE_SPACE) ? 0 : 255; // 0은 빈 공간, 255는 장애물
+                      }
+                    }
+
+                    // SDT dead reckoning 함수 호출
+                    sdt_dead_reckoning(width, height, 127, image, distance_field);
+
+                    // intermediate_pose의 위치를 확인하여 거리와 방향을 계산
+                    unsigned int pose_x = static_cast<unsigned int>(intermediate_pose.x());
+                    unsigned int pose_y = static_cast<unsigned int>(intermediate_pose.y());
+                    float distance = distance_field[pose_y * width + pose_x];
+
+                    // 가장 가까운 장애물까지의 방향을 계산
+                    float obstacle_direction_x = PX(pose_x + 1, pose_y + 1) - (pose_x + 1);
+                    float obstacle_direction_y = PY(pose_x + 1, pose_y + 1) - (pose_y + 1);
+
+                    ROS_DEBUG("Obstacle distance: %f", distance);
+                    ROS_DEBUG("Obstacle direction: (%f, %f)", obstacle_direction_x, obstacle_direction_y);
+
+                    delete[] image;
+                    delete[] distance_field;
+
+
 
                     return false;
                 }
