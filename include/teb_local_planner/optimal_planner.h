@@ -49,6 +49,7 @@
 #include <teb_local_planner/planner_interface.h>
 #include <teb_local_planner/visualization.h>
 #include <teb_local_planner/robot_footprint_model.h>
+#include <teb_local_planner/pose_se2.h>
 
 // g2o lib stuff
 #include <g2o/core/sparse_optimizer.h>
@@ -64,6 +65,8 @@
 #include <geometry_msgs/PoseStamped.h>
 #include <tf/transform_datatypes.h>
 #include <teb_local_planner/TrajectoryMsg.h>
+
+#include <costmap_2d/costmap_2d_ros.h>
 
 #include <nav_msgs/Odometry.h>
 #include <limits.h>
@@ -483,7 +486,11 @@ public:
    * @param[out] trajectory the resulting trajectory
    */
   void getFullTrajectory(std::vector<TrajectoryPointMsg>& trajectory) const;
-  
+
+  void processIntermediatePose(const PoseSE2& intermediate_pose);
+
+  void pushPoseAwayFromObstacle(const PoseSE2& pose, const std::vector<unsigned char>& costmap_data, unsigned int width, unsigned int height);
+
   /**
    * @brief Check whether the planned trajectory is feasible or not.
    * 
@@ -695,6 +702,8 @@ protected:
   boost::shared_ptr<g2o::SparseOptimizer> optimizer_; //!< g2o optimizer for trajectory optimization
   std::pair<bool, geometry_msgs::Twist> vel_start_; //!< Store the initial velocity at the start pose
   std::pair<bool, geometry_msgs::Twist> vel_goal_; //!< Store the final velocity at the goal pose
+
+  const costmap_2d::Costmap2DROS* local_costmap_ros_;
 
   bool initialized_; //!< Keeps track about the correct initialization of this class
   bool optimized_; //!< This variable is \c true as long as the last optimization has been completed successful

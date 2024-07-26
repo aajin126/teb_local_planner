@@ -52,9 +52,13 @@
 #include <costmap_2d/costmap_2d_ros.h>
 #include <costmap_2d/costmap_2d.h>
 #include <costmap_2d/layered_costmap.h>
+#include <teb_local_planner/pose_se2.h>
 
-#define SDT_DEAD_RECKONING_IMPLEMENTATION
 #include "teb_local_planner/sdt_dead_reckoning.h"
+#include "teb_local_planner/local_map_subscriber.h" // Include the header for local map subscriber
+
+// Global pointer to access LocalMapSubscriber instance
+extern LocalMapSubscriber* local_map_subscriber;
 
 #include <nav_msgs/Path.h>
 #include <geometry_msgs/PoseStamped.h>
@@ -116,7 +120,6 @@ void TebOptimalPlanner::initialize(const TebConfig& cfg, ObstContainer* obstacle
   vel_goal_.second.linear.x = 0;
   vel_goal_.second.linear.y = 0;
   vel_goal_.second.angular.z = 0;
-  initialized_ = true;
 }
 
 
@@ -1372,65 +1375,66 @@ void TebOptimalPlanner::getFullTrajectory(std::vector<TrajectoryPointMsg>& traje
   goal.time_from_start.fromSec(curr_time);
 }
 
-// 장애물까지의 거리와 방향을 출력하는 함수
-void printDistanceAndDirection(const float* distance_field, unsigned int width, unsigned int height, float x, float y) {
-    // x와 y를 정수 좌표로 변환
-    int xi = static_cast<int>(x);
-    int yi = static_cast<int>(y);
-
-    // 유효한 좌표인지 확인
-    if (xi >= 0 && xi < width && yi >= 0 && yi < height) {
-        // 거리 필드에서 거리 값을 가져오기
-        float distance = distance_field[xi + yi * width];
-
-        if (distance != -1) {
-            ROS_DEBUG("Distance to obstacle at (%f, %f): %f", x, y, distance);
-
-            // 장애물까지의 방향 계산
-            float dx = xi - x;
-            float dy = yi - y;
-            float angle = atan2(dy, dx) * 180.0 / M_PI; // 라디안을 도로 변환
-
-            ROS_DEBUG("Direction to obstacle: %f degrees", angle);
-        } else {
-            ROS_DEBUG("No obstacle detected at (%f, %f).", x, y);
-        }
-    } else {
-        ROS_DEBUG("Invalid position (%f, %f).", x, y);
-    }
-}
-
-// Global variables
-nav_msgs::OccupancyGrid::ConstPtr global_map;
-
-
-// 지도 콜백 함수
-void mapCallback(const nav_msgs::OccupancyGrid::ConstPtr& msg) {
-    global_map = msg;
-}
-
-void processIntermediatePose(const PoseSE2& intermediate_pose) {
-    if (!global_map) {
-        ROS_ERROR("No map data available.");
-        return;
-    }
-
-    unsigned int width = global_map->info.width;
-    unsigned int height = global_map->info.height;
-    unsigned char threshold = 50; // 예시 임계값, 실제 값으로 교체
-    std::vector<unsigned char> image(global_map->data.begin(), global_map->data.end());
+void pushPoseAwayFromObstacle(PoseSE2& pose, const std::vector<unsigned char>& costmap_data, unsigned int width, unsigned int height)
+{
+    unsigned char threshold = 50; // 예시 값
     float* distance_field = new float[width * height];
+    sdt_dead_reckoning(width, height, threshold, costmap_data.data(), distance_field);
 
-    // Generate distance field
-    sdt_dead_reckoning(width, height, threshold, image.data(), distance_field);
+    // 현재 위치를 가져옵니다.
+    Eigen::Vector2d position = pose.position();
 
-    // Output distance and direction to the obstacle
-    printDistanceAndDirection(distance_field, width, height, intermediate_pose.x(), intermediate_pose.y());
+    int xi = static_cast<int>(position.x());
+    int yi = static_cast<int>(position.y());
 
-    // Cleanup
+    if (xi >= 0 && xi < width && yi >= 0 && yi < height)
+    {
+        float distance = distance_field[xi + yi * width];
+        if (distance != -1)
+        {
+            // Calculate the direction vector away from the obstacle
+            float dx = xi - position.x();
+            float dy = yi - position.y();
+            float angle = atan2(dy, dx);
+            float move_distance = 0.5 * distance; // Move 50% of the distance away from the obstacle
+
+            // 새 위치를 계산합니다.
+            position.x() += move_distance * cos(angle);
+            position.y() += move_distance * sin(angle);
+
+            // pose 객체의 위치를 새로운 위치로 업데이트합니다.
+            // 새로운 위치를 pose 객체의 position에 반영합니다.
+            pose.position() = position; // Eigen의 Vector2d는 직접 할당이 가능합니다.
+        }
+    }
+
     delete[] distance_field;
 }
 
+void processIntermediatePose(const PoseSE2& intermediate_pose)
+{
+    if (local_map_subscriber)
+    {
+        const std::vector<unsigned char>& costmap_data = local_map_subscriber->getCostmapData();
+        unsigned int width = local_map_subscriber->getWidth();
+        unsigned int height = local_map_subscriber->getHeight();
+        const float* distance_field = local_map_subscriber->getDistanceField();
+
+        if (distance_field)
+        {
+            // `intermediate_pose`의 복사본을 생성하여 수정할 수 있는 객체를 만듭니다.
+            PoseSE2 modifiable_pose = intermediate_pose;
+
+            // 수정 가능한 `PoseSE2` 객체를 사용하여 장애물로부터 위치를 밀어냅니다.
+            pushPoseAwayFromObstacle(modifiable_pose, costmap_data, width, height);
+
+            // 수정된 `modifiable_pose`를 사용하는 후속 처리가 필요할 경우 여기에 작성합니다.
+            // 예를 들어, 수정된 `modifiable_pose`를 로깅하거나 다른 함수에 전달할 수 있습니다.
+            // 예를 들어, 로깅:
+            // ROS_INFO("Modified pose position: [%f, %f]", modifiable_pose.position().x(), modifiable_pose.position().y());
+        }
+    }
+}
 
 
 bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
@@ -1539,13 +1543,26 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
                     }
 
                     processIntermediatePose(intermediate_pose);
+
+                    // Re-check feasibility of the processed pose
+                    intermediate_cost = costmap_model->footprintCost(intermediate_pose.x(), intermediate_pose.y(), intermediate_pose.theta(),
+                                                                         footprint_spec, inscribed_radius, circumscribed_radius);
+
+                    if (intermediate_cost == -1)
+                    {
+                        if (visualization_)
+                        {
+                            visualization_->publishInfeasibleRobotPose(intermediate_pose, *cfg_->robot_model, footprint_spec);
+                        }
+                      return false;
+                    }
                 }
             }
         }
-    }
     
-  }
+    }
   return true;
-}
+  }
 
+}
 } // namespace teb_local_planner
