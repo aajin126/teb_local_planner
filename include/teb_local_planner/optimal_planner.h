@@ -487,9 +487,9 @@ public:
    */
   void getFullTrajectory(std::vector<TrajectoryPointMsg>& trajectory) const;
 
-  void processIntermediatePose(const PoseSE2& intermediate_pose);
+  void processIntermediatePose(PoseSE2& intermediate_pose);
 
-  void pushPoseAwayFromObstacle(const PoseSE2& pose, const std::vector<unsigned char>& costmap_data, unsigned int width, unsigned int height);
+  void pushPoseAwayFromObstacle(PoseSE2& pose, const std::vector<unsigned char>& costmap_data, unsigned int width, unsigned int height);
 
   /**
    * @brief Check whether the planned trajectory is feasible or not.

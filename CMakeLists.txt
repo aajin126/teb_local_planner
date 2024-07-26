@@ -193,6 +193,7 @@ add_library(teb_local_planner
    src/graph_search.cpp
    src/local_map_subscriber.cpp
    src/pose_util.cpp
+   src/sdt_dead_reckoning.cpp
 )
 
 # Dynamic reconfigure: make sure configure headers are built before any node using them

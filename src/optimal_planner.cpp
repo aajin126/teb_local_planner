@@ -1375,7 +1375,7 @@ void TebOptimalPlanner::getFullTrajectory(std::vector<TrajectoryPointMsg>& traje
   goal.time_from_start.fromSec(curr_time);
 }
 
-void pushPoseAwayFromObstacle(PoseSE2& pose, const std::vector<unsigned char>& costmap_data, unsigned int width, unsigned int height)
+void TebOptimalPlanner::pushPoseAwayFromObstacle(PoseSE2& pose, const std::vector<unsigned char>& costmap_data, unsigned int width, unsigned int height)
 {
     unsigned char threshold = 50; // 예시 값
     float* distance_field = new float[width * height];
@@ -1411,7 +1411,7 @@ void pushPoseAwayFromObstacle(PoseSE2& pose, const std::vector<unsigned char>& c
     delete[] distance_field;
 }
 
-void processIntermediatePose(const PoseSE2& intermediate_pose)
+void TebOptimalPlanner::processIntermediatePose(PoseSE2& intermediate_pose)
 {
     if (local_map_subscriber)
     {
