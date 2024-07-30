@@ -85,6 +85,7 @@ TebOptimalPlanner::TebOptimalPlanner() : cfg_(NULL), obstacles_(NULL), via_point
   
 TebOptimalPlanner::TebOptimalPlanner(const TebConfig& cfg, ObstContainer* obstacles, TebVisualizationPtr visual, const ViaPointContainer* via_points)
 {
+  
   initialize(cfg, obstacles, visual, via_points);
 }
 
@@ -1381,7 +1382,7 @@ void TebOptimalPlanner::pushPoseAwayFromObstacle(PoseSE2& pose, const std::vecto
     float* distance_field = new float[width * height];
     sdt_dead_reckoning(width, height, threshold, costmap_data.data(), distance_field);
 
-    // 현재 위치를 가져옵니다.
+    // intermediate pose 위치를 가져옵니다.
     Eigen::Vector2d position = pose.position();
 
     int xi = static_cast<int>(position.x());
@@ -1405,6 +1406,10 @@ void TebOptimalPlanner::pushPoseAwayFromObstacle(PoseSE2& pose, const std::vecto
             // pose 객체의 위치를 새로운 위치로 업데이트합니다.
             // 새로운 위치를 pose 객체의 position에 반영합니다.
             pose.position() = position; // Eigen의 Vector2d는 직접 할당이 가능합니다.
+
+            visualization_->visualizeIntermediatePoint(pose); 
+            std::cout << "Press Enter to continue..." << std::endl;
+            std::cin.get();
         }
     }
 
@@ -1413,8 +1418,9 @@ void TebOptimalPlanner::pushPoseAwayFromObstacle(PoseSE2& pose, const std::vecto
 
 void TebOptimalPlanner::processIntermediatePose(PoseSE2& intermediate_pose)
 {
-    if (local_map_subscriber)
+    if (local_map_subscriber) // Get local map information 
     {
+        ROS_DEBUG("get local map information");
         const std::vector<unsigned char>& costmap_data = local_map_subscriber->getCostmapData();
         unsigned int width = local_map_subscriber->getWidth();
         unsigned int height = local_map_subscriber->getHeight();
@@ -1422,9 +1428,10 @@ void TebOptimalPlanner::processIntermediatePose(PoseSE2& intermediate_pose)
 
         if (distance_field)
         {
-            // `intermediate_pose`의 복사본을 생성하여 수정할 수 있는 객체를 만듭니다.
+            // `intermediate_pose`의 복사본을 생성하여 수정할 수 있는 객체인 modifiable_pose로 만듭니다.
             PoseSE2 modifiable_pose = intermediate_pose;
 
+            ROS_DEBUG("push pose away from obstacle");
             // 수정 가능한 `PoseSE2` 객체를 사용하여 장애물로부터 위치를 밀어냅니다.
             pushPoseAwayFromObstacle(modifiable_pose, costmap_data, width, height);
 
@@ -1434,6 +1441,8 @@ void TebOptimalPlanner::processIntermediatePose(PoseSE2& intermediate_pose)
             // ROS_INFO("Modified pose position: [%f, %f]", modifiable_pose.position().x(), modifiable_pose.position().y());
         }
     }
+
+    ROS_DEBUG("Did not get local map information");
 }
 
 
@@ -1542,7 +1551,9 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
                         std::cin.get();
                     }
 
+                    ROS_DEBUG("Processing intermediate pose");
                     processIntermediatePose(intermediate_pose);
+                    ROS_DEBUG("Finish processing intermediate pose");
 
                     // Re-check feasibility of the processed pose
                     intermediate_cost = costmap_model->footprintCost(intermediate_pose.x(), intermediate_pose.y(), intermediate_pose.theta(),

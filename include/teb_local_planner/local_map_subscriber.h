@@ -12,10 +12,10 @@ public:
     ~LocalMapSubscriber();
 
     // Accessor methods
-    const std::vector<unsigned char>& getCostmapData() const { return costmap_data_; }
-    unsigned int getWidth() const { return width_; }
-    unsigned int getHeight() const { return height_; }
-    const float* getDistanceField() const { return distance_field_; }
+    const std::vector<unsigned char>& getCostmapData() const;
+    unsigned int getWidth() const;
+    unsigned int getHeight() const;
+    const float* getDistanceField() const;
 
 private:
     void costmapCallback(const sensor_msgs::Image::ConstPtr& msg);

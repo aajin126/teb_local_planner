@@ -40,6 +40,7 @@
 #define OPTIMAL_PLANNER_H_
 
 #include <math.h>
+#include <thread>
 
 
 // teb stuff
@@ -131,6 +132,7 @@ public:
     * @param visual Shared pointer to the TebVisualization class (optional)
     * @param via_points Container storing via-points (optional)
     */
+
   void initialize(const TebConfig& cfg, ObstContainer* obstacles = NULL,
                   TebVisualizationPtr visual = TebVisualizationPtr(), const ViaPointContainer* via_points = NULL);
 
@@ -707,6 +709,7 @@ protected:
 
   bool initialized_; //!< Keeps track about the correct initialization of this class
   bool optimized_; //!< This variable is \c true as long as the last optimization has been completed successful
+
   
 public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW    
