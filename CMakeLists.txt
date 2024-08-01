@@ -206,12 +206,11 @@ target_link_libraries(teb_local_planner
    ${catkin_LIBRARIES}
 )
 
-
-
 ## Build additional executables
 
 add_executable(test_optim_node src/test_optim_node.cpp)
 add_executable(distance_map src/distance_map_deadreck.cpp)
+add_executable(local_map_subscriber src/local_map_subscriber.cpp)
 
 target_link_libraries(test_optim_node
    teb_local_planner
@@ -221,6 +220,12 @@ target_link_libraries(test_optim_node
 
 target_link_libraries(distance_map ${catkin_LIBRARIES})
 
+target_link_libraries(local_map_subscriber
+   ${catkin_LIBRARIES}
+   teb_local_planner
+)
+
+add_dependencies(local_map_subscriber teb_local_planner)
 
 #############
 ## Install ##

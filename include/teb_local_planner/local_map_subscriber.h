@@ -2,7 +2,7 @@
 #define LOCAL_MAP_SUBSCRIBER_H
 
 #include <ros/ros.h>
-#include <sensor_msgs/Image.h>
+#include <nav_msgs/OccupancyGrid.h>
 #include <vector>
 
 class LocalMapSubscriber
@@ -16,15 +16,18 @@ public:
     unsigned int getWidth() const;
     unsigned int getHeight() const;
     const float* getDistanceField() const;
+    bool isDataReady() const;
 
 private:
-    void costmapCallback(const sensor_msgs::Image::ConstPtr& msg);
+    void costmapCallback(const nav_msgs::OccupancyGrid::ConstPtr& msg);
 
     ros::NodeHandle nh_;
     ros::Subscriber costmap_sub_;
     std::vector<unsigned char> costmap_data_;
     unsigned int width_, height_;
     float* distance_field_; // Pointer to store distance field
+
+    bool data_ready_; 
 };
 
 // Global pointer to access LocalMapSubscriber instance

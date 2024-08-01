@@ -489,9 +489,11 @@ public:
    */
   void getFullTrajectory(std::vector<TrajectoryPointMsg>& trajectory) const;
 
+  void printDistanceField();
+
   void processIntermediatePose(PoseSE2& intermediate_pose);
 
-  void pushPoseAwayFromObstacle(PoseSE2& pose, const std::vector<unsigned char>& costmap_data, unsigned int width, unsigned int height);
+  void pushPoseAwayFromObstacle(PoseSE2& pose, unsigned int width, unsigned int height);
 
   /**
    * @brief Check whether the planned trajectory is feasible or not.
@@ -704,8 +706,6 @@ protected:
   boost::shared_ptr<g2o::SparseOptimizer> optimizer_; //!< g2o optimizer for trajectory optimization
   std::pair<bool, geometry_msgs::Twist> vel_start_; //!< Store the initial velocity at the start pose
   std::pair<bool, geometry_msgs::Twist> vel_goal_; //!< Store the final velocity at the goal pose
-
-  const costmap_2d::Costmap2DROS* local_costmap_ros_;
 
   bool initialized_; //!< Keeps track about the correct initialization of this class
   bool optimized_; //!< This variable is \c true as long as the last optimization has been completed successful

@@ -57,21 +57,15 @@
 #include "teb_local_planner/sdt_dead_reckoning.h"
 #include "teb_local_planner/local_map_subscriber.h" // Include the header for local map subscriber
 
-// Global pointer to access LocalMapSubscriber instance
-extern LocalMapSubscriber* local_map_subscriber;
-
 #include <nav_msgs/Path.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <nav_msgs/OccupancyGrid.h>
 #include <tf/transform_datatypes.h>
 #include <teb_local_planner/TrajectoryMsg.h>
-#include <sensor_msgs/Image.h>
 
-#include <nav_msgs/Odometry.h>
-
+#include <vector>
 #include <memory>
 #include <limits>
-
 
 namespace teb_local_planner
 {
@@ -1376,75 +1370,124 @@ void TebOptimalPlanner::getFullTrajectory(std::vector<TrajectoryPointMsg>& traje
   goal.time_from_start.fromSec(curr_time);
 }
 
-void TebOptimalPlanner::pushPoseAwayFromObstacle(PoseSE2& pose, const std::vector<unsigned char>& costmap_data, unsigned int width, unsigned int height)
+
+void TebOptimalPlanner::pushPoseAwayFromObstacle(PoseSE2& pose, unsigned int width, unsigned int height)
 {
-    unsigned char threshold = 50; // 예시 값
-    float* distance_field = new float[width * height];
-    sdt_dead_reckoning(width, height, threshold, costmap_data.data(), distance_field);
+    const float* distance_field = local_map_subscriber->getDistanceField(); // Use the distance field from the global subscriber
 
-    // intermediate pose 위치를 가져옵니다.
-    Eigen::Vector2d position = pose.position();
-
-    int xi = static_cast<int>(position.x());
-    int yi = static_cast<int>(position.y());
-
-    if (xi >= 0 && xi < width && yi >= 0 && yi < height)
+    if (distance_field)
     {
-        float distance = distance_field[xi + yi * width];
-        if (distance != -1)
+        // intermediate pose 위치를 가져옵니다.
+        Eigen::Vector2d position = pose.position();
+
+        int xi = static_cast<int>(position.x());
+        int yi = static_cast<int>(position.y());
+
+        if (xi >= 0 && xi < width && yi >= 0 && yi < height)
         {
-            // Calculate the direction vector away from the obstacle
-            float dx = xi - position.x();
-            float dy = yi - position.y();
-            float angle = atan2(dy, dx);
-            float move_distance = 0.5 * distance; // Move 50% of the distance away from the obstacle
+            float distance = distance_field[xi + yi * width];
+            if (distance != -1)
+            {
+                // Calculate the direction vector away from the obstacle
+                float dx = xi - position.x();
+                float dy = yi - position.y();
+                float angle = atan2(dy, dx);
+                float move_distance = 0.5 * distance; // Move 50% of the distance away from the obstacle
 
-            // 새 위치를 계산합니다.
-            position.x() += move_distance * cos(angle);
-            position.y() += move_distance * sin(angle);
+                // 새 위치를 계산합니다.
+                position.x() += move_distance * cos(angle);
+                position.y() += move_distance * sin(angle);
 
-            // pose 객체의 위치를 새로운 위치로 업데이트합니다.
-            // 새로운 위치를 pose 객체의 position에 반영합니다.
-            pose.position() = position; // Eigen의 Vector2d는 직접 할당이 가능합니다.
+                // pose 객체의 위치를 새로운 위치로 업데이트합니다.
+                pose.position() = position;
 
-            visualization_->visualizeIntermediatePoint(pose); 
-            std::cout << "Press Enter to continue..." << std::endl;
-            std::cin.get();
+                // Visualization and debugging
+                visualization_->visualizeIntermediatePoint(pose); 
+                std::cout << "Press Enter to continue..." << std::endl;
+                std::cin.get();
+            }
         }
     }
+    else
+    {
+        ROS_DEBUG("Distance field is null");
+    }
+}
 
-    delete[] distance_field;
+void TebOptimalPlanner::printDistanceField()
+{
+    if (local_map_subscriber->isDataReady())
+    {
+        const float* distance_field = local_map_subscriber->getDistanceField();
+        if (distance_field)
+        {
+            unsigned int width = local_map_subscriber->getWidth();
+            unsigned int height = local_map_subscriber->getHeight();
+
+            ROS_INFO("Distance Field:");
+            for (unsigned int y = 0; y < height; ++y)
+            {
+                for (unsigned int x = 0; x < width; ++x)
+                {
+                    float distance = distance_field[x + y * width];
+                    // Print values with a tab for readability
+                    printf("%6.2f\t", distance);
+                }
+                printf("\n");
+            }
+        }
+        else
+        {
+            ROS_WARN("Distance field is not initialized.");
+        }
+    }
+    else
+    {
+        ROS_WARN("Local map subscriber is not initialized.");
+    }
 }
 
 void TebOptimalPlanner::processIntermediatePose(PoseSE2& intermediate_pose)
 {
-    if (local_map_subscriber) // Get local map information 
+    ros::Rate rate(10); // Rate of 10 Hz, adjust as needed
+
+    while (ros::ok())
     {
-        ROS_DEBUG("get local map information");
-        const std::vector<unsigned char>& costmap_data = local_map_subscriber->getCostmapData();
-        unsigned int width = local_map_subscriber->getWidth();
-        unsigned int height = local_map_subscriber->getHeight();
-        const float* distance_field = local_map_subscriber->getDistanceField();
-
-        if (distance_field)
+        if (local_map_subscriber->isDataReady())
         {
-            // `intermediate_pose`의 복사본을 생성하여 수정할 수 있는 객체인 modifiable_pose로 만듭니다.
-            PoseSE2 modifiable_pose = intermediate_pose;
+            ROS_DEBUG("Local map subscriber is not null");
+            unsigned int width = local_map_subscriber->getWidth();
+            unsigned int height = local_map_subscriber->getHeight();
+            const float* distance_field = local_map_subscriber->getDistanceField();
 
-            ROS_DEBUG("push pose away from obstacle");
-            // 수정 가능한 `PoseSE2` 객체를 사용하여 장애물로부터 위치를 밀어냅니다.
-            pushPoseAwayFromObstacle(modifiable_pose, costmap_data, width, height);
+            ROS_DEBUG("Width: %u, Height: %u",width, height);
 
-            // 수정된 `modifiable_pose`를 사용하는 후속 처리가 필요할 경우 여기에 작성합니다.
-            // 예를 들어, 수정된 `modifiable_pose`를 로깅하거나 다른 함수에 전달할 수 있습니다.
-            // 예를 들어, 로깅:
-            // ROS_INFO("Modified pose position: [%f, %f]", modifiable_pose.position().x(), modifiable_pose.position().y());
+            if (distance_field)
+            {
+                ROS_DEBUG("Distance field is not null");
+
+                PoseSE2 modifiable_pose = intermediate_pose;
+
+                ROS_DEBUG("Push pose away from obstacle");
+                pushPoseAwayFromObstacle(modifiable_pose, width, height);
+
+                ROS_INFO("Modified pose position: [%f, %f]", modifiable_pose.position().x(), modifiable_pose.position().y());
+            }
+            else
+            {
+                ROS_DEBUG("Distance field is null");
+            }
         }
+        else
+        {
+            ROS_DEBUG("Local map subscriber is null");
+        }
+
+        ROS_DEBUG("Did not get local map information");
+        
+        rate.sleep(); // Sleep for the remaining time to maintain the loop rate
     }
-
-    ROS_DEBUG("Did not get local map information");
 }
-
 
 bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
                                              double inscribed_radius, double circumscribed_radius, int look_ahead_idx, double feasibility_check_lookahead_distance)
