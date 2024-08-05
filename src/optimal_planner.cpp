@@ -1613,7 +1613,7 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
               return false;
             }
 
-            ROS_DEBUG("teb size : %d, %d", teb_.sizePoses(), teb_.sizeTimeDiffs);
+            ROS_DEBUG("teb size : %d", teb_.sizePoses());
                 
             // Implement optimization part when adding intermediate pose 
 
