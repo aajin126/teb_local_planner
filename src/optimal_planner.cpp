@@ -609,7 +609,8 @@ void TebOptimalPlanner::AddEdgesObstacles(double weight_multiplier)
   // iterate all teb points, skipping the last and, if the EdgeVelocityObstacleRatio edges should not be created, the first one too
   const int first_vertex = cfg_->optim.weight_velocity_obstacle_ratio == 0 ? 1 : 0;
   for (int i = first_vertex; i < teb_.sizePoses() - 1; ++i)
-  {    
+  {
+      ROS_DEBUG("vertex : %d", i);    
       double left_min_dist = std::numeric_limits<double>::max();
       double right_min_dist = std::numeric_limits<double>::max();
       ObstaclePtr left_obstacle;
@@ -807,6 +808,7 @@ void TebOptimalPlanner::AddEdgesViaPoints()
     return; // if weight equals zero skip adding edges!
 
   int start_pose_idx = 0;
+  ROS_DEBUG("START ADDING VIA POINTS");
   int n = teb_.sizePoses();
   if (n<3) // we do not have any degrees of freedom for reaching via-points
     return;
@@ -1611,16 +1613,15 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
               return false;
             }
 
-            ROS_DEBUG("teb size : %d", teb_.sizePoses());
+            ROS_DEBUG("teb size : %d, %d", teb_.sizePoses(), teb_.sizeTimeDiffs);
                 
-            
-
             // Implement optimization part when adding intermediate pose 
 
             ROS_DEBUG("Footprint position %d", intermediate_pose.position());
 
             std::cout << "Press Enter to continue..." << std::endl;
             std::cin.get();
+
             ROS_DEBUG("optimizeTEB with intermediate pose"); 
 
             optimizeTEB(cfg_->optim.no_inner_iterations, cfg_->optim.no_outer_iterations);
