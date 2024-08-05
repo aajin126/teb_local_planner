@@ -1602,6 +1602,8 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
             // 기존 포즈 벡터를 업데이트된 포즈 벡터로 교체
             teb_.clearTimedElasticBand(); // 기존 포즈를 지우는 메서드가 필요할 수 있음
 
+            ROS_DEBUG("teb size : %d", teb_.sizePoses());
+
             for (const auto& pose : updated_poses) 
             {
                 teb_.addPose(pose); // 기존 addPose 메서드를 사용하여 포즈를 추가
