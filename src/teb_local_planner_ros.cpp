@@ -346,10 +346,15 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
   
   // Update obstacle container with costmap information or polygons provided by a costmap_converter plugin
   if (costmap_converter_)
+  {
+    ROS_DEBUG("updateObstacleContainerWithCostmapConverter");
     updateObstacleContainerWithCostmapConverter();
+  }
   else
+  {
+    ROS_DEBUG("updateObstacleContainerWithCostmap");
     updateObstacleContainerWithCostmap();
-  
+  }
   // also consider custom obstacles (must be called after other updates, since the container is not cleared)
   updateObstacleContainerWithCustomObstacles();
   
@@ -614,9 +619,11 @@ void TebLocalPlannerROS::updateObstacleContainerWithCustomObstacles()
 {
   // Add custom obstacles obtained via message
   boost::mutex::scoped_lock l(custom_obst_mutex_);
+  ROS_DEBUG("updateObstacleContainerWithCustomObstacles");
 
   if (!custom_obstacle_msg_.obstacles.empty())
   {
+    ROS_DEBUG("Start to updateObstacleContainerWithCustomObstacles");
     // We only use the global header to specify the obstacle coordinate system instead of individual ones
     Eigen::Affine3d obstacle_to_map_eig;
     try 

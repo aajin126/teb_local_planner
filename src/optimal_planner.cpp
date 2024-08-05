@@ -214,18 +214,21 @@ bool TebOptimalPlanner::optimizeTEB(int iterations_innerloop, int iterations_out
   {
     if (cfg_->trajectory.teb_autosize)
     {
+      ROS_DEBUG("AUTO RESIZE");
       //teb_.autoResize(cfg_->trajectory.dt_ref, cfg_->trajectory.dt_hysteresis, cfg_->trajectory.min_samples, cfg_->trajectory.max_samples);
       teb_.autoResize(cfg_->trajectory.dt_ref, cfg_->trajectory.dt_hysteresis, cfg_->trajectory.min_samples, cfg_->trajectory.max_samples, fast_mode);
 
     }
 
     success = buildGraph(weight_multiplier);
+    ROS_DEBUG("SUCCESSFULLY BUILD GRAPH");
     if (!success) 
     {
         clearGraph();
         return false;
     }
     success = optimizeGraph(iterations_innerloop, false);
+    ROS_DEBUG("SUCCESSFULLY OPTIMIZE GRAPH");
     if (!success) 
     {
         clearGraph();
@@ -448,8 +451,11 @@ bool TebOptimalPlanner::buildGraph(double weight_multiplier)
   if (cfg_->obstacles.legacy_obstacle_association)
     AddEdgesObstaclesLegacy(weight_multiplier);
   else
+  {
     AddEdgesObstacles(weight_multiplier);
-
+    ROS_DEBUG("SUCCESSFULLY ADD EDGES OBSTACLES");
+  }
+  
   if (cfg_->obstacles.include_dynamic_obstacles)
     AddEdgesDynamicObstacles();
   
@@ -511,7 +517,6 @@ bool TebOptimalPlanner::optimizeGraph(int no_iterations,bool clear_after)
     
   return true;
 }
-
 void TebOptimalPlanner::clearGraph()
 {
   // clear optimizer states
@@ -537,6 +542,7 @@ void TebOptimalPlanner::AddTEBVertices()
   unsigned int id_counter = 0; // used for vertices ids
   obstacles_per_vertex_.resize(teb_.sizePoses());
   auto iter_obstacle = obstacles_per_vertex_.begin();
+  ROS_DEBUG("TEB VERTEX SIZE : %d", teb_.sizePoses());
   for (int i=0; i<teb_.sizePoses(); ++i)
   {
     teb_.PoseVertex(i)->setId(id_counter++);
@@ -796,18 +802,17 @@ void TebOptimalPlanner::AddEdgesDynamicObstacles(double weight_multiplier)
 
 void TebOptimalPlanner::AddEdgesViaPoints()
 {
+  ROS_DEBUG("ADD EDGES VIA POINTS");
   if (cfg_->optim.weight_viapoint==0 || via_points_==NULL || via_points_->empty() )
     return; // if weight equals zero skip adding edges!
 
   int start_pose_idx = 0;
-  
   int n = teb_.sizePoses();
   if (n<3) // we do not have any degrees of freedom for reaching via-points
     return;
   
   for (ViaPointContainer::const_iterator vp_it = via_points_->begin(); vp_it != via_points_->end(); ++vp_it)
   {
-    
     int index = teb_.findClosestTrajectoryPose(*vp_it, NULL, start_pose_idx);
     if (cfg_->trajectory.via_points_ordered)
       start_pose_idx = index+2; // skip a point to have a DOF inbetween for further via-points
@@ -1497,10 +1502,13 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
   ROS_DEBUG("tebsizePoses: %d", teb().sizePoses());
   ROS_DEBUG("look ahead idx: %d", look_ahead_idx);
 
-  if (feasibility_check_lookahead_distance > 0){
-    for (int i=1; i < teb().sizePoses(); ++i){
+  if (feasibility_check_lookahead_distance > 0)
+  {
+    for (int i=1; i < teb().sizePoses(); ++i)
+    {
       double pose_distance=std::hypot(teb().Pose(i).x()-teb().Pose(0).x(), teb().Pose(i).y()-teb().Pose(0).y());
-      if(pose_distance > feasibility_check_lookahead_distance){
+      if(pose_distance > feasibility_check_lookahead_distance)
+      {
         look_ahead_idx = i - 1;
         break;
       }
@@ -1540,6 +1548,7 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
         {
             int n_additional_samples = std::max(std::ceil(fabs(delta_rot) / cfg_->trajectory.min_resolution_collision_check_angular),
                                                 std::ceil(delta_dist.norm() / inscribed_radius)) - 1;
+
             // intermediate pose 전 후의 teb pose visualize                                     
             visualization_->publishRobotPose(teb().Pose(i), *cfg_->robot_model, footprint_spec);
             visualization_->publishRobotPose(teb().Pose(i+1), *cfg_->robot_model, footprint_spec);
@@ -1552,6 +1561,7 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
             PoseSE2 intermediate_pose = teb().Pose(i);
             ROS_DEBUG("pose %d turn into intermediate_pose 0", i);
 
+            std::vector<PoseSE2> intermediate_poses; // 중간 포즈를 저장할 임시 리스트
 
             for (int step = 0; step < n_additional_samples; ++step)
             {
@@ -1562,61 +1572,96 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
                                                                         footprint_spec, inscribed_radius, circumscribed_radius);
                 
                 visualization_->visualizeIntermediatePoint(intermediate_pose); 
+                intermediate_poses.push_back(intermediate_pose);
+            }
 
-                // ROS_DEBUG("Footprint cost at intermediate step %d: %f", step, intermediate_cost);
+            int insert_index = i+1;
 
-                // std::cout << "Press Enter to continue..." << std::endl;
-                // std::cin.get();
+            ROS_DEBUG("teb size : %d", teb_.sizePoses(););
 
-                // Implement optimization part when adding intermediate pose 
+            std::vector<PoseSE2> updated_poses;
 
-                // ROS_DEBUG("Footprint cost at intermediate step %d: %f", step, intermediate_cost);
-                // ROS_DEBUG("Footprint position %d", intermediate_pose.position());
-                //ROS_DEBUG("optimizeTEB with intermediate pose"); 
-                //std::cout << "Press Enter to continue..." << std::endl;
-                //std::cin.get();
+            for (int j = 0; j < teb_.sizePoses(); ++j) 
+            {
+              if (j == insert_index) 
+              {
+                // 중간 포즈를 삽입
+                for (const auto& pose : intermediate_poses) 
+                {
+                  updated_poses.push_back(pose);
+                }
+              }
+              // 기존 포즈를 추가
+              updated_poses.push_back(teb_.Pose(j));
+            }
 
-                //optimizeTEB(cfg_->optim.no_inner_iterations, cfg_->optim.no_outer_iterations);
+            ROS_DEBUG("update pose size : %d", updated_poses.size());
+
+            // 기존 포즈 벡터를 업데이트된 포즈 벡터로 교체
+            teb_.clearTimedElasticBand(); // 기존 포즈를 지우는 메서드가 필요할 수 있음
+
+            for (const auto& pose : updated_poses) 
+            {
+                teb_.addPose(pose); // 기존 addPose 메서드를 사용하여 포즈를 추가
+            }
+          
+            if (teb_.sizePoses() == 0)
+            {
+              ROS_ERROR("TebOptimalPlanner::isTrajectoryFeasible: TEB is empty.");
+              return false;
+            }
+
+            ROS_DEBUG("teb size : %d", teb_.sizePoses(););
                 
-                ROS_DEBUG("Footprint cost at intermediate step %d: %f", step, intermediate_cost);
-                ROS_DEBUG("Footprint position (%d, %d)", intermediate_pose.position());
+            
+
+            // Implement optimization part when adding intermediate pose 
+
+            ROS_DEBUG("Footprint position %d", intermediate_pose.position());
+
+            std::cout << "Press Enter to continue..." << std::endl;
+            std::cin.get();
+            ROS_DEBUG("optimizeTEB with intermediate pose"); 
+
+            optimizeTEB(cfg_->optim.no_inner_iterations, cfg_->optim.no_outer_iterations);
+              
+            ROS_DEBUG("Footprint position (%d, %d)", intermediate_pose.position());
+
+            std::cout << "Press Enter to continue..." << std::endl;
+            std::cin.get();
+            /*
+            if (intermediate_cost == -1)
+            {
+
+                if (visualization_)
+                {
+                    visualization_->publishInfeasibleRobotPose(intermediate_pose, *cfg_->robot_model, footprint_spec);
+
+                }
+                return false;
+                
+                ROS_DEBUG("Processing intermediate pose");
+                processIntermediatePose(intermediate_pose);
+                ROS_DEBUG("Finish processing intermediate pose");
+
+                // Re-check feasibility of the processed pose
+                intermediate_cost = costmap_model->footprintCost(intermediate_pose.x(), intermediate_pose.y(), intermediate_pose.theta(),
+                                                                         footprint_spec, inscribed_radius, circumscribed_radius);
 
                 if (intermediate_cost == -1)
                 {
-
                     if (visualization_)
                     {
                         visualization_->publishInfeasibleRobotPose(intermediate_pose, *cfg_->robot_model, footprint_spec);
-                        
-                        // usleep(1000000);
-                        // 프로그램을 일시적으로 멈추고 사용자 입력을 기다림
-                        std::cout << "Press Enter to continue..." << std::endl;
-                        std::cin.get();
                     }
-
-                    ROS_DEBUG("Processing intermediate pose");
-                    processIntermediatePose(intermediate_pose);
-                    ROS_DEBUG("Finish processing intermediate pose");
-
-                    // Re-check feasibility of the processed pose
-                    intermediate_cost = costmap_model->footprintCost(intermediate_pose.x(), intermediate_pose.y(), intermediate_pose.theta(),
-                                                                         footprint_spec, inscribed_radius, circumscribed_radius);
-
-                    if (intermediate_cost == -1)
-                    {
-                        if (visualization_)
-                        {
-                            visualization_->publishInfeasibleRobotPose(intermediate_pose, *cfg_->robot_model, footprint_spec);
-                        }
-                      return false;
-                    }
+                  return false;
                 }
+                */
             }
         }
     
     }
   return true;
-  }
-
 }
+
 } // namespace teb_local_planner
