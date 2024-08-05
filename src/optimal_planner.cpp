@@ -1577,7 +1577,7 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
 
             int insert_index = i+1;
 
-            ROS_DEBUG("teb size : %d", teb_.sizePoses(););
+            ROS_DEBUG("teb size : %d", teb_.sizePoses());
 
             std::vector<PoseSE2> updated_poses;
 
@@ -1611,7 +1611,7 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
               return false;
             }
 
-            ROS_DEBUG("teb size : %d", teb_.sizePoses(););
+            ROS_DEBUG("teb size : %d", teb_.sizePoses());
                 
             
 
