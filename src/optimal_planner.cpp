@@ -303,6 +303,72 @@ bool TebOptimalPlanner::plan(const std::vector<geometry_msgs::PoseStamped>& init
                 PoseSE2 intermediate_pose = teb().Pose(i);
                 ROS_DEBUG("pose %d turn into intermediate_pose 0", i);
 
+                std::vector<PoseSE2> intermediate_poses; // 중간 포즈를 저장할 임시 리스트
+
+                for (int step = 0; step < n_additional_samples; ++step)
+                {
+                  intermediate_pose.position() = intermediate_pose.position() + delta_dist / (n_additional_samples + 1.0);
+                  intermediate_pose.theta() = g2o::normalize_theta(intermediate_pose.theta() +
+                                                                 delta_rot / (n_additional_samples + 1.0));
+                  double intermediate_cost = costmap_model->footprintCost(intermediate_pose.x(), intermediate_pose.y(), intermediate_pose.theta(),
+                                                                          footprint_spec, inscribed_radius, circumscribed_radius);
+                
+                  visualization_->visualizeIntermediatePoint(intermediate_pose); 
+                  intermediate_poses.push_back(intermediate_pose);
+
+                  if (intermediate_cost == -1)
+                  {
+                    visualization_->publishInfeasibleRobotPose(intermediate_pose, *cfg_->robot_model, footprint_spec);
+                  }
+                }
+
+                ROS_DEBUG("teb size : %d", teb().sizePoses());
+                ROS_DEBUG("intermediate poses size : %d", intermediate_poses.size());
+
+                for(int g = 0; g < teb().sizePoses(); g++)
+                {
+                  ROS_INFO("pose %d,  x : %f, y : %f", g, teb().Pose(g).x(), teb().Pose(g).y());
+                }
+
+                // Insert the new pose and time difference at the position
+                for (int k = 0; k < intermediate_poses.size(); k++)
+                {
+                  teb().insertPose(i + k + 1, intermediate_poses[k]);
+                  teb().insertTimeDiff(i + k + 1, cfg_->trajectory.dt_ref);
+                }
+
+                for(int g = 0; g < teb().sizePoses(); g++)
+                {
+                  ROS_INFO("pose %d,  x : %f, y : %f", g, teb().Pose(g).x(), teb().Pose(g).y());
+                  double pose_cost = costmap_model->footprintCost(teb().Pose(g).x(), teb().Pose(g).y(), teb().Pose(g).theta(),footprint_spec, inscribed_radius, circumscribed_radius);
+                  ROS_INFO("Pose cost : %lf", pose_cost);
+                }
+            
+                ROS_DEBUG("FINISH INSERTING NEW POSES");
+
+                ROS_DEBUG("teb size : %d", teb_.sizePoses());
+                
+                // Implement optimization part when adding intermediate pose 
+                for(int i = 0; i < intermediate_poses.size(); i++)
+                {
+                    ROS_INFO("Footprint position x : %f, y : %f", intermediate_poses[i].x(), intermediate_poses[i].y());
+                }
+            
+                std::cout << "Press Enter to continue..." << std::endl;
+                std::cin.get();
+
+                ROS_INFO("optimizeTEB with intermediate pose"); 
+
+                optimizeTEB(cfg_->optim.no_inner_iterations, cfg_->optim.no_outer_iterations);
+              
+                for(int g = 0; g < teb().sizePoses(); g++)
+                {
+                  ROS_INFO("pose %d,  x : %f, y : %f", g, teb().Pose(g).x(), teb().Pose(g).y());
+                  double pose_cost = costmap_model->footprintCost(teb().Pose(g).x(), teb().Pose(g).y(), teb().Pose(g).theta(),
+                                                                        footprint_spec, inscribed_radius, circumscribed_radius);
+                  ROS_INFO("Pose cost : %lf", pose_cost);
+                }
+
                 std::cout << "Press Enter to continue..." << std::endl;
                 std::cin.get();
             }
@@ -1505,6 +1571,67 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
 {
   if (look_ahead_idx < 0 || look_ahead_idx >= teb().sizePoses())
     look_ahead_idx = teb().sizePoses() - 1;
+
+  if (feasibility_check_lookahead_distance > 0){
+    for (int i=1; i < teb().sizePoses(); ++i){
+      double pose_distance=std::hypot(teb().Pose(i).x()-teb().Pose(0).x(), teb().Pose(i).y()-teb().Pose(0).y());
+      if(pose_distance > feasibility_check_lookahead_distance){
+        look_ahead_idx = i - 1;
+        break;
+      }
+    }
+  }
+
+  for (int i=0; i <= look_ahead_idx; ++i)
+  {           
+    if ( costmap_model->footprintCost(teb().Pose(i).x(), teb().Pose(i).y(), teb().Pose(i).theta(), footprint_spec, inscribed_radius, circumscribed_radius) == -1 )
+    {
+      if (visualization_)
+      {
+        visualization_->publishInfeasibleRobotPose(teb().Pose(i), *cfg_->robot_model, footprint_spec);
+      }
+      return false;
+    }
+    // Checks if the distance between two poses is higher than the robot radius or the orientation diff is bigger than the specified threshold
+    // and interpolates in that case.
+    // (if obstacles are pushing two consecutive poses away, the center between two consecutive poses might coincide with the obstacle ;-)!
+    if (i<look_ahead_idx)
+    {
+      double delta_rot = g2o::normalize_theta(g2o::normalize_theta(teb().Pose(i+1).theta()) -
+                                              g2o::normalize_theta(teb().Pose(i).theta()));
+      Eigen::Vector2d delta_dist = teb().Pose(i+1).position()-teb().Pose(i).position();
+      if(fabs(delta_rot) > cfg_->trajectory.min_resolution_collision_check_angular || delta_dist.norm() > inscribed_radius)
+      {
+        int n_additional_samples = std::max(std::ceil(fabs(delta_rot) / cfg_->trajectory.min_resolution_collision_check_angular), 
+                                            std::ceil(delta_dist.norm() / inscribed_radius)) - 1;
+        PoseSE2 intermediate_pose = teb().Pose(i);
+        for(int step = 0; step < n_additional_samples; ++step)
+        {
+          intermediate_pose.position() = intermediate_pose.position() + delta_dist / (n_additional_samples + 1.0);
+          intermediate_pose.theta() = g2o::normalize_theta(intermediate_pose.theta() + 
+                                                           delta_rot / (n_additional_samples + 1.0));
+          if ( costmap_model->footprintCost(intermediate_pose.x(), intermediate_pose.y(), intermediate_pose.theta(),
+            footprint_spec, inscribed_radius, circumscribed_radius) == -1 )
+          {
+            if (visualization_) 
+            {
+              visualization_->publishInfeasibleRobotPose(intermediate_pose, *cfg_->robot_model, footprint_spec);
+            }
+            return false;
+          }
+        }
+      }
+    }
+  }
+  return true;
+}
+
+/*
+bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
+                                             double inscribed_radius, double circumscribed_radius, int look_ahead_idx, double feasibility_check_lookahead_distance)
+{
+  if (look_ahead_idx < 0 || look_ahead_idx >= teb().sizePoses())
+    look_ahead_idx = teb().sizePoses() - 1;
     
   ROS_DEBUG("tebsizePoses: %d", teb().sizePoses());
   ROS_DEBUG("look ahead idx: %d", look_ahead_idx);
@@ -1666,10 +1793,10 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
                   return false;
                 }
              */
-            }
-        }
-    }
-  return true;
-}
+//            }
+//        }
+//    }
+//  return true;
+//}
 
 } // namespace teb_local_planner

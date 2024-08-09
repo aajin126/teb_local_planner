@@ -361,12 +361,12 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
     
   // Do not allow config changes during the following optimization step
   boost::mutex::scoped_lock cfg_lock(cfg_.configMutex());
-/*
+
   int look_ahead_idx = cfg_.trajectory.feasibility_check_no_poses;
   double inscribed_radius = robot_inscribed_radius_;
 
   ROS_DEBUG("transformed plan size : %d", transformed_plan.size());
-
+/*
   if (look_ahead_idx < 0 || look_ahead_idx >= transformed_plan.size())
       look_ahead_idx = transformed_plan.size() - 1;
 
@@ -380,11 +380,11 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
         double yaw1 = tf2::getYaw(transformed_plan[i].pose.orientation);
         double yaw2 = tf2::getYaw(transformed_plan[i + 1].pose.orientation);
 
-        ROS_DEBUG("yaw[i] : %d , yaw[i+1] : %d", yaw1, yaw2);
+        ROS_DEBUG("yaw[i] : %lf , yaw[i+1] : %lf", yaw1, yaw2);
 
         double delta_rot = g2o::normalize_theta(yaw2) - g2o::normalize_theta(yaw1);
 
-        ROS_DEBUG("delta_rot : %d", delta_rot);
+        ROS_DEBUG("delta_rot : %lf", delta_rot);
 
         // Point를 Eigen::Vector2d로 변환
         Eigen::Vector2d pos1(transformed_plan[i].pose.position.x, transformed_plan[i].pose.position.y);
@@ -401,12 +401,11 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
           visualization_->visualizeIntermediatePoint(intermediate_pose);
           ROS_DEBUG("pose %d turn into intermediate_pose 0", i);
 
-          std::cout << "Press Enter to continue..." << std::endl;
-          std::cin.get();
          }
       }
   }
   */
+  
   // Now perform the actual planning
   // bool success = planner_->plan(robot_pose_, robot_goal_, robot_vel_, cfg_.goal_tolerance.free_goal_vel); // straight line init
   ROS_DEBUG("planning based transformed plan");
