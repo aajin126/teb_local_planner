@@ -1221,6 +1221,8 @@ void TebOptimalPlanner::computeCurrentCost(double obst_cost_scale, double viapoi
     cost_ += cur_cost;
   }
 
+  ROS_DEBUG("cost : %d", cost_);
+
   // delete temporary created graph
   if (!graph_exist_flag) 
     clearGraph();
@@ -1523,7 +1525,7 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
   for (int i=0; i <= look_ahead_idx; ++i)
   {           
     double cost = costmap_model->footprintCost(teb().Pose(i).x(), teb().Pose(i).y(), teb().Pose(i).theta(), footprint_spec, inscribed_radius, circumscribed_radius);
-    ROS_DEBUG("Footprint cost at pose %d: %f", i, cost);
+    ROS_DEBUG("Footprint cost at pose %d: %lf", i, cost);
     if (visualization_)
     {
         visualization_->publishRobotPose(teb().Pose(i), *cfg_->robot_model, footprint_spec);
@@ -1545,9 +1547,9 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
     {
         double delta_rot = g2o::normalize_theta(g2o::normalize_theta(teb().Pose(i + 1).theta()) -
                                                 g2o::normalize_theta(teb().Pose(i).theta()));
-        ROS_DEBUG("delta_rot : %d", delta_rot);
+        ROS_INFO("delta_rot : %lf", delta_rot);
         Eigen::Vector2d delta_dist = teb().Pose(i + 1).position() - teb().Pose(i).position();
-        ROS_DEBUG("delta_dist : %d", delta_dist);
+        ROS_INFO("delta_dist x : %lf, delta_dist y : %lf", delta_dist.x(), delta_dist.y());
 
         if (fabs(delta_rot) > cfg_->trajectory.min_resolution_collision_check_angular || delta_dist.norm() > inscribed_radius)
         {
@@ -1580,72 +1582,43 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
                 intermediate_poses.push_back(intermediate_pose);
             }
 
-            int insert_index = i+1;
+            ROS_DEBUG("teb size : %d", teb().sizePoses());
+            ROS_DEBUG("intermediate poses size : %d", intermediate_poses.size());
 
-            ROS_DEBUG("teb size : %d", teb_.sizePoses());
-
-            std::vector<PoseSE2> updated_poses;
-
-            for (int j = 0; j < teb_.sizePoses(); ++j) 
+            for(int g = 0; g < teb().sizePoses(); g++)
             {
-              if (j == insert_index) 
-              {
-                // 중간 포즈를 삽입
-                for (const auto& pose : intermediate_poses) 
-                {
-                  updated_poses.push_back(pose);
-                }
-              }
-              // 기존 포즈를 추가
-              updated_poses.push_back(teb_.Pose(j));
+              ROS_INFO("pose %d,  x : %f, y : %f", g, teb().Pose(g).x(), teb().Pose(g).y());
             }
 
-            ROS_DEBUG("update pose size : %d", updated_poses.size());
-
-            // 기존 포즈 벡터를 업데이트된 포즈 벡터로 교체
-            teb_.clearTimedElasticBand(); // 기존 포즈를 지우는 메서드가 필요할 수 있음
-
-            ROS_DEBUG("teb size : %d", teb_.sizePoses());
-
-            for (const auto& pose : updated_poses) 
+            // Insert the new pose and time difference at the position
+            for (int k = 0; k < intermediate_poses.size(); k++)
             {
-                teb_.addPose(pose); // 기존 addPose 메서드를 사용하여 포즈를 추가
+              teb().insertPose(i + k + 1, intermediate_poses[k]);
+              teb().insertTimeDiff(i + k + 1, cfg_->trajectory.dt_ref);
             }
 
-            // 여기에서 벡터 접근 시 예외를 처리합니다.
-            try {
-                  for (int k = 0; k < teb_.sizePoses(); ++k) 
-                  {
-                      PoseSE2 pose = teb_.Pose(k);
-                      std::cout << "Pose at index " << k << ": x = " << pose.x() << ", y = " << pose.y() << ", theta = " << pose.theta() << std::endl;
-                  }
-                } catch (const std::out_of_range& e) {
-                    std::cerr << "Index out of range: " << e.what() << std::endl;
-                }
-          
-            if (teb_.sizePoses() == 0)
+            for(int g = 0; g < teb().sizePoses(); g++)
             {
-              ROS_ERROR("TebOptimalPlanner::isTrajectoryFeasible: TEB is empty.");
-              return false;
+              ROS_INFO("pose %d,  x : %f, y : %f", g, teb().Pose(g).x(), teb().Pose(g).y());
             }
+            
+            ROS_DEBUG("FINISH INSERTING NEW POSES");
 
             ROS_DEBUG("teb size : %d", teb_.sizePoses());
                 
             // Implement optimization part when adding intermediate pose 
 
-            ROS_DEBUG("Footprint position x : %d, y : %d", intermediate_pose.x(), intermediate_pose.y());
+            ROS_INFO("Footprint position x : %f, y : %f", intermediate_pose.position().x(), intermediate_pose.position().y());
 
-            std::cout << "Press Enter to continue..." << std::endl;
-            std::cin.get();
-
-            ROS_DEBUG("optimizeTEB with intermediate pose"); 
+            ROS_INFO("optimizeTEB with intermediate pose"); 
 
             optimizeTEB(cfg_->optim.no_inner_iterations, cfg_->optim.no_outer_iterations);
               
-            ROS_DEBUG("Footprint position x : %d, y : %d", intermediate_pose.x(), intermediate_pose.y());
+            ROS_INFO("Footprint position x : %f, y : %f", intermediate_pose.position().x(), intermediate_pose.position().y());
 
             std::cout << "Press Enter to continue..." << std::endl;
             std::cin.get();
+
             /*
             if (intermediate_cost == -1)
             {
@@ -1673,10 +1646,9 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
                     }
                   return false;
                 }
-                */
+             */
             }
         }
-    
     }
   return true;
 }
