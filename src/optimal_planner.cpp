@@ -1580,6 +1580,11 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
                 
                 visualization_->visualizeIntermediatePoint(intermediate_pose); 
                 intermediate_poses.push_back(intermediate_pose);
+
+                if (intermediate_cost == -1)
+                {
+                  visualization_->publishInfeasibleRobotPose(intermediate_pose, *cfg_->robot_model, footprint_spec);
+                }
             }
 
             ROS_DEBUG("teb size : %d", teb().sizePoses());
@@ -1600,6 +1605,9 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
             for(int g = 0; g < teb().sizePoses(); g++)
             {
               ROS_INFO("pose %d,  x : %f, y : %f", g, teb().Pose(g).x(), teb().Pose(g).y());
+              double pose_cost = costmap_model->footprintCost(teb().Pose(g).x(), teb().Pose(g).y(), teb().Pose(g).theta(),
+                                                                        footprint_spec, inscribed_radius, circumscribed_radius);
+              ROS_INFO("Pose cost : %lf", pose_cost);
             }
             
             ROS_DEBUG("FINISH INSERTING NEW POSES");
@@ -1607,14 +1615,25 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
             ROS_DEBUG("teb size : %d", teb_.sizePoses());
                 
             // Implement optimization part when adding intermediate pose 
-
-            ROS_INFO("Footprint position x : %f, y : %f", intermediate_pose.position().x(), intermediate_pose.position().y());
+            for(int i = 0; i < intermediate_poses.size(); i++)
+            {
+                ROS_INFO("Footprint position x : %f, y : %f", intermediate_poses[i].x(), intermediate_poses[i].y());
+            }
+            
+            std::cout << "Press Enter to continue..." << std::endl;
+            std::cin.get();
 
             ROS_INFO("optimizeTEB with intermediate pose"); 
 
             optimizeTEB(cfg_->optim.no_inner_iterations, cfg_->optim.no_outer_iterations);
               
-            ROS_INFO("Footprint position x : %f, y : %f", intermediate_pose.position().x(), intermediate_pose.position().y());
+            for(int g = 0; g < teb().sizePoses(); g++)
+            {
+              ROS_INFO("pose %d,  x : %f, y : %f", g, teb().Pose(g).x(), teb().Pose(g).y());
+              double pose_cost = costmap_model->footprintCost(teb().Pose(g).x(), teb().Pose(g).y(), teb().Pose(g).theta(),
+                                                                        footprint_spec, inscribed_radius, circumscribed_radius);
+              ROS_INFO("Pose cost : %lf", pose_cost);
+            }
 
             std::cout << "Press Enter to continue..." << std::endl;
             std::cin.get();
