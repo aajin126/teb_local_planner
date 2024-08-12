@@ -261,7 +261,7 @@ void TebOptimalPlanner::setVelocityGoal(const geometry_msgs::Twist& vel_goal)
   vel_goal_.second = vel_goal;
 }
 
-bool TebOptimalPlanner::plan(const std::vector<geometry_msgs::PoseStamped>& initial_plan, const geometry_msgs::Twist* start_vel, bool free_goal_vel)
+bool TebOptimalPlanner::plan(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec, const std::vector<geometry_msgs::PoseStamped>& initial_plan, double inscribed_radius, double circumscribed_radius, const geometry_msgs::Twist* start_vel, bool free_goal_vel)
 {    
   ROS_DEBUG("TEB plan with initial_plan 1 ");
 
@@ -269,8 +269,6 @@ bool TebOptimalPlanner::plan(const std::vector<geometry_msgs::PoseStamped>& init
   std::cin.get();
 
   ROS_ASSERT_MSG(initialized_, "Call initialize() first.");
-
-  double inscribed_radius = robot_inscribed_radius_;
 
   if (!teb_.isInit())
   {
@@ -391,7 +389,7 @@ bool TebOptimalPlanner::plan(const std::vector<geometry_msgs::PoseStamped>& init
 
       if (look_ahead_idx < 0 || look_ahead_idx >= teb().sizePoses())
         look_ahead_idx = teb().sizePoses() - 1;
-        
+
       for (int i=0; i <= look_ahead_idx; ++i)
       {           
           if (i<look_ahead_idx)
@@ -407,14 +405,90 @@ bool TebOptimalPlanner::plan(const std::vector<geometry_msgs::PoseStamped>& init
                 ROS_DEBUG("initial planning -> additional_samples number : %d", n_additional_samples);
                 PoseSE2 intermediate_pose = teb().Pose(i);
                 ROS_DEBUG("pose %d turn into intermediate_pose 0", i);
+
+                std::vector<PoseSE2> intermediate_poses; // 중간 포즈를 저장할 임시 리스트
+
+                for (int step = 0; step < n_additional_samples; ++step)
+                {
+                  intermediate_pose.position() = intermediate_pose.position() + delta_dist / (n_additional_samples + 1.0);
+                  intermediate_pose.theta() = g2o::normalize_theta(intermediate_pose.theta() +
+                                                                 delta_rot / (n_additional_samples + 1.0));
+                  double intermediate_cost = costmap_model->footprintCost(intermediate_pose.x(), intermediate_pose.y(), intermediate_pose.theta(),
+                                                                          footprint_spec, inscribed_radius, circumscribed_radius);
+                
+                  visualization_->visualizeIntermediatePoint(intermediate_pose); 
+                  intermediate_poses.push_back(intermediate_pose);
+
+                  if (intermediate_cost == -1)
+                  {
+                    visualization_->publishInfeasibleRobotPose(intermediate_pose, *cfg_->robot_model, footprint_spec);
+                  }
+                }
+
+                ROS_DEBUG("teb size : %d", teb().sizePoses());
+                ROS_DEBUG("intermediate poses size : %d", intermediate_poses.size());
+
+                for(int g = 0; g < teb().sizePoses(); g++)
+                {
+                  ROS_INFO("pose %d,  x : %f, y : %f", g, teb().Pose(g).x(), teb().Pose(g).y());
+                }
+
+                // Insert the new pose and time difference at the position
+                for (int k = 0; k < intermediate_poses.size(); k++)
+                {
+                  teb().insertPose(i + k + 1, intermediate_poses[k]);
+                  teb().insertTimeDiff(i + k + 1, cfg_->trajectory.dt_ref);
+                }
+
+                for(int g = 0; g < teb().sizePoses(); g++)
+                {
+                  ROS_INFO("pose %d,  x : %f, y : %f", g, teb().Pose(g).x(), teb().Pose(g).y());
+                  double pose_cost = costmap_model->footprintCost(teb().Pose(g).x(), teb().Pose(g).y(), teb().Pose(g).theta(),footprint_spec, inscribed_radius, circumscribed_radius);
+                  if (pose_cost == -1)
+                  {
+                    std::cout << "Press Enter to continue..." << std::endl;
+                    std::cin.get();
+                  }
+                  ROS_INFO("Pose cost : %lf", pose_cost);
+                }
+            
+                ROS_DEBUG("FINISH INSERTING NEW POSES");
+
+                ROS_DEBUG("teb size : %d", teb_.sizePoses());
+                
+                // Implement optimization part when adding intermediate pose 
+                for(int i = 0; i < intermediate_poses.size(); i++)
+                {
+                    ROS_INFO("Footprint position x : %f, y : %f", intermediate_poses[i].x(), intermediate_poses[i].y());
+                }
+            
+                std::cout << "Press Enter to continue..." << std::endl;
+                std::cin.get();
+
+                ROS_INFO("optimizeTEB with intermediate pose"); 
+
+                optimizeTEB(cfg_->optim.no_inner_iterations, cfg_->optim.no_outer_iterations);
+              
+                for(int g = 0; g < teb().sizePoses(); g++)
+                {
+                  ROS_INFO("pose %d,  x : %f, y : %f", g, teb().Pose(g).x(), teb().Pose(g).y());
+                  double pose_cost = costmap_model->footprintCost(teb().Pose(g).x(), teb().Pose(g).y(), teb().Pose(g).theta(),
+                                                                        footprint_spec, inscribed_radius, circumscribed_radius);
+                  ROS_INFO("Pose cost : %lf", pose_cost);
+                }
+
+                std::cout << "Press Enter to continue..." << std::endl;
+                std::cin.get();
             }
           }
       }
+        
     }
     
-      else // goal too far away -> reinit
+    else // goal too far away -> reinit
     { 
       ROS_DEBUG("New goal: distance to existing goal is higher than the specified threshold. Reinitalizing trajectories.");
+
       teb_.clearTimedElasticBand();
       teb_.initTrajectoryToGoal(initial_plan, cfg_->robot.max_vel_x, cfg_->robot.max_vel_theta, cfg_->trajectory.global_plan_overwrite_orientation,
         cfg_->trajectory.min_samples, cfg_->trajectory.allow_init_with_backwards_motion);
@@ -453,6 +527,41 @@ bool TebOptimalPlanner::plan(const std::vector<geometry_msgs::PoseStamped>& init
     vel_goal_.first = true; // we just reactivate and use the previously set velocity (should be zero if nothing was modified)
   
   ROS_DEBUG("TEB optimization start");
+  // now optimize
+  return optimizeTEB(cfg_->optim.no_inner_iterations, cfg_->optim.no_outer_iterations);
+}
+
+bool TebOptimalPlanner::plan(const std::vector<geometry_msgs::PoseStamped>& initial_plan, const geometry_msgs::Twist* start_vel, bool free_goal_vel)
+{    
+  ROS_ASSERT_MSG(initialized_, "Call initialize() first.");
+  if (!teb_.isInit())
+  {
+    teb_.initTrajectoryToGoal(initial_plan, cfg_->robot.max_vel_x, cfg_->robot.max_vel_theta, cfg_->trajectory.global_plan_overwrite_orientation,
+      cfg_->trajectory.min_samples, cfg_->trajectory.allow_init_with_backwards_motion);
+  }
+  else // warm start
+  {
+    PoseSE2 start_(initial_plan.front().pose);
+    PoseSE2 goal_(initial_plan.back().pose);
+    if (teb_.sizePoses()>0
+        && (goal_.position() - teb_.BackPose().position()).norm() < cfg_->trajectory.force_reinit_new_goal_dist
+        && fabs(g2o::normalize_theta(goal_.theta() - teb_.BackPose().theta())) < cfg_->trajectory.force_reinit_new_goal_angular) // actual warm start!
+      teb_.updateAndPruneTEB(start_, goal_, cfg_->trajectory.min_samples); // update TEB
+    else // goal too far away -> reinit
+    {
+      ROS_DEBUG("New goal: distance to existing goal is higher than the specified threshold. Reinitalizing trajectories.");
+      teb_.clearTimedElasticBand();
+      teb_.initTrajectoryToGoal(initial_plan, cfg_->robot.max_vel_x, cfg_->robot.max_vel_theta, cfg_->trajectory.global_plan_overwrite_orientation,
+        cfg_->trajectory.min_samples, cfg_->trajectory.allow_init_with_backwards_motion);
+    }
+  }
+  if (start_vel)
+    setVelocityStart(*start_vel);
+  if (free_goal_vel)
+    setVelocityGoalFree();
+  else
+    vel_goal_.first = true; // we just reactivate and use the previously set velocity (should be zero if nothing was modified)
+  
   // now optimize
   return optimizeTEB(cfg_->optim.no_inner_iterations, cfg_->optim.no_outer_iterations);
 }

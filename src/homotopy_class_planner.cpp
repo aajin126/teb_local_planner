@@ -82,6 +82,19 @@ void HomotopyClassPlanner::setVisualization(TebVisualizationPtr visualization)
   visualization_ = visualization;
 }
 
+bool HomotopyClassPlanner::plan(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec, const std::vector<geometry_msgs::PoseStamped>& initial_plan, double inscribed_radius, double circumscribed_radius, const geometry_msgs::Twist* start_vel, bool free_goal_vel)
+{
+  ROS_ASSERT_MSG(initialized_, "Call initialize() first.");
+
+  // store initial plan for further initializations (must be valid for the lifetime of this object or clearPlanner() is called!)
+  initial_plan_ = &initial_plan;
+
+  PoseSE2 start(initial_plan.front().pose);
+  PoseSE2 goal(initial_plan.back().pose);
+
+  return plan(start, goal, start_vel, free_goal_vel);
+}
+
 bool HomotopyClassPlanner::plan(const std::vector<geometry_msgs::PoseStamped>& initial_plan, const geometry_msgs::Twist* start_vel, bool free_goal_vel)
 {
   ROS_ASSERT_MSG(initialized_, "Call initialize() first.");

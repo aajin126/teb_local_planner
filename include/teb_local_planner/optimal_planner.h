@@ -138,7 +138,18 @@ public:
 
   /** @name Plan a trajectory  */
   //@{
-  
+  /**
+   * @param costmap_model Pointer to the costmap model
+   * @param footprint_spec The specification of the footprint of the robot in world coordinates
+   * @param inscribed_radius The radius of the inscribed circle of the robot
+   * @param circumscribed_radius The radius of the circumscribed circle of the robot
+   * @param initial_plan vector of geometry_msgs::PoseStamped (must be valid until clearPlanner() is called!)
+   * @param start_vel Current start velocity (e.g. the velocity of the robot, only linear.x, linear.y (holonomic) and angular.z are used)
+   * @param free_goal_vel if \c true, a nonzero final velocity at the goal pose is allowed,
+   *		      otherwise the final velocity will be zero (default: false)
+   */  
+  virtual bool plan(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec, const std::vector<geometry_msgs::PoseStamped>& initial_plan, double inscribed_radius = 0.0, double circumscribed_radius = 0.0, const geometry_msgs::Twist* start_vel = NULL, bool free_goal_vel=false);
+
   /**
    * @brief Plan a trajectory based on an initial reference plan.
    * 
@@ -682,20 +693,19 @@ protected:
   boost::shared_ptr<g2o::SparseOptimizer> initOptimizer();
 
   //new  
-  //std::vector<geometry_msgs::Point> footprint_spec_; //!< Store the footprint of the robot 
+  // external objects (store weak pointers)
+  costmap_2d::Costmap2DROS* costmap_ros_; //!< Pointer to the costmap ros wrapper, received from the navigation stack
+  costmap_2d::Costmap2D* costmap_; //!< Pointer to the 2d costmap (obtained from the costmap ros wrapper)
+  
+  std::vector<geometry_msgs::Point> footprint_spec_; //!< Store the footprint of the robot 
   double robot_inscribed_radius_; //!< The radius of the inscribed circle of the robot (collision possible)
-  //double robot_circumscribed_radius; //!< The radius of the circumscribed circle of the robot
+  double robot_circumscribed_radius; //!< The radius of the circumscribed circle of the robot
 
   // external objects (store weak pointers)
   const TebConfig* cfg_; //!< Config class that stores and manages all related parameters
   ObstContainer* obstacles_; //!< Store obstacles that are relevant for planning
   const ViaPointContainer* via_points_; //!< Store via points for planning
   std::vector<ObstContainer> obstacles_per_vertex_; //!< Store the obstacles associated with the n-1 initial vertices
-
-  //new 
-  //costmap_2d::Costmap2DROS* costmap_ros_; //!< Pointer to the costmap ros wrapper, received from the navigation stack
-  //costmap_2d::Costmap2D* costmap_; //!< Pointer to the 2d costmap (obtained from the costmap ros wrapper)
-  //tf2_ros::Buffer* tf_; //!< pointer to tf buffer
 
   double cost_; //!< Store cost value of the current hyper-graph
   RotType prefer_rotdir_; //!< Store whether to prefer a specific initial rotation in optimization (might be activated in case the robot oscillates)

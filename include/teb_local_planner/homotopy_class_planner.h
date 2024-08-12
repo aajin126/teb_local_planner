@@ -146,6 +146,17 @@ public:
   //@{
 
   /**
+   * @param costmap_model Pointer to the costmap model
+   * @param footprint_spec The specification of the footprint of the robot in world coordinates
+   * @param inscribed_radius The radius of the inscribed circle of the robot
+   * @param circumscribed_radius The radius of the circumscribed circle of the robot
+   * @param initial_plan vector of geometry_msgs::PoseStamped (must be valid until clearPlanner() is called!)
+   * @param start_vel Current start velocity (e.g. the velocity of the robot, only linear.x, linear.y (holonomic) and angular.z are used)
+   * @param free_goal_vel if \c true, a nonzero final velocity at the goal pose is allowed,
+   *		      otherwise the final velocity will be zero (default: false)
+   */
+  virtual bool plan(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec, const std::vector<geometry_msgs::PoseStamped>& initial_plan, double inscribed_radius = 0.0, double circumscribed_radius = 0.0, const geometry_msgs::Twist* start_vel = NULL, bool free_goal_vel=false);
+  /**
    * @brief Plan a trajectory based on an initial reference plan.
    *
    * Provide this method to create and optimize a trajectory that is initialized
@@ -568,7 +579,13 @@ protected:
 
   TebOptimalPlannerPtr last_best_teb_;  //!< Points to the plan used in the previous control cycle
 
-
+  // external objects (store weak pointers)
+  costmap_2d::Costmap2DROS* costmap_ros_; //!< Pointer to the costmap ros wrapper, received from the navigation stack
+  costmap_2d::Costmap2D* costmap_; //!< Pointer to the 2d costmap (obtained from the costmap ros wrapper)
+  
+  std::vector<geometry_msgs::Point> footprint_spec_; //!< Store the footprint of the robot 
+  double robot_inscribed_radius_; //!< The radius of the inscribed circle of the robot (collision possible)
+  double robot_circumscribed_radius; //!< The radius of the circumscribed circle of the robot
 
 public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW

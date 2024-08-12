@@ -84,6 +84,19 @@ public:
   
   /** @name Plan a trajectory */
   //@{
+
+  /**
+   * @param costmap_model Pointer to the costmap model
+   * @param footprint_spec The specification of the footprint of the robot in world coordinates
+   * @param inscribed_radius The radius of the inscribed circle of the robot
+   * @param circumscribed_radius The radius of the circumscribed circle of the robot
+   * @param initial_plan vector of geometry_msgs::PoseStamped (must be valid until clearPlanner() is called!)
+   * @param start_vel Current start velocity (e.g. the velocity of the robot, only linear.x, linear.y (holonomic) and angular.z are used)
+   * @param free_goal_vel if \c true, a nonzero final velocity at the goal pose is allowed,
+   *		      otherwise the final velocity will be zero (default: false)
+   */  
+
+  virtual bool plan(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec, const std::vector<geometry_msgs::PoseStamped>& initial_plan, double inscribed_radius = 0.0, double circumscribed_radius = 0.0, const geometry_msgs::Twist* start_vel = NULL, bool free_goal_vel=false) = 0;
   
   /**
    * @brief Plan a trajectory based on an initial reference plan.
