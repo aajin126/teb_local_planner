@@ -441,10 +441,7 @@ bool TimedElasticBand::initTrajectoryToGoal(const std::vector<geometry_msgs::Pos
       {
         // simple strategy: interpolate between the current pose and the goal
         PoseSE2 intermediate_pose = PoseSE2::average(BackPose(), goal);
-        ROS_DEBUG("intermediate_pose : %d", intermediate_pose.position());
-        
-        std::cout << "Press Enter to continue..." << std::endl;
-        std::cin.get();
+        ROS_DEBUG("intermediate_pose : (%d,%d)", intermediate_pose.position().x(), intermediate_pose.position().y());
 
         double dt = estimateDeltaT(BackPose(), intermediate_pose, max_vel_x, max_vel_theta);
         addPoseAndTimeDiff( intermediate_pose, dt ); // let the optimier correct the timestep (TODO: better initialization

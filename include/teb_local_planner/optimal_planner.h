@@ -502,7 +502,7 @@ public:
 
   void printDistanceField();
 
-  void processIntermediatePose(PoseSE2& intermediate_pose);
+  void processPose(PoseSE2& intermediate_pose);
 
   void pushPoseAwayFromObstacle(PoseSE2& pose, unsigned int width, unsigned int height);
 
@@ -719,6 +719,10 @@ protected:
 
   bool initialized_; //!< Keeps track about the correct initialization of this class
   bool optimized_; //!< This variable is \c true as long as the last optimization has been completed successful
+
+  const float* distance_map_;
+  unsigned int map_width_;
+  unsigned int map_height_;
 
   
 public:

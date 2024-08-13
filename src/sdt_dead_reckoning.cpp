@@ -2,6 +2,11 @@
 #include <stdlib.h>
 #include <math.h>
 
+#include <ros/ros.h>
+#include <nav_msgs/OccupancyGrid.h>
+#include <sensor_msgs/Image.h>
+#include <vector>
+
 #define SDT_DEAD_RECKONING_IMPLEMENTATION
 
 void sdt_dead_reckoning(unsigned int width, unsigned int height, unsigned char threshold, const unsigned char* image, float* distance_field) {
@@ -132,4 +137,56 @@ void sdt_dead_reckoning(unsigned int width, unsigned int height, unsigned char t
     free(padded_distance_field);
     free(px);
     free(py);
+}
+
+class DistanceFieldUpdater {
+public:
+    DistanceFieldUpdater(ros::NodeHandle& nh) : nh_(nh), map_received_(false) {
+        // Subscribe to the local costmap topic
+        costmap_sub_ = nh_.subscribe("/move_base/local_costmap/costmap", 1, &DistanceFieldUpdater::costmapCallback, this);
+        // Publisher for the minimum distance to obstacles
+        robot_distance_pub_ = nh_.advertise<sensor_msgs::Image>("/distance_map", 1);
+        ROS_INFO("DistanceFieldUpdater initialized");
+    }
+
+private:
+    ros::NodeHandle nh_;
+    ros::Subscriber costmap_sub_;
+    ros::Publisher robot_distance_pub_;
+
+    bool map_received_; // Variable to track if the map has been received
+    unsigned int map_width_;
+    unsigned int map_height_;
+    float map_resolution_;
+    std::vector<float> distance_field_;
+
+
+    // Callback function to handle incoming costmap messages
+    void costmapCallback(const nav_msgs::OccupancyGrid::ConstPtr& msg) {
+    map_width_ = msg->info.width;
+    map_height_ = msg->info.height;
+    map_resolution_ = msg->info.resolution;
+    map_received_ = true;
+
+    // Update distance field size
+    distance_field_.resize(map_width_ * map_height_);
+
+    // Extract costmap data and convert to unsigned char
+    std::vector<unsigned char> unsigned_costmap_data(msg->data.size());
+    for (size_t i = 0; i < msg->data.size(); ++i) {
+        unsigned_costmap_data[i] = static_cast<unsigned char>(msg->data[i]);
+    }
+    sdt_dead_reckoning(map_width_, map_height_, 0, unsigned_costmap_data.data(), distance_field_.data());
+
+    ROS_DEBUG("Costmap received and distance field updated.");
+	}
+};
+int main(int argc, char** argv) {
+    ros::init(argc, argv, "distance_field_updater");
+    ros::NodeHandle nh;
+
+    DistanceFieldUpdater updater(nh);
+
+    ros::spin();
+    return 0;
 }
