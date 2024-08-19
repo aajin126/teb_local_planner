@@ -683,6 +683,7 @@ bool TebOptimalPlanner::optimizeGraph(int no_iterations,bool clear_after)
     
   return true;
 }
+
 void TebOptimalPlanner::clearGraph()
 {
   // clear optimizer states
@@ -698,8 +699,6 @@ void TebOptimalPlanner::clearGraph()
     optimizer_->clear();
   }
 }
-
-
 
 void TebOptimalPlanner::AddTEBVertices()
 {
