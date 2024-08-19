@@ -163,6 +163,8 @@ public:
                                   const std::vector<geometry_msgs::Point>& footprint);
 
   void visualizeIntermediatePoint(const PoseSE2& pose, const std::string& ns = "IntermediatePoints");
+
+   void visualizeObstacle(const ObstaclePtr& obstacle) const;
   
   /**
    * @brief Publish obstacle positions to the ros topic \e ../../teb_markers
@@ -277,6 +279,7 @@ protected:
   ros::Publisher footprintmodel_pub_; //!< Publisher for the trajectory pose sequence
   ros::Publisher infeasiblefootprint_pub_; //!< Publisher for visualization markers
   ros::Publisher infeasiblefootprintmodel_pub_; //!< Publisher for the feedback message for analysis and debug purposes
+  ros::Publisher obstacle_pub_;
   
   const TebConfig* cfg_; //!< Config class that stores and manages all related parameters
   

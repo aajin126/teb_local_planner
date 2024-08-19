@@ -823,9 +823,15 @@ void TebOptimalPlanner::AddEdgesObstacles(double weight_multiplier)
       }   
       
       if (left_obstacle)
+      {
         iter_obstacle->push_back(left_obstacle);
+        visualization_->visualizeObstacle(left_obstacle);
+      }
       if (right_obstacle)
+      {
         iter_obstacle->push_back(right_obstacle);
+        visualization_->visualizeObstacle(right_obstacle);
+      }
 
       // continue here to ignore obstacles for the first pose, but use them later to create the EdgeVelocityObstacleRatio edges
       if (i == 0)
@@ -1663,7 +1669,7 @@ void TebOptimalPlanner::processPose(PoseSE2& intermediate_pose)
         rate.sleep(); // Sleep for the remaining time to maintain the loop rate
     }
 }
-*/
+
 
 float getDistanceAt(double x, double y) const {
     if (!map_received_) {
@@ -1694,6 +1700,7 @@ void processPose(const PoseSE2& pose) {
         // 다른 작업 수행
     }
 }
+*/
 /*
 
 bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
@@ -1759,7 +1766,7 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
   }
   return true;
 }
-
+*/
 
 bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
                                              double inscribed_radius, double circumscribed_radius, int look_ahead_idx, double feasibility_check_lookahead_distance)
@@ -1900,7 +1907,7 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
     }
   return true;
 }
-*/
+/*
 
 bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
                                              double inscribed_radius, double circumscribed_radius, int look_ahead_idx, double feasibility_check_lookahead_distance)
@@ -2041,4 +2048,5 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
   }
   return true;
 }
+*/
 } // namespace teb_local_planner

@@ -70,8 +70,8 @@ void TebVisualization::initialize(ros::NodeHandle& nh, const TebConfig& cfg)
   footprintmodel_pub_ = nh.advertise<visualization_msgs::Marker>("footprintmodel_markers", 1000);
   infeasiblefootprint_pub_ = nh.advertise<visualization_msgs::Marker>("infeasiblefootprint_markers", 1000);
   infeasiblefootprintmodel_pub_ = nh.advertise<visualization_msgs::Marker>("infeasiblefootprintmodel_markers", 1000);
+  obstacle_pub_ = nh.advertise<visualization_msgs::Marker>("close_obstacle", 1000);
 
-  
   initialized_ = true; 
 }
 
@@ -268,6 +268,37 @@ void TebVisualization::visualizeIntermediatePoint(const PoseSE2& pose, const std
 
   // Publish the marker
   teb_marker_pub_.publish(marker);
+}
+
+void TebVisualization::visualizeObstacle(const ObstaclePtr& obstacle) const
+{
+    if (!obstacle || printErrorWhenNotInitialized())
+        return;
+
+    visualization_msgs::Marker marker;
+    marker.header.frame_id = cfg_->map_frame;
+    marker.header.stamp = ros::Time::now();
+    marker.ns = "ObstacleVisualization";
+    marker.type = visualization_msgs::Marker::SPHERE;
+    marker.action = visualization_msgs::Marker::ADD;
+    marker.lifetime = ros::Duration(2.0);
+
+    geometry_msgs::Point point;
+    point.x = obstacle->getCentroid().x(); // 장애물의 중심 위치
+    point.y = obstacle->getCentroid().y();
+    point.z = 0;
+    marker.pose.position = point;
+    
+    marker.scale.x = 0.05; // 장애물의 크기 조정
+    marker.scale.y = 0.05;
+    marker.scale.z = 0.05;
+
+    marker.color.a = 1.0;
+    marker.color.r = 0.0;
+    marker.color.g = 1.0;
+    marker.color.b = 0.0;
+
+    obstacle_pub_.publish(marker);
 }
 
 
