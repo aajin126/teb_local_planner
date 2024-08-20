@@ -78,8 +78,10 @@ TebOptimalPlanner::TebOptimalPlanner() : cfg_(NULL), obstacles_(NULL), via_point
   
 TebOptimalPlanner::TebOptimalPlanner(const TebConfig& cfg, ObstContainer* obstacles, TebVisualizationPtr visual, const ViaPointContainer* via_points)
 {
-  
   initialize(cfg, obstacles, visual, via_points);
+
+  ros::NodeHandle nh;
+  local_map_subscriber_ = std::make_shared<DistanceFieldUpdater>(nh);
 }
 
 TebOptimalPlanner::~TebOptimalPlanner()
@@ -825,13 +827,14 @@ void TebOptimalPlanner::AddEdgesObstacles(double weight_multiplier)
       if (left_obstacle)
       {
         iter_obstacle->push_back(left_obstacle);
-        visualization_->visualizeObstacle(left_obstacle);
       }
       if (right_obstacle)
       {
         iter_obstacle->push_back(right_obstacle);
-        visualization_->visualizeObstacle(right_obstacle);
       }
+      visualization_->visualizeObstacle(teb_.Pose(i), left_obstacle, right_obstacle);
+      //std::cout << "Press Enter to continue..." << std::endl;
+      //std::cin.get();
 
       // continue here to ignore obstacles for the first pose, but use them later to create the EdgeVelocityObstacleRatio edges
       if (i == 0)
@@ -1551,10 +1554,9 @@ void TebOptimalPlanner::getFullTrajectory(std::vector<TrajectoryPointMsg>& traje
   goal.time_from_start.fromSec(curr_time);
 }
 
-/*
 void TebOptimalPlanner::pushPoseAwayFromObstacle(PoseSE2& pose, unsigned int width, unsigned int height)
 {
-    const float* distance_field = local_map_subscriber->getDistanceField(); // Use the distance field from the global subscriber
+    const float* distance_field = local_map_subscriber_->getDistanceField(); // Use the distance field from the global subscriber
 
     if (distance_field)
     {
@@ -1597,13 +1599,13 @@ void TebOptimalPlanner::pushPoseAwayFromObstacle(PoseSE2& pose, unsigned int wid
 
 void TebOptimalPlanner::printDistanceField()
 {
-    if (local_map_subscriber->isDataReady())
+    if (local_map_subscriber_->isDataReady())
     {
-        const float* distance_field = local_map_subscriber->getDistanceField();
+        const float* distance_field = local_map_subscriber_->getDistanceField();
         if (distance_field)
         {
-            unsigned int width = local_map_subscriber->getWidth();
-            unsigned int height = local_map_subscriber->getHeight();
+            unsigned int width = local_map_subscriber_->getWidth();
+            unsigned int height = local_map_subscriber_->getHeight();
 
             ROS_INFO("Distance Field:");
             for (unsigned int y = 0; y < height; ++y)
@@ -1630,77 +1632,38 @@ void TebOptimalPlanner::printDistanceField()
 
 void TebOptimalPlanner::processPose(PoseSE2& intermediate_pose)
 {
-    ros::Rate rate(10); // Rate of 10 Hz, adjust as needed
-
-    while (ros::ok())
+    // Check if the local map subscriber has received the map data
+    if (local_map_subscriber_->isDataReady())
     {
-        if (local_map_subscriber->isDataReady())
+        ROS_DEBUG("Local map subscriber is not null");
+        unsigned int width = local_map_subscriber_->getWidth();
+        unsigned int height = local_map_subscriber_->getHeight();
+        const float* distance_field = local_map_subscriber_->getDistanceField();
+
+        ROS_DEBUG("Width: %u, Height: %u", width, height);
+
+        if (distance_field)
         {
-            ROS_DEBUG("Local map subscriber is not null");
-            unsigned int width = local_map_subscriber->getWidth();
-            unsigned int height = local_map_subscriber->getHeight();
-            const float* distance_field = local_map_subscriber->getDistanceField();
+            ROS_DEBUG("Distance field is not null");
 
-            ROS_DEBUG("Width: %u, Height: %u",width, height);
+            PoseSE2 modifiable_pose = intermediate_pose;
 
-            if (distance_field)
-            {
-                ROS_DEBUG("Distance field is not null");
+            ROS_DEBUG("Push pose away from obstacle");
+            pushPoseAwayFromObstacle(modifiable_pose, width, height);
 
-                PoseSE2 modifiable_pose = intermediate_pose;
-
-                ROS_DEBUG("Push pose away from obstacle");
-                pushPoseAwayFromObstacle(modifiable_pose, width, height);
-
-                ROS_INFO("Modified pose position: [%f, %f]", modifiable_pose.position().x(), modifiable_pose.position().y());
-            }
-            else
-            {
-                ROS_DEBUG("Distance field is null");
-            }
+            ROS_INFO("Modified pose position: [%f, %f]", modifiable_pose.position().x(), modifiable_pose.position().y());
         }
         else
         {
-            ROS_DEBUG("Local map subscriber is null");
+            ROS_DEBUG("Distance field is null");
         }
-
-        ROS_DEBUG("Did not get local map information");
-        
-        rate.sleep(); // Sleep for the remaining time to maintain the loop rate
+    }
+    else
+    {
+        ROS_DEBUG("Local map subscriber is null or data is not ready");
     }
 }
 
-
-float getDistanceAt(double x, double y) const {
-    if (!map_received_) {
-        ROS_WARN("Map not received yet. Returning large distance.");
-        return std::numeric_limits<float>::max(); // 초기 맵이 수신되지 않았을 때 큰 값을 반환
-    }
-
-    int grid_x = static_cast<int>(x / map_resolution_);
-    int grid_y = static_cast<int>(y / map_resolution_);
-
-    if (grid_x < 0 || grid_x >= map_width_ || grid_y < 0 || grid_y >= map_height_) {
-        ROS_WARN("Coordinates out of bounds. Returning large distance.");
-        return std::numeric_limits<float>::max(); // 맵의 범위를 벗어났을 때 큰 값을 반환
-    }
-
-    return distance_field_[grid_y * map_width_ + grid_x];
-}
-
-void processPose(const PoseSE2& pose) {
-    float distance = updater.getDistanceAt(pose.x(), pose.y());
-    
-    if (distance < threshold) {
-        ROS_WARN("Pose is too close to an obstacle!");
-        // 여기에 추가 작업 수행
-    }
-    else {
-        ROS_INFO("Pose is at a safe distance.");
-        // 다른 작업 수행
-    }
-}
-*/
 /*
 
 bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
@@ -1766,7 +1729,7 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
   }
   return true;
 }
-*/
+
 
 bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
                                              double inscribed_radius, double circumscribed_radius, int look_ahead_idx, double feasibility_check_lookahead_distance)
@@ -1907,7 +1870,7 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
     }
   return true;
 }
-/*
+*/
 
 bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
                                              double inscribed_radius, double circumscribed_radius, int look_ahead_idx, double feasibility_check_lookahead_distance)
@@ -2023,7 +1986,7 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
 
               if (pose_cost == -1)
               {
-                float distance = updater.getDistanceAt(teb().Pose(g).x(), teb().Pose(g).y());
+                float distance = local_map_subscriber_->getDistanceAt(teb().Pose(g).x(), teb().Pose(g).y());
                 ROS_INFO("Distance at pose: %f", distance);
 
                 processPose(teb().Pose(g));
@@ -2043,10 +2006,12 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
                                                                         footprint_spec, inscribed_radius, circumscribed_radius);
               ROS_INFO("Pose cost : %lf", pose_cost);
             }
+            std::cout << "Press Enter to continue..." << std::endl;
+            std::cin.get();
         }
     }
   }
   return true;
 }
-*/
+
 } // namespace teb_local_planner

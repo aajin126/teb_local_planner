@@ -191,7 +191,6 @@ add_library(teb_local_planner
    src/homotopy_class_planner.cpp
    src/teb_local_planner_ros.cpp
    src/graph_search.cpp
-   src/pose_util.cpp
    src/sdt_dead_reckoning.cpp
 )
 

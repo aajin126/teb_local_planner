@@ -164,7 +164,7 @@ public:
 
   void visualizeIntermediatePoint(const PoseSE2& pose, const std::string& ns = "IntermediatePoints");
 
-   void visualizeObstacle(const ObstaclePtr& obstacle) const;
+  void visualizeObstacle(const PoseSE2& teb_pose, const ObstaclePtr& left_obstacle, const ObstaclePtr& right_obstacle) const;
   
   /**
    * @brief Publish obstacle positions to the ros topic \e ../../teb_markers

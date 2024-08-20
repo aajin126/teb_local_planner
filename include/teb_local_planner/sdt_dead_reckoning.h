@@ -75,14 +75,37 @@ v1.0  2018-08-31  Initial release
 #ifndef SDT_DEAD_RECKONING_HEADER
 #define SDT_DEAD_RECKONING_HEADER
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include <ros/ros.h>
+#include <nav_msgs/OccupancyGrid.h>
+#include <sensor_msgs/Image.h>
+#include <vector>
+#include <limits>
+#include <cmath>
+#include <memory>
 
-void sdt_dead_reckoning(unsigned int width, unsigned int height, unsigned char threshold, const unsigned char* image, float* distance_field);
+class DistanceFieldUpdater {
+public:
+    explicit DistanceFieldUpdater(ros::NodeHandle& nh);
 
-#ifdef __cplusplus
-}
-#endif
+    float getDistanceAt(double x, double y) const;
+	
+    bool isDataReady() const;
+    const float* getDistanceField() const;
+    unsigned int getWidth() const;
+    unsigned int getHeight() const;
+
+private:
+    ros::NodeHandle nh_;
+    ros::Subscriber costmap_sub_;
+    ros::Publisher robot_distance_pub_;
+
+    bool map_received_;
+    unsigned int map_width_;
+    unsigned int map_height_;
+    float map_resolution_;
+    std::vector<float> distance_field_;
+
+    void costmapCallback(const nav_msgs::OccupancyGrid::ConstPtr& msg);
+};
 
 #endif  // SDT_DEAD_RECKONING_HEADER

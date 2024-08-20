@@ -6,6 +6,7 @@
 #include <nav_msgs/OccupancyGrid.h>
 #include <sensor_msgs/Image.h>
 #include <vector>
+#include <limits>
 
 #define SDT_DEAD_RECKONING_IMPLEMENTATION
 
@@ -139,39 +140,53 @@ void sdt_dead_reckoning(unsigned int width, unsigned int height, unsigned char t
     free(py);
 }
 
-class DistanceFieldUpdater {
-public:
-    DistanceFieldUpdater(ros::NodeHandle& nh) : nh_(nh), map_received_(false) {
-        // Subscribe to the local costmap topic
-        costmap_sub_ = nh_.subscribe("/move_base/local_costmap/costmap", 1, &DistanceFieldUpdater::costmapCallback, this);
-        // Publisher for the minimum distance to obstacles
-        robot_distance_pub_ = nh_.advertise<sensor_msgs::Image>("/distance_map", 1);
-        ROS_INFO("DistanceFieldUpdater initialized");
+DistanceFieldUpdater::DistanceFieldUpdater(ros::NodeHandle& nh) : nh_(nh), map_received_(false), map_width_(0), map_height_(0) {
+    costmap_sub_ = nh_.subscribe("/move_base/local_costmap/costmap", 1, &DistanceFieldUpdater::costmapCallback, this);
+    robot_distance_pub_ = nh_.advertise<sensor_msgs::Image>("/distance_map", 1);
+    ROS_INFO("DistanceFieldUpdater initialized");
+}
+
+float DistanceFieldUpdater::getDistanceAt(double x, double y) const {
+    if (!map_received_) {
+        ROS_WARN("Map not received yet. Returning large distance.");
+        return std::numeric_limits<float>::max();
     }
 
-private:
-    ros::NodeHandle nh_;
-    ros::Subscriber costmap_sub_;
-    ros::Publisher robot_distance_pub_;
+    int grid_x = static_cast<int>(x / map_resolution_);
+    int grid_y = static_cast<int>(y / map_resolution_);
 
-    bool map_received_; // Variable to track if the map has been received
-    unsigned int map_width_;
-    unsigned int map_height_;
-    float map_resolution_;
-    std::vector<float> distance_field_;
+    if (grid_x < 0 || grid_x >= map_width_ || grid_y < 0 || grid_y >= map_height_) {
+        ROS_WARN("Coordinates out of bounds. Returning large distance.");
+        return std::numeric_limits<float>::max();
+    }
 
+    return distance_field_[grid_y * map_width_ + grid_x];
+}
 
-    // Callback function to handle incoming costmap messages
-    void costmapCallback(const nav_msgs::OccupancyGrid::ConstPtr& msg) {
+bool DistanceFieldUpdater::isDataReady() const {
+    return map_received_;
+}
+
+const float* DistanceFieldUpdater::getDistanceField() const {
+    return distance_field_.data();
+}
+
+unsigned int DistanceFieldUpdater::getWidth() const {
+    return map_width_;
+}
+
+unsigned int DistanceFieldUpdater::getHeight() const {
+    return map_height_;
+}
+
+void DistanceFieldUpdater::costmapCallback(const nav_msgs::OccupancyGrid::ConstPtr& msg) {
     map_width_ = msg->info.width;
     map_height_ = msg->info.height;
     map_resolution_ = msg->info.resolution;
     map_received_ = true;
 
-    // Update distance field size
     distance_field_.resize(map_width_ * map_height_);
 
-    // Extract costmap data and convert to unsigned char
     std::vector<unsigned char> unsigned_costmap_data(msg->data.size());
     for (size_t i = 0; i < msg->data.size(); ++i) {
         unsigned_costmap_data[i] = static_cast<unsigned char>(msg->data[i]);
@@ -179,13 +194,13 @@ private:
     sdt_dead_reckoning(map_width_, map_height_, 0, unsigned_costmap_data.data(), distance_field_.data());
 
     ROS_DEBUG("Costmap received and distance field updated.");
-	}
-};
+}
+
 int main(int argc, char** argv) {
     ros::init(argc, argv, "distance_field_updater");
     ros::NodeHandle nh;
 
-    DistanceFieldUpdater updater(nh);
+    DistanceFieldUpdater local_map_subscriber_(nh);
 
     ros::spin();
     return 0;
