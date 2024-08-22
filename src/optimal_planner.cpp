@@ -1896,20 +1896,20 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
 
   for (int i=0; i <= look_ahead_idx; ++i)
   {           
-    double cost = costmap_model->footprintCost(teb().Pose(i).x(), teb().Pose(i).y(), teb().Pose(i).theta(), footprint_spec, inscribed_radius, circumscribed_radius);
-    ROS_DEBUG("Footprint cost at pose %d: %lf", i, cost);
-    if (visualization_)
-    {
-        visualization_->publishRobotPose(teb().Pose(i), *cfg_->robot_model, footprint_spec);
-    }
+    double cost = costmap_model->footprintCost(teb().Pose(i).x(), teb().Pose(i).y(), teb().Pose(i).theta(), footprint_spec, inscribed_radius, circumscribed_radius);    
+    ROS_INFO("pose %d,  x : %f, y : %f, cost : %d", i, teb().Pose(i).x(), teb().Pose(i).y(), cost);
 
     if (cost == -1)
     {
+        float distance = local_map_subscriber_->getDistanceAt(teb().Pose(g).x(), teb().Pose(g).y());
+        ROS_INFO("Distance at pose: %f", distance);
+
+        processPose(teb().Pose(g));
+
         if (visualization_)
         {
             visualization_->publishInfeasibleRobotPose(teb().Pose(i), *cfg_->robot_model, footprint_spec);
         }
-        return false;
     }
   
     // Checks if the distance between two poses is higher than the robot radius or the orientation diff is bigger than the specified threshold
@@ -1932,9 +1932,6 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
             visualization_->publishRobotPose(teb().Pose(i), *cfg_->robot_model, footprint_spec);
             visualization_->publishRobotPose(teb().Pose(i+1), *cfg_->robot_model, footprint_spec);
 
-            // 프로그램을 일시적으로 멈추고 사용자 입력을 기다림
-            // std::cout << "Press Enter to continue..." << std::endl;
-            // std::cin.get();
 
             ROS_DEBUG("additional_samples number : %d", n_additional_samples);
             PoseSE2 intermediate_pose = teb().Pose(i);
@@ -2013,5 +2010,6 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
   }
   return true;
 }
+
 
 } // namespace teb_local_planner

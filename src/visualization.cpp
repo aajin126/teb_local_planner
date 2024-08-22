@@ -227,8 +227,8 @@ void TebVisualization::publishRobotPose(const PoseSE2& pose,
                                                   const BaseRobotFootprintModel& robot_model,
                                                   const std::vector<geometry_msgs::Point>& footprint)
 {
-  publishRobotFootprintModel(pose, robot_model, "RobotPose/model", toColorMsg(1.0, 0.0, 0.0, 0.0)); //black
-  publishRobotFootprint(pose, footprint, "RobotPose/footprint", toColorMsg(1.0, 0.0, 0.0, 0.0)); // black 
+  publishRobotFootprintModel(pose, robot_model, "RobotPose/model", toColorMsg(1.0, 0.0, 1.0, 0.0)); //green
+  publishRobotFootprint(pose, footprint, "RobotPose/footprint", toColorMsg(1.0, 0.0, 0.0, 1.0)); // blue
 }
 
 void TebVisualization::visualizeIntermediatePoint(const PoseSE2& pose, const std::string& ns)
