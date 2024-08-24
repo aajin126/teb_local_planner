@@ -503,7 +503,7 @@ public:
 
   void printDistanceField();
 
-  void processPose(PoseSE2& intermediate_pose);
+  void processPose(PoseSE2& target_pose);
 
   void pushPoseAwayFromObstacle(PoseSE2& pose, unsigned int width, unsigned int height);
 
@@ -717,7 +717,7 @@ protected:
   boost::shared_ptr<g2o::SparseOptimizer> optimizer_; //!< g2o optimizer for trajectory optimization
   std::pair<bool, geometry_msgs::Twist> vel_start_; //!< Store the initial velocity at the start pose
   std::pair<bool, geometry_msgs::Twist> vel_goal_; //!< Store the final velocity at the goal pose
-  std::shared_ptr<DistanceFieldUpdater> local_map_subscriber_;
+  std::shared_ptr<DistanceFieldUpdater> map_subscriber_;
 
   bool initialized_; //!< Keeps track about the correct initialization of this class
   bool optimized_; //!< This variable is \c true as long as the last optimization has been completed successful

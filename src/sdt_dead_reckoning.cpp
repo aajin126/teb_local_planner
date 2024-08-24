@@ -141,7 +141,7 @@ void sdt_dead_reckoning(unsigned int width, unsigned int height, unsigned char t
 }
 
 DistanceFieldUpdater::DistanceFieldUpdater(ros::NodeHandle& nh) : nh_(nh), map_received_(false), map_width_(0), map_height_(0) {
-    costmap_sub_ = nh_.subscribe("/move_base/local_costmap/costmap", 1, &DistanceFieldUpdater::costmapCallback, this);
+    costmap_sub_ = nh_.subscribe("/move_base/global_costmap/costmap", 1, &DistanceFieldUpdater::costmapCallback, this);
     robot_distance_pub_ = nh_.advertise<sensor_msgs::Image>("/distance_map", 1);
     ROS_INFO("DistanceFieldUpdater initialized");
 }
@@ -155,10 +155,7 @@ float DistanceFieldUpdater::getDistanceAt(double x, double y) const {
     int grid_x = static_cast<int>(x / map_resolution_);
     int grid_y = static_cast<int>(y / map_resolution_);
 
-    if (grid_x < 0 || grid_x >= map_width_ || grid_y < 0 || grid_y >= map_height_) {
-        ROS_WARN("Coordinates out of bounds. Returning large distance.");
-        return std::numeric_limits<float>::max();
-    }
+    ROS_INFO("grid_x: %d, grid_y: %d, map_width: %d, map_height: %d", grid_x, grid_y, map_width_, map_height_);
 
     return distance_field_[grid_y * map_width_ + grid_x];
 }
@@ -200,7 +197,7 @@ int main(int argc, char** argv) {
     ros::init(argc, argv, "distance_field_updater");
     ros::NodeHandle nh;
 
-    DistanceFieldUpdater local_map_subscriber_(nh);
+    DistanceFieldUpdater map_subscriber_(nh);
 
     ros::spin();
     return 0;

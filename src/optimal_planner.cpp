@@ -81,7 +81,7 @@ TebOptimalPlanner::TebOptimalPlanner(const TebConfig& cfg, ObstContainer* obstac
   initialize(cfg, obstacles, visual, via_points);
 
   ros::NodeHandle nh;
-  local_map_subscriber_ = std::make_shared<DistanceFieldUpdater>(nh);
+  map_subscriber_ = std::make_shared<DistanceFieldUpdater>(nh);
 }
 
 TebOptimalPlanner::~TebOptimalPlanner()
@@ -776,8 +776,7 @@ void TebOptimalPlanner::AddEdgesObstacles(double weight_multiplier)
   // iterate all teb points, skipping the last and, if the EdgeVelocityObstacleRatio edges should not be created, the first one too
   const int first_vertex = cfg_->optim.weight_velocity_obstacle_ratio == 0 ? 1 : 0;
   for (int i = first_vertex; i < teb_.sizePoses() - 1; ++i)
-  {
-      ROS_DEBUG("vertex : %d", i);    
+  {  
       double left_min_dist = std::numeric_limits<double>::max();
       double right_min_dist = std::numeric_limits<double>::max();
       ObstaclePtr left_obstacle;
@@ -1556,7 +1555,7 @@ void TebOptimalPlanner::getFullTrajectory(std::vector<TrajectoryPointMsg>& traje
 
 void TebOptimalPlanner::pushPoseAwayFromObstacle(PoseSE2& pose, unsigned int width, unsigned int height)
 {
-    const float* distance_field = local_map_subscriber_->getDistanceField(); // Use the distance field from the global subscriber
+    const float* distance_field = map_subscriber_->getDistanceField(); // Use the distance field from the global subscriber
 
     if (distance_field)
     {
@@ -1566,29 +1565,28 @@ void TebOptimalPlanner::pushPoseAwayFromObstacle(PoseSE2& pose, unsigned int wid
         int xi = static_cast<int>(position.x());
         int yi = static_cast<int>(position.y());
 
-        if (xi >= 0 && xi < width && yi >= 0 && yi < height)
+        float distance = distance_field[xi + yi * width];
+
+        if (distance != -1)
         {
-            float distance = distance_field[xi + yi * width];
-            if (distance != -1)
-            {
-                // Calculate the direction vector away from the obstacle
-                float dx = xi - position.x();
-                float dy = yi - position.y();
-                float angle = atan2(dy, dx);
-                float move_distance = 0.5 * distance; // Move 50% of the distance away from the obstacle
+            // Calculate the direction vector away from the obstacle
+            float dx = xi - position.x();
+            float dy = yi - position.y();
+            float angle = atan2(dy, dx);
+            float move_distance = 0.5 * distance; // Move 50% of the distance away from the obstacle
 
-                // 새 위치를 계산합니다.
-                position.x() += move_distance * cos(angle);
-                position.y() += move_distance * sin(angle);
+            // 새 위치를 계산합니다.
+            position.x() += move_distance * cos(angle);
+            position.y() += move_distance * sin(angle);
 
-                // pose 객체의 위치를 새로운 위치로 업데이트합니다.
-                pose.position() = position;
+            // pose 객체의 위치를 새로운 위치로 업데이트합니다.
+            pose.position() = position;
 
-                // Visualization and debugging
-                visualization_->visualizeIntermediatePoint(pose); 
-                std::cout << "Press Enter to continue..." << std::endl;
-                std::cin.get();
-            }
+            // Visualization and debugging
+            visualization_->visualizeIntermediatePoint(pose); 
+            
+            std::cout << "Press Enter to continue..." << std::endl;
+            std::cin.get();
         }
     }
     else
@@ -1599,13 +1597,13 @@ void TebOptimalPlanner::pushPoseAwayFromObstacle(PoseSE2& pose, unsigned int wid
 
 void TebOptimalPlanner::printDistanceField()
 {
-    if (local_map_subscriber_->isDataReady())
+    if (map_subscriber_->isDataReady())
     {
-        const float* distance_field = local_map_subscriber_->getDistanceField();
+        const float* distance_field = map_subscriber_->getDistanceField();
         if (distance_field)
         {
-            unsigned int width = local_map_subscriber_->getWidth();
-            unsigned int height = local_map_subscriber_->getHeight();
+            unsigned int width = map_subscriber_->getWidth();
+            unsigned int height = map_subscriber_->getHeight();
 
             ROS_INFO("Distance Field:");
             for (unsigned int y = 0; y < height; ++y)
@@ -1626,19 +1624,19 @@ void TebOptimalPlanner::printDistanceField()
     }
     else
     {
-        ROS_WARN("Local map subscriber is not initialized.");
+        ROS_WARN("Map subscriber is not initialized.");
     }
 }
 
-void TebOptimalPlanner::processPose(PoseSE2& intermediate_pose)
+void TebOptimalPlanner::processPose(PoseSE2& target_pose)
 {
-    // Check if the local map subscriber has received the map data
-    if (local_map_subscriber_->isDataReady())
+    // Check if the map subscriber has received the map data
+    if (map_subscriber_->isDataReady())
     {
-        ROS_DEBUG("Local map subscriber is not null");
-        unsigned int width = local_map_subscriber_->getWidth();
-        unsigned int height = local_map_subscriber_->getHeight();
-        const float* distance_field = local_map_subscriber_->getDistanceField();
+        ROS_DEBUG("Map subscriber is not null");
+        unsigned int width = map_subscriber_->getWidth();
+        unsigned int height = map_subscriber_->getHeight();
+        const float* distance_field = map_subscriber_->getDistanceField();
 
         ROS_DEBUG("Width: %u, Height: %u", width, height);
 
@@ -1646,7 +1644,7 @@ void TebOptimalPlanner::processPose(PoseSE2& intermediate_pose)
         {
             ROS_DEBUG("Distance field is not null");
 
-            PoseSE2 modifiable_pose = intermediate_pose;
+            PoseSE2 modifiable_pose = target_pose;
 
             ROS_DEBUG("Push pose away from obstacle");
             pushPoseAwayFromObstacle(modifiable_pose, width, height);
@@ -1660,7 +1658,7 @@ void TebOptimalPlanner::processPose(PoseSE2& intermediate_pose)
     }
     else
     {
-        ROS_DEBUG("Local map subscriber is null or data is not ready");
+        ROS_DEBUG("Map subscriber is null or data is not ready");
     }
 }
 
@@ -1895,16 +1893,20 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
   }
 
   for (int i=0; i <= look_ahead_idx; ++i)
-  {           
+  {    
+    // i번째 pose의 cost가 -1이면 push pose 
     double cost = costmap_model->footprintCost(teb().Pose(i).x(), teb().Pose(i).y(), teb().Pose(i).theta(), footprint_spec, inscribed_radius, circumscribed_radius);    
-    ROS_INFO("pose %d,  x : %f, y : %f, cost : %d", i, teb().Pose(i).x(), teb().Pose(i).y(), cost);
+    ROS_INFO("pose %d,  x : %f, y : %f, cost : %lf", i, teb().Pose(i).x(), teb().Pose(i).y(), cost);
 
     if (cost == -1)
     {
-        float distance = local_map_subscriber_->getDistanceAt(teb().Pose(g).x(), teb().Pose(g).y());
+        float distance = local_map_subscriber_->getDistanceAt(teb().Pose(i).x(), teb().Pose(i).y());
         ROS_INFO("Distance at pose: %f", distance);
 
-        processPose(teb().Pose(g));
+        processPose(teb().Pose(i));
+
+        std::cout << "Press Enter to continue..." << std::endl;
+        std::cin.get();
 
         if (visualization_)
         {
@@ -1944,10 +1946,12 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
                 intermediate_pose.position() = intermediate_pose.position() + delta_dist / (n_additional_samples + 1.0);
                 intermediate_pose.theta() = g2o::normalize_theta(intermediate_pose.theta() +
                                                                  delta_rot / (n_additional_samples + 1.0));
+
                 double intermediate_cost = costmap_model->footprintCost(intermediate_pose.x(), intermediate_pose.y(), intermediate_pose.theta(),
                                                                         footprint_spec, inscribed_radius, circumscribed_radius);
                 
                 visualization_->visualizeIntermediatePoint(intermediate_pose); 
+
                 intermediate_poses.push_back(intermediate_pose);
 
                 if (intermediate_cost == -1)
@@ -1974,26 +1978,23 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
             ROS_DEBUG("FINISH INSERTING NEW POSES");
             ROS_DEBUG("teb size : %d", teb_.sizePoses());
 
-            for(int g = 0; g < teb().sizePoses(); g++)
+            for(int g = 0; g < look_ahead_idx; g++)
             {
               ROS_INFO("pose %d,  x : %f, y : %f", g, teb().Pose(g).x(), teb().Pose(g).y());
               double pose_cost = costmap_model->footprintCost(teb().Pose(g).x(), teb().Pose(g).y(), teb().Pose(g).theta(),
                                                                         footprint_spec, inscribed_radius, circumscribed_radius);
               ROS_INFO("Pose cost : %lf", pose_cost);
-
+        
               if (pose_cost == -1)
               {
                 float distance = local_map_subscriber_->getDistanceAt(teb().Pose(g).x(), teb().Pose(g).y());
                 ROS_INFO("Distance at pose: %f", distance);
 
                 processPose(teb().Pose(g));
+
+                std::cout << "Press Enter to continue..." << std::endl;
+                std::cin.get();
               }
-            }
-    
-            // Implement optimization part when adding intermediate pose 
-            for(int i = 0; i < intermediate_poses.size(); i++)
-            {
-                ROS_INFO("Footprint position x : %f, y : %f", intermediate_poses[i].x(), intermediate_poses[i].y());
             }
 
             for(int g = 0; g < teb().sizePoses(); g++)
@@ -2003,8 +2004,6 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
                                                                         footprint_spec, inscribed_radius, circumscribed_radius);
               ROS_INFO("Pose cost : %lf", pose_cost);
             }
-            std::cout << "Press Enter to continue..." << std::endl;
-            std::cin.get();
         }
     }
   }
