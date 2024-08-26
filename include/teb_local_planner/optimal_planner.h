@@ -503,9 +503,9 @@ public:
 
   void printDistanceField();
 
-  void processPose(PoseSE2& target_pose);
+  Eigen::Vector2d processPose(PoseSE2& target_pose);
 
-  void pushPoseAwayFromObstacle(PoseSE2& pose, unsigned int width, unsigned int height);
+  Eigen::Vector2d pushPoseAwayFromObstacle(PoseSE2& pose, unsigned int width, unsigned int height);
 
   /**
    * @brief Check whether the planned trajectory is feasible or not.

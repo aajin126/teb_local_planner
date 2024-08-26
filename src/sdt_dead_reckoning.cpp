@@ -5,6 +5,7 @@
 #include <ros/ros.h>
 #include <nav_msgs/OccupancyGrid.h>
 #include <sensor_msgs/Image.h>
+#include <teb_local_planner/pose_se2.h>
 #include <vector>
 #include <limits>
 
@@ -146,6 +147,17 @@ DistanceFieldUpdater::DistanceFieldUpdater(ros::NodeHandle& nh) : nh_(nh), map_r
     ROS_INFO("DistanceFieldUpdater initialized");
 }
 
+void DistanceFieldUpdater::updateDistanceField(const unsigned char* image) {
+    unsigned int padded_width = map_width_ + 2;
+    unsigned int padded_height = map_height_ + 2;
+    px_.resize(padded_width * padded_height, -1);
+    py_.resize(padded_width * padded_height, -1);
+    distance_field_.resize(map_width_ * map_height_);
+
+    // Call sdt_dead_reckoning to populate px, py, and distance_field
+    sdt_dead_reckoning(map_width_, map_height_, 0, image, distance_field_.data());
+}
+
 float DistanceFieldUpdater::getDistanceAt(double x, double y) const {
     if (!map_received_) {
         ROS_WARN("Map not received yet. Returning large distance.");
@@ -158,6 +170,32 @@ float DistanceFieldUpdater::getDistanceAt(double x, double y) const {
     ROS_INFO("grid_x: %d, grid_y: %d, map_width: %d, map_height: %d", grid_x, grid_y, map_width_, map_height_);
 
     return distance_field_[grid_y * map_width_ + grid_x];
+}
+
+Eigen::Vector2d DistanceFieldUpdater::getClosestObstacle(double x, double y) const {
+    if (!map_received_) {
+        ROS_WARN("Map not received yet. Returning invalid coordinates.");
+        return Eigen::Vector2d(std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::quiet_NaN());
+    }
+
+    int grid_x = static_cast<int>(x / map_resolution_);
+    int grid_y = static_cast<int>(y / map_resolution_);
+
+    // Get the closest obstacle coordinates from the px and py arrays
+    unsigned int padded_width = map_width_ + 2;
+    int closest_obstacle_x = px_[(grid_x + 1) + (grid_y + 1) * padded_width];
+    int closest_obstacle_y = py_[(grid_x + 1) + (grid_y + 1) * padded_width];
+
+    if (closest_obstacle_x == -1 || closest_obstacle_y == -1) {
+        ROS_WARN("No valid closest obstacle found. Returning invalid coordinates.");
+        return Eigen::Vector2d(std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::quiet_NaN());
+    }
+
+    // Convert back to world coordinates
+    double obstacle_x = closest_obstacle_x * map_resolution_;
+    double obstacle_y = closest_obstacle_y * map_resolution_;
+
+    return Eigen::Vector2d(obstacle_x, obstacle_y);
 }
 
 bool DistanceFieldUpdater::isDataReady() const {
@@ -185,6 +223,9 @@ void DistanceFieldUpdater::costmapCallback(const nav_msgs::OccupancyGrid::ConstP
     distance_field_.resize(map_width_ * map_height_);
 
     std::vector<unsigned char> unsigned_costmap_data(msg->data.size());
+
+    updateDistanceField(unsigned_costmap_data.data());
+    
     for (size_t i = 0; i < msg->data.size(); ++i) {
         unsigned_costmap_data[i] = static_cast<unsigned char>(msg->data[i]);
     }

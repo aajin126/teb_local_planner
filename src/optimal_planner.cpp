@@ -1553,7 +1553,8 @@ void TebOptimalPlanner::getFullTrajectory(std::vector<TrajectoryPointMsg>& traje
   goal.time_from_start.fromSec(curr_time);
 }
 
-void TebOptimalPlanner::pushPoseAwayFromObstacle(PoseSE2& pose, unsigned int width, unsigned int height)
+/*
+Eigen::Vector2d TebOptimalPlanner::pushPoseAwayFromObstacle(PoseSE2& pose, unsigned int width, unsigned int height)
 {
     const float* distance_field = map_subscriber_->getDistanceField(); // Use the distance field from the global subscriber
 
@@ -1567,13 +1568,15 @@ void TebOptimalPlanner::pushPoseAwayFromObstacle(PoseSE2& pose, unsigned int wid
 
         float distance = distance_field[xi + yi * width];
 
+        ROS_INFO("Distance : %f", distance);
+
         if (distance != -1)
         {
             // Calculate the direction vector away from the obstacle
             float dx = xi - position.x();
             float dy = yi - position.y();
             float angle = atan2(dy, dx);
-            float move_distance = 0.5 * distance; // Move 50% of the distance away from the obstacle
+            float move_distance = 0.01 * distance; // Move 50% of the distance away from the obstacle
 
             // 새 위치를 계산합니다.
             position.x() += move_distance * cos(angle);
@@ -1581,6 +1584,8 @@ void TebOptimalPlanner::pushPoseAwayFromObstacle(PoseSE2& pose, unsigned int wid
 
             // pose 객체의 위치를 새로운 위치로 업데이트합니다.
             pose.position() = position;
+
+            ROS_INFO("New Position x : %f, y : %f", position.x(), position.y());
 
             // Visualization and debugging
             visualization_->visualizeIntermediatePoint(pose); 
@@ -1593,6 +1598,55 @@ void TebOptimalPlanner::pushPoseAwayFromObstacle(PoseSE2& pose, unsigned int wid
     {
         ROS_DEBUG("Distance field is null");
     }
+
+     return pose.position(); // Return the updated position
+}
+*/
+
+Eigen::Vector2d TebOptimalPlanner::pushPoseAwayFromObstacle(PoseSE2& pose, unsigned int width, unsigned int height)
+{
+    // Ensure map subscriber is valid and data is ready
+    if (!map_subscriber_ || !map_subscriber_->isDataReady()) {
+        ROS_WARN("Map data not available. Cannot push pose away from obstacle.");
+        return pose.position(); // Return the current position if no map data
+    }
+
+    // Retrieve the current position from the pose
+    Eigen::Vector2d position = pose.position();
+
+    // Get the closest obstacle to the current position
+    Eigen::Vector2d closest_obstacle = map_subscriber_->getClosestObstacle(position.x(), position.y());
+
+    // Check if the closest obstacle is valid
+    if (std::isnan(closest_obstacle.x()) || std::isnan(closest_obstacle.y())) {
+        ROS_WARN("Invalid closest obstacle coordinates.");
+        return pose.position(); // Return the current position if the closest obstacle is invalid
+    }
+
+    // Calculate the direction vector from the current position to the closest obstacle
+    Eigen::Vector2d direction_to_obstacle = closest_obstacle - position;
+
+    // Calculate the distance to the closest obstacle
+    float distance_to_obstacle = direction_to_obstacle.norm();
+
+    // Calculate the direction vector away from the obstacle
+    Eigen::Vector2d direction_away_from_obstacle = -direction_to_obstacle.normalized();
+
+    // Determine how much to move away from the obstacle
+    float move_distance = 0.01 * distance_to_obstacle; // Adjust this factor as needed
+
+    // Compute the new position
+    Eigen::Vector2d new_position = position + move_distance * direction_away_from_obstacle;
+
+    // Update the pose with the new position
+    pose.position() = new_position;
+
+    ROS_INFO("New Position x: %f, y: %f", new_position.x(), new_position.y());
+
+    // Visualization and debugging
+    visualization_->visualizeIntermediatePoint(pose);
+
+    return new_position; // Return the updated position
 }
 
 void TebOptimalPlanner::printDistanceField()
@@ -1628,8 +1682,11 @@ void TebOptimalPlanner::printDistanceField()
     }
 }
 
-void TebOptimalPlanner::processPose(PoseSE2& target_pose)
+Eigen::Vector2d TebOptimalPlanner::processPose(PoseSE2& target_pose)
 {
+
+    Eigen::Vector2d modified_pose = target_pose.position(); 
+    
     // Check if the map subscriber has received the map data
     if (map_subscriber_->isDataReady())
     {
@@ -1647,7 +1704,7 @@ void TebOptimalPlanner::processPose(PoseSE2& target_pose)
             PoseSE2 modifiable_pose = target_pose;
 
             ROS_DEBUG("Push pose away from obstacle");
-            pushPoseAwayFromObstacle(modifiable_pose, width, height);
+            modified_pose = pushPoseAwayFromObstacle(modifiable_pose, width, height);
 
             ROS_INFO("Modified pose position: [%f, %f]", modifiable_pose.position().x(), modifiable_pose.position().y());
         }
@@ -1660,6 +1717,8 @@ void TebOptimalPlanner::processPose(PoseSE2& target_pose)
     {
         ROS_DEBUG("Map subscriber is null or data is not ready");
     }
+
+    return modified_pose; 
 }
 
 /*
@@ -1900,10 +1959,10 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
 
     if (cost == -1)
     {
-        float distance = local_map_subscriber_->getDistanceAt(teb().Pose(i).x(), teb().Pose(i).y());
+        float distance = map_subscriber_->getDistanceAt(teb().Pose(i).x(), teb().Pose(i).y());
         ROS_INFO("Distance at pose: %f", distance);
 
-        processPose(teb().Pose(i));
+        teb().Pose(i).position() = processPose(teb().Pose(i));
 
         std::cout << "Press Enter to continue..." << std::endl;
         std::cin.get();
@@ -1987,10 +2046,12 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
         
               if (pose_cost == -1)
               {
-                float distance = local_map_subscriber_->getDistanceAt(teb().Pose(g).x(), teb().Pose(g).y());
+                float distance = map_subscriber_->getDistanceAt(teb().Pose(g).x(), teb().Pose(g).y());
                 ROS_INFO("Distance at pose: %f", distance);
 
                 processPose(teb().Pose(g));
+
+                teb().Pose(g).position() = processPose(teb().Pose(i));
 
                 std::cout << "Press Enter to continue..." << std::endl;
                 std::cin.get();

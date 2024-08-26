@@ -77,6 +77,7 @@ v1.0  2018-08-31  Initial release
 
 #include <ros/ros.h>
 #include <nav_msgs/OccupancyGrid.h>
+#include <teb_local_planner/pose_se2.h>
 #include <sensor_msgs/Image.h>
 #include <vector>
 #include <limits>
@@ -86,8 +87,9 @@ v1.0  2018-08-31  Initial release
 class DistanceFieldUpdater {
 public:
     explicit DistanceFieldUpdater(ros::NodeHandle& nh);
-
+    void updateDistanceField(const unsigned char* image);
     float getDistanceAt(double x, double y) const;
+    Eigen::Vector2d getClosestObstacle(double x, double y) const;
 	
     bool isDataReady() const;
     const float* getDistanceField() const;
@@ -103,6 +105,10 @@ private:
     unsigned int map_width_;
     unsigned int map_height_;
     float map_resolution_;
+
+    // Buffers to store px and py
+    std::vector<int> px_;
+    std::vector<int> py_;
     std::vector<float> distance_field_;
 
     void costmapCallback(const nav_msgs::OccupancyGrid::ConstPtr& msg);
