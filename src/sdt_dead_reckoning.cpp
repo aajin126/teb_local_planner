@@ -11,15 +11,11 @@
 
 #define SDT_DEAD_RECKONING_IMPLEMENTATION
 
-void sdt_dead_reckoning(unsigned int width, unsigned int height, unsigned char threshold, const unsigned char* image, float* distance_field) {
+void sdt_dead_reckoning(unsigned int width, unsigned int height, unsigned char threshold, const unsigned char* image, float* distance_field, int* px, int* py) {
     // The internal buffers have a 1px padding around them so we can avoid border checks in the loops below
     unsigned int padded_width = width + 2;
     unsigned int padded_height = height + 2;
 
-    // px and py store the corresponding border point for each pixel (just p in the paper, here x and y
-    // are separated into px and py).
-    int* px = (int*)malloc(padded_width * padded_height * sizeof(px[0]));
-    int* py = (int*)malloc(padded_width * padded_height * sizeof(py[0]));
     float* padded_distance_field = (float*)malloc(padded_width * padded_height * sizeof(padded_distance_field[0]));
 
     // Create macros as local shorthands to access the buffers. Push (and later restore) any previous macro definitions so we
@@ -137,8 +133,6 @@ void sdt_dead_reckoning(unsigned int width, unsigned int height, unsigned char t
     #pragma pop_macro("LENGTH")
 
     free(padded_distance_field);
-    free(px);
-    free(py);
 }
 
 DistanceFieldUpdater::DistanceFieldUpdater(ros::NodeHandle& nh) : nh_(nh), map_received_(false), map_width_(0), map_height_(0) {
@@ -150,12 +144,13 @@ DistanceFieldUpdater::DistanceFieldUpdater(ros::NodeHandle& nh) : nh_(nh), map_r
 void DistanceFieldUpdater::updateDistanceField(const unsigned char* image) {
     unsigned int padded_width = map_width_ + 2;
     unsigned int padded_height = map_height_ + 2;
+
     px_.resize(padded_width * padded_height, -1);
     py_.resize(padded_width * padded_height, -1);
     distance_field_.resize(map_width_ * map_height_);
 
     // Call sdt_dead_reckoning to populate px, py, and distance_field
-    sdt_dead_reckoning(map_width_, map_height_, 0, image, distance_field_.data());
+    sdt_dead_reckoning(map_width_, map_height_, 0, image, distance_field_.data(), px_.data(), py_.data());
 }
 
 float DistanceFieldUpdater::getDistanceAt(double x, double y) const {
@@ -181,10 +176,15 @@ Eigen::Vector2d DistanceFieldUpdater::getClosestObstacle(double x, double y) con
     int grid_x = static_cast<int>(x / map_resolution_);
     int grid_y = static_cast<int>(y / map_resolution_);
 
-    // Get the closest obstacle coordinates from the px and py arrays
+    // Get the closest obstacle coordinates from the px_ and py_ arrays
     unsigned int padded_width = map_width_ + 2;
     int closest_obstacle_x = px_[(grid_x + 1) + (grid_y + 1) * padded_width];
     int closest_obstacle_y = py_[(grid_x + 1) + (grid_y + 1) * padded_width];
+
+    // Log the values of px_ and py_
+    ROS_INFO("px_[%d, %d]: %d", grid_x + 1, grid_y + 1, closest_obstacle_x);
+    ROS_INFO("py_[%d, %d]: %d", grid_x + 1, grid_y + 1, closest_obstacle_y);
+
 
     if (closest_obstacle_x == -1 || closest_obstacle_y == -1) {
         ROS_WARN("No valid closest obstacle found. Returning invalid coordinates.");
@@ -220,16 +220,13 @@ void DistanceFieldUpdater::costmapCallback(const nav_msgs::OccupancyGrid::ConstP
     map_resolution_ = msg->info.resolution;
     map_received_ = true;
 
-    distance_field_.resize(map_width_ * map_height_);
-
     std::vector<unsigned char> unsigned_costmap_data(msg->data.size());
 
-    updateDistanceField(unsigned_costmap_data.data());
-    
     for (size_t i = 0; i < msg->data.size(); ++i) {
         unsigned_costmap_data[i] = static_cast<unsigned char>(msg->data[i]);
     }
-    sdt_dead_reckoning(map_width_, map_height_, 0, unsigned_costmap_data.data(), distance_field_.data());
+
+    updateDistanceField(unsigned_costmap_data.data());
 
     ROS_DEBUG("Costmap received and distance field updated.");
 }

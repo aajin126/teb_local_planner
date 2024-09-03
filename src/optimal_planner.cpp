@@ -1937,6 +1937,7 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
     
   ROS_DEBUG("tebsizePoses: %d", teb().sizePoses());
   ROS_DEBUG("look ahead idx: %d", look_ahead_idx);
+  ROS_INFO("inscribed radius : %d", inscribed_radius);
 
   if (feasibility_check_lookahead_distance > 0)
   {
@@ -1964,8 +1965,8 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
 
         teb().Pose(i).position() = processPose(teb().Pose(i));
 
-        std::cout << "Press Enter to continue..." << std::endl;
-        std::cin.get();
+        //std::cout << "Press Enter to continue..." << std::endl;
+        //std::cin.get();
 
         if (visualization_)
         {
@@ -2053,8 +2054,8 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
 
                 teb().Pose(g).position() = processPose(teb().Pose(i));
 
-                std::cout << "Press Enter to continue..." << std::endl;
-                std::cin.get();
+                //std::cout << "Press Enter to continue..." << std::endl;
+                //std::cin.get();
               }
             }
 
