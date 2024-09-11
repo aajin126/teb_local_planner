@@ -1721,7 +1721,8 @@ Eigen::Vector2d TebOptimalPlanner::processPose(PoseSE2& target_pose)
     return modified_pose; 
 }
 
-/*
+
+// orginal func
 
 bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
                                              double inscribed_radius, double circumscribed_radius, int look_ahead_idx, double feasibility_check_lookahead_distance)
@@ -1765,8 +1766,7 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
         for(int step = 0; step < n_additional_samples; ++step)
         {
           ROS_INFO("check for intermediate pose after optimization");
-          std::cout << "Press Enter to continue..." << std::endl;
-          std::cin.get();
+
           intermediate_pose.position() = intermediate_pose.position() + delta_dist / (n_additional_samples + 1.0);
           intermediate_pose.theta() = g2o::normalize_theta(intermediate_pose.theta() + 
                                                            delta_rot / (n_additional_samples + 1.0));
@@ -1787,6 +1787,9 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
   return true;
 }
 
+/*
+// optimizeTEB 한 번 더 시도 
+// 문제가 있는 부분만 optimization 실행 필요
 
 bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
                                              double inscribed_radius, double circumscribed_radius, int look_ahead_idx, double feasibility_check_lookahead_distance)
@@ -1927,7 +1930,8 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
     }
   return true;
 }
-*/
+
+// push poses 
 
 bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
                                              double inscribed_radius, double circumscribed_radius, int look_ahead_idx, double feasibility_check_lookahead_distance)
@@ -2053,9 +2057,6 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
                 processPose(teb().Pose(g));
 
                 teb().Pose(g).position() = processPose(teb().Pose(i));
-
-                //std::cout << "Press Enter to continue..." << std::endl;
-                //std::cin.get();
               }
             }
 
@@ -2071,6 +2072,6 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
   }
   return true;
 }
-
+*/
 
 } // namespace teb_local_planner
