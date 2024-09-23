@@ -520,6 +520,11 @@ public:
    * @return \c true, if the robot footprint along the first part of the trajectory intersects with 
    *         any obstacle in the costmap, \c false otherwise.
    */
+
+  void reOptimizeDuplicatedAndCircularPoses(double proximity_threshold, double circular_threshold);
+
+  void optimizePoseSegment(int start_idx, int end_idx);
+
   virtual bool isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec, double inscribed_radius = 0.0,
           double circumscribed_radius=0.0, int look_ahead_idx=-1, double feasibility_check_lookahead_distance=-1.0);
   
@@ -578,6 +583,8 @@ protected:
    * @see optimizeGraph
    */
   void AddTEBVertices();
+
+  void AddTEBVertices(int start_idx, int end_idx);
   
   /**
    * @brief Add all edges (local cost functions) for limiting the translational and angular velocity.
@@ -719,8 +726,14 @@ protected:
   std::pair<bool, geometry_msgs::Twist> vel_goal_; //!< Store the final velocity at the goal pose
   std::shared_ptr<DistanceFieldUpdater> map_subscriber_;
 
+  std::vector<int> redundant_indices;
+
   bool initialized_; //!< Keeps track about the correct initialization of this class
   bool optimized_; //!< This variable is \c true as long as the last optimization has been completed successful
+  bool is_reoptimization_active = false;
+
+  double proximity_threshold = 0.15; // 예: 20cm 
+  double circular_threshold = M_PI; // 예: 180도
 
   const float* distance_map_;
   unsigned int map_width_;

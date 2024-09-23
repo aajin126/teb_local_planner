@@ -611,9 +611,16 @@ bool TebOptimalPlanner::buildGraph(double weight_multiplier)
   }
 
   optimizer_->setComputeBatchStatistics(cfg_->recovery.divergence_detection_enable);
-  
-  // add TEB vertices
-  AddTEBVertices();
+
+  if (is_reoptimization_active) 
+  { // 재최적화가 활성화된 경우 
+    AddTEBVertices(redundant_indices.front() - 1, redundant_indices.back()); 
+  }
+
+  else 
+  { // 전체 TEB 포즈 추가 
+    AddTEBVertices(); 
+  }  
   
   // add Edges (local cost functions)
   if (cfg_->obstacles.legacy_obstacle_association)
@@ -709,7 +716,9 @@ void TebOptimalPlanner::AddTEBVertices()
   unsigned int id_counter = 0; // used for vertices ids
   obstacles_per_vertex_.resize(teb_.sizePoses());
   auto iter_obstacle = obstacles_per_vertex_.begin();
+
   ROS_DEBUG("TEB VERTEX SIZE : %d", teb_.sizePoses());
+
   for (int i=0; i<teb_.sizePoses(); ++i)
   {
     teb_.PoseVertex(i)->setId(id_counter++);
@@ -723,6 +732,33 @@ void TebOptimalPlanner::AddTEBVertices()
     (iter_obstacle++)->reserve(obstacles_->size());
   }
 }
+
+void TebOptimalPlanner::AddTEBVertices(int start_idx, int end_idx)
+{
+    // 그래프에 vertex 추가
+    ROS_DEBUG_COND(cfg_->optim.optimization_verbose, "Adding limited TEB vertices ...");
+    unsigned int id_counter = 0; // vertex ID 카운터
+    obstacles_per_vertex_.resize(end_idx - start_idx + 1); // 해당 구간 크기로 조정
+    auto iter_obstacle = obstacles_per_vertex_.begin();
+   
+    ROS_DEBUG("TEB VERTEX SIZE : %d", end_idx - start_idx + 1);
+   
+    for (int i = start_idx; i <= end_idx; ++i)
+    {
+        teb_.PoseVertex(i)->setId(id_counter++);
+        optimizer_->addVertex(teb_.PoseVertex(i));
+       
+        if (teb_.sizeTimeDiffs() != 0 && i < teb_.sizeTimeDiffs())
+        {
+            teb_.TimeDiffVertex(i)->setId(id_counter++);
+            optimizer_->addVertex(teb_.TimeDiffVertex(i));
+        }
+       
+        iter_obstacle->clear();
+        (iter_obstacle++)->reserve(obstacles_->size());
+    }
+}
+
 
 
 void TebOptimalPlanner::AddEdgesObstacles(double weight_multiplier)
@@ -1721,9 +1757,69 @@ Eigen::Vector2d TebOptimalPlanner::processPose(PoseSE2& target_pose)
     return modified_pose; 
 }
 
+void TebOptimalPlanner::reOptimizeDuplicatedAndCircularPoses(double proximity_threshold, double circular_threshold)
+{
+    is_reoptimization_active = true; 
+
+    double accumulated_rotation = 0.0;
+
+    // 포즈들을 순차적으로 확인하면서 중복 및 회전 구간 탐지
+    for (int i = 1; i < teb().sizePoses(); ++i)
+    {
+        // 포즈 간의 거리 계산 (비슷한 위치의 포즈 탐지)
+        double dist = std::hypot(teb().Pose(i).x() - teb().Pose(i-1).x(),
+                                 teb().Pose(i).y() - teb().Pose(i-1).y());
+
+        // theta(회전 각도) 차이 계산 (회전 경로 탐지)
+        double delta_theta = g2o::normalize_theta(teb().Pose(i).theta() - teb().Pose(i-1).theta());
+        accumulated_rotation += fabs(delta_theta);
+
+        // 중복된 포즈(가까운 위치) 또는 회전이 360도 이상(2π)인 구간을 찾음
+        if (dist < proximity_threshold || accumulated_rotation > circular_threshold)
+        {
+            redundant_indices.push_back(i); // 중복된 포즈 또는 회전 구간 인덱스 저장
+        }
+        else if (!redundant_indices.empty())
+        {
+            // 중복된 구간이 끝났으면 해당 구간을 최적화
+            optimizePoseSegment(redundant_indices.front() - 1, redundant_indices.back());
+            redundant_indices.clear(); // 리스트 초기화
+            accumulated_rotation = 0.0; // 회전 초기화
+        }
+    }
+
+    // 남은 중복 또는 circular 구간이 있을 경우 최적화
+    if (!redundant_indices.empty())
+    {
+        optimizePoseSegment(redundant_indices.front() - 1, redundant_indices.back());
+    }
+
+    is_reoptimization_active = false;
+}
+
+// 구간에 대한 최적화를 수행하는 함수 (이전과 동일)
+void TebOptimalPlanner::optimizePoseSegment(int start_idx, int end_idx)
+{
+    std::vector<PoseSE2> pose_segment;
+   
+    // 포즈를 복사
+    for (int i = start_idx; i <= end_idx; ++i)
+    {
+        pose_segment.push_back(teb().Pose(i));
+    }
+
+    optimizeTEB(cfg_->optim.no_inner_iterations, cfg_->optim.no_outer_iterations);
+   
+    // 최적화된 포즈를 기존 경로에 반영
+    for (int i = start_idx, j = 0; i <= end_idx; ++i, ++j)
+    {
+        teb().Pose(i) = pose_segment[j];
+    }
+}
+
 
 // orginal func
-
+/*
 bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
                                              double inscribed_radius, double circumscribed_radius, int look_ahead_idx, double feasibility_check_lookahead_distance)
 {
@@ -1783,6 +1879,73 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
         }
       }
     }
+  }
+  return true;
+}
+*/
+bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
+                                             double inscribed_radius, double circumscribed_radius, int look_ahead_idx, double feasibility_check_lookahead_distance)
+{
+  if (look_ahead_idx < 0 || look_ahead_idx >= teb().sizePoses())
+    look_ahead_idx = teb().sizePoses() - 1;
+
+  if (feasibility_check_lookahead_distance > 0){
+    for (int i=1; i < teb().sizePoses(); ++i){
+      double pose_distance=std::hypot(teb().Pose(i).x()-teb().Pose(0).x(), teb().Pose(i).y()-teb().Pose(0).y());
+      if(pose_distance > feasibility_check_lookahead_distance){
+        look_ahead_idx = i - 1;
+        break;
+      }
+    }
+  }
+
+  for (int i=0; i <= look_ahead_idx; ++i)
+  {           
+    if ( costmap_model->footprintCost(teb().Pose(i).x(), teb().Pose(i).y(), teb().Pose(i).theta(), footprint_spec, inscribed_radius, circumscribed_radius) == -1 )
+    {
+      if (visualization_)
+      {
+        visualization_->publishInfeasibleRobotPose(teb().Pose(i), *cfg_->robot_model, footprint_spec);
+      }
+      return false;
+    }
+    reOptimizeDuplicatedAndCircularPoses(proximity_threshold, circular_threshold);
+    // Checks if the distance between two poses is higher than the robot radius or the orientation diff is bigger than the specified threshold
+    // and interpolates in that case.
+    // (if obstacles are pushing two consecutive poses away, the center between two consecutive poses might coincide with the obstacle ;-)!
+    /*
+    if (i<look_ahead_idx)
+    {
+      double delta_rot = g2o::normalize_theta(g2o::normalize_theta(teb().Pose(i+1).theta()) -
+                                              g2o::normalize_theta(teb().Pose(i).theta()));
+      Eigen::Vector2d delta_dist = teb().Pose(i+1).position()-teb().Pose(i).position();
+      
+      if(fabs(delta_rot) > cfg_->trajectory.min_resolution_collision_check_angular || delta_dist.norm() > inscribed_radius)
+      {
+        int n_additional_samples = std::max(std::ceil(fabs(delta_rot) / cfg_->trajectory.min_resolution_collision_check_angular), 
+                                            std::ceil(delta_dist.norm() / inscribed_radius)) - 1;
+        PoseSE2 intermediate_pose = teb().Pose(i);
+        for(int step = 0; step < n_additional_samples; ++step)
+        {
+          ROS_INFO("check for intermediate pose after optimization");
+
+          intermediate_pose.position() = intermediate_pose.position() + delta_dist / (n_additional_samples + 1.0);
+          intermediate_pose.theta() = g2o::normalize_theta(intermediate_pose.theta() + 
+                                                           delta_rot / (n_additional_samples + 1.0));
+
+          if ( costmap_model->footprintCost(intermediate_pose.x(), intermediate_pose.y(), intermediate_pose.theta(),
+            footprint_spec, inscribed_radius, circumscribed_radius) == -1 )
+          {
+            if (visualization_) 
+            {
+              visualization_->publishInfeasibleRobotPose(intermediate_pose, *cfg_->robot_model, footprint_spec);
+            }
+            return false;
+          }
+        }
+      }
+    }
+    */
   }
   return true;
 }
