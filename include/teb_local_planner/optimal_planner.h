@@ -453,7 +453,8 @@ public:
    */
   double getCurrentCost() const {return cost_;}
   
-    
+  double computeCostForPose(const PoseSE2& pose);
+
   /**
    * @brief Extract the velocity from consecutive poses and a time difference (including strafing velocity for holonomic robots)
    * 

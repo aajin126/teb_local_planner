@@ -238,10 +238,14 @@ bool TebOptimalPlanner::optimizeTEB(int iterations_innerloop, int iterations_out
     optimized_ = true;
     
     if (compute_cost_afterwards && i==iterations_outerloop-1) // compute cost vec only in the last iteration
-      computeCurrentCost(obst_cost_scale, viapoint_cost_scale, alternative_time_cost);
-      
+    {
+        computeCurrentCost(obst_cost_scale, viapoint_cost_scale, alternative_time_cost);
+        ROS_INFO_STREAM("Obstacle cost: " << obst_cost_scale << ", Via-point cost: " << viapoint_cost_scale);
+    }
+  
+     
     clearGraph();
-    
+
     weight_multiplier *= cfg_->optim.weight_adapt_factor;
   }
 
@@ -653,6 +657,33 @@ bool TebOptimalPlanner::buildGraph(double weight_multiplier)
 
   if (cfg_->optim.weight_velocity_obstacle_ratio > 0)
     AddEdgesVelocityObstacleRatio();
+
+  // 엣지 비용 출력
+  for (const auto& edge : optimizer_->activeEdges()) {
+    double edge_cost = edge->chi2(); // 현재 엣지의 비용 계산
+    auto* edge_obstacle = dynamic_cast<EdgeObstacle*>(edge);
+    auto* edge_viapoint = dynamic_cast<EdgeViaPoint*>(edge);
+    auto* edge_velocity = dynamic_cast<EdgeVelocity*>(edge);
+    auto* edge_acceleration = dynamic_cast<EdgeAcceleration*>(edge);
+    auto* edge_timeoptimal = dynamic_cast<EdgeTimeOptimal*>(edge);
+    auto* edge_shortestpath = dynamic_cast<EdgeShortestPath*>(edge);
+
+    // 각 엣지 유형에 따라 로그 출력
+    if (edge_obstacle) {
+        ROS_INFO_STREAM("Obstacle Edge cost: " << edge_cost);
+    } else if (edge_viapoint) {
+        ROS_INFO_STREAM("Via Point Edge cost: " << edge_cost);
+    } else if (edge_velocity) {
+        ROS_INFO_STREAM("Velocity Edge cost: " << edge_cost);
+    } else if (edge_acceleration) {
+        ROS_INFO_STREAM("Acceleration Edge cost: " << edge_cost);
+    } else if (edge_timeoptimal) {
+        ROS_INFO_STREAM("Time Optimal Edge cost: " << edge_cost);
+    } else if (edge_shortestpath) {
+        ROS_INFO_STREAM("Shortest Path Edge cost: " << edge_cost);
+    }
+}
+
     
   return true;  
 }
@@ -1103,7 +1134,6 @@ void TebOptimalPlanner::AddEdgesVelocity()
       velocity_edge->setTebConfig(*cfg_);
       optimizer_->addEdge(velocity_edge);
     } 
-    
   }
 }
 
@@ -1394,7 +1424,7 @@ void TebOptimalPlanner::computeCurrentCost(double obst_cost_scale, double viapoi
   {
     graph_exist_flag = true;
   }
-  
+  //초기 추정값(initial guess)을 계산
   optimizer_->computeInitialGuess();
   
   cost_ = 0;
@@ -1434,6 +1464,23 @@ void TebOptimalPlanner::computeCurrentCost(double obst_cost_scale, double viapoi
   // delete temporary created graph
   if (!graph_exist_flag) 
     clearGraph();
+}
+
+double TebOptimalPlanner::computeCostForPose(const PoseSE2& pose) {
+  /*
+    double cost = 0.0;
+
+    // 장애물 비용
+    double obstacle_cost = computeObstacleCost(pose.position());
+    cost += obstacle_cost * cfg_->optim.obst_cost_scale;  // 스케일링 적용
+
+
+    // 경유지점 비용
+    double viapoint_cost = computeViaPointCost(pose.position());
+    cost += viapoint_cost * cfg_->optim.viapoint_cost_scale;  // 스케일링 적용
+
+    return cost;
+   */
 }
 
 
@@ -1819,7 +1866,7 @@ void TebOptimalPlanner::optimizePoseSegment(int start_idx, int end_idx)
 
 
 // orginal func
-/*
+
 bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
                                              double inscribed_radius, double circumscribed_radius, int look_ahead_idx, double feasibility_check_lookahead_distance)
 {
@@ -1882,7 +1929,8 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
   }
   return true;
 }
-*/
+
+/*
 bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
                                              double inscribed_radius, double circumscribed_radius, int look_ahead_idx, double feasibility_check_lookahead_distance)
 {
@@ -1913,7 +1961,7 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
     // Checks if the distance between two poses is higher than the robot radius or the orientation diff is bigger than the specified threshold
     // and interpolates in that case.
     // (if obstacles are pushing two consecutive poses away, the center between two consecutive poses might coincide with the obstacle ;-)!
-    /*
+
     if (i<look_ahead_idx)
     {
       double delta_rot = g2o::normalize_theta(g2o::normalize_theta(teb().Pose(i+1).theta()) -
@@ -1945,10 +1993,11 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
         }
       }
     }
-    */
+
   }
   return true;
 }
+*/
 
 /*
 // optimizeTEB 한 번 더 시도 
