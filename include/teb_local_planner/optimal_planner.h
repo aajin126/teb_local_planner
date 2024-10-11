@@ -452,8 +452,10 @@ public:
    * @return const reference to the TebCostVec.
    */
   double getCurrentCost() const {return cost_;}
+
+  void computeEdgeCost(double obst_cost_scale, double viapoint_cost_scale, bool alternative_time_cost);
   
-  double computeCostForPose(const PoseSE2& pose);
+  double computeCostForPose(double obst_cost_scale, double viapoint_cost_scale, bool alternative_time_cost, const PoseSE2& pose);
 
   /**
    * @brief Extract the velocity from consecutive poses and a time difference (including strafing velocity for holonomic robots)
