@@ -245,7 +245,7 @@ public:
    *          (only used if \c compute_cost_afterwards is true).
    * @return \c true if the optimization terminates successfully, \c false otherwise
    */	  
-  bool optimizeTEB(int iterations_innerloop, int iterations_outerloop, bool compute_cost_afterwards = false,
+  bool optimizeTEB(int iterations_innerloop, int iterations_outerloop, bool compute_cost_afterwards = true,
                    double obst_cost_scale=1.0, double viapoint_cost_scale=1.0, bool alternative_time_cost=false);
   
   //@}

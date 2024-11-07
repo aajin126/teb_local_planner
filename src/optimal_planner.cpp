@@ -140,7 +140,6 @@ void TebOptimalPlanner::visualize()
  
 }
 
-
 /*
  * registers custom vertices and edges in g2o framework
  */
@@ -240,9 +239,12 @@ bool TebOptimalPlanner::optimizeTEB(int iterations_innerloop, int iterations_out
     
     if (compute_cost_afterwards && i==iterations_outerloop-1) // compute cost vec only in the last iteration
     {
-        computeCurrentCost(obst_cost_scale, viapoint_cost_scale, alternative_time_cost);
-        computeEdgeCost(obst_cost_scale, viapoint_cost_scale, alternative_time_cost);
+      ROS_INFO("iteration outerloop: %f", iterations_outerloop - 1);
+      computeCurrentCost(obst_cost_scale, viapoint_cost_scale, alternative_time_cost);
+      computeEdgeCost(obst_cost_scale, viapoint_cost_scale, alternative_time_cost);
     }
+    //computeCurrentCost(obst_cost_scale, viapoint_cost_scale, alternative_time_cost);
+    
 
     clearGraph();
 
@@ -1402,6 +1404,7 @@ void TebOptimalPlanner::computeCurrentCost(double obst_cost_scale, double viapoi
   
   cost_ = 0;
 
+  //unactivated 
   if (alternative_time_cost)
   {
     cost_ += teb_.getSumOfAllTimeDiffs();
@@ -1423,23 +1426,23 @@ void TebOptimalPlanner::computeCurrentCost(double obst_cost_scale, double viapoi
     }
     else if (dynamic_cast<EdgeViaPoint*>(*it) != nullptr)
     {
+      ROS_INFO("viapoint");
       cur_cost *= viapoint_cost_scale;
     }
-    else if (dynamic_cast<EdgeTimeOptimal*>(*it) != nullptr && alternative_time_cost)
+    else if (dynamic_cast<EdgeTimeOptimal*>(*it) != nullptr && alternative_time_cost) // unactivated
     {
       continue; // skip these edges if alternative_time_cost is active
     }
     cost_ += cur_cost;
   }
 
-  // 파일에 기록할 fstream 객체 생성
-  std::ofstream outfile("/home/glab/txt/costs.txt", std::ios_base::app);
-  if (!outfile.is_open()) {
-    ROS_ERROR("Failed to open costs.txt for writing.");
-    return; // 파일 열기 실패 시 종료
-  }
-
+  std::ofstream outfile;
+  outfile.open("/home/glab/txt/edgecost(11).txt", std::ios_base::app);
+  
   ROS_INFO("cost : %f", cost_); // %f로 변경하여 double형 출력
+  outfile << "Trajectory cost: " << cost_ << std::endl;
+
+  outfile.close();
 
 
   // delete temporary created graph
@@ -1450,26 +1453,25 @@ void TebOptimalPlanner::computeCurrentCost(double obst_cost_scale, double viapoi
 void TebOptimalPlanner::computeEdgeCost(double obst_cost_scale, double viapoint_cost_scale, bool alternative_time_cost){
 
   std::ofstream outfile;
-  outfile.open("/home/glab/txt/edge_costs_1011(1).txt", std::ios_base::app);
+  outfile.open("/home/glab/txt/edgecost(11).txt", std::ios_base::app);
+
+  int num = teb_.sizePoses();
+  outfile << "TEB number: " << num << std::endl;
 
   // 엣지 비용 출력
   for (const auto& edge : optimizer_->activeEdges()) {
     double edge_cost = edge->chi2(); // 현재 엣지의 비용 계산
-    auto* edge_obstacle = dynamic_cast<EdgeObstacle*>(edge);
-    auto* edge_viapoint = dynamic_cast<EdgeViaPoint*>(edge);
+    auto* edge_obstacle = dynamic_cast<EdgeInflatedObstacle*>(edge);
     auto* edge_velocity = dynamic_cast<EdgeVelocity*>(edge);
     auto* edge_acceleration = dynamic_cast<EdgeAcceleration*>(edge);
     auto* edge_timeoptimal = dynamic_cast<EdgeTimeOptimal*>(edge);
-    auto* edge_shortestpath = dynamic_cast<EdgeShortestPath*>(edge);
     auto* edge_kinematicsdiffdrive = dynamic_cast<EdgeKinematicsDiffDrive*>(edge);
 
     // 각 엣지 유형에 따라 로그 출력 및 파일에 기록
+    /*
     if (edge_obstacle) {
-      ROS_INFO("Obstacle Edge cost: %f", edge_cost);
-      outfile << "Obstacle Edge cost: " << edge_cost << std::endl;
-    } else if (edge_viapoint) {
-      ROS_INFO("Via Point Edge cost: %f", edge_cost);
-      outfile << "Via Point Edge cost: " << edge_cost << std::endl;
+      ROS_INFO("Obstacle Edge cost: %f", edge_cost * obst_cost_scale);
+      outfile << "Obstacle Edge cost: " << edge_cost * obst_cost_scale << std::endl;
     } else if (edge_velocity) {
       ROS_INFO("Velocity Edge cost: %f", edge_cost);
       outfile << "Velocity Edge cost: " << edge_cost << std::endl;
@@ -1479,13 +1481,11 @@ void TebOptimalPlanner::computeEdgeCost(double obst_cost_scale, double viapoint_
     } else if (edge_timeoptimal) {
       ROS_INFO("Time Optimal Edge cost: %f", edge_cost);
       outfile << "Time Optimal Edge cost: " << edge_cost << std::endl;
-    } else if (edge_shortestpath) {
-      ROS_INFO("Shortest Path Edge cost: %f", edge_cost);
-      outfile << "Shortest Path Edge cost: " << edge_cost << std::endl;
     } else if (edge_kinematicsdiffdrive) {
       ROS_INFO("KinematicsDiffDrive Edge cost: %f", edge_cost);
       outfile << "KinematicsDiffDrive Edge cost: " << edge_cost << std::endl;
     }
+      */
   }
 
   outfile << std::endl << std::endl; // 두 칸 띄우기
@@ -1740,14 +1740,16 @@ Eigen::Vector2d TebOptimalPlanner::pushPoseAwayFromObstacle(PoseSE2& pose, unsig
     // Calculate the distance to the closest obstacle
     float distance_to_obstacle = direction_to_obstacle.norm();
 
+    ROS_INFO("Distance between obstacle and pose : %lf", distance_to_obstacle);
+
     // Calculate the direction vector away from the obstacle
-    Eigen::Vector2d direction_away_from_obstacle = -direction_to_obstacle.normalized();
+    Eigen::Vector2d direction_away_from_obstacle = - direction_to_obstacle.normalized();
 
     // Determine how much to move away from the obstacle
-    float move_distance = 0.01 * distance_to_obstacle; // Adjust this factor as needed
+    float move_distance = 0.07 * distance_to_obstacle; // Adjust this factor as needed
 
     // Compute the new position
-    Eigen::Vector2d new_position = position + move_distance * direction_away_from_obstacle;
+    Eigen::Vector2d new_position = position + (2.5 - move_distance) * direction_away_from_obstacle;
 
     // Update the pose with the new position
     pose.position() = new_position;
@@ -1892,7 +1894,7 @@ void TebOptimalPlanner::optimizePoseSegment(int start_idx, int end_idx)
     }
 }
 
-
+/*
 // orginal func
 
 bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
@@ -1958,7 +1960,7 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
   return true;
 }
 
-/*
+
 bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
                                              double inscribed_radius, double circumscribed_radius, int look_ahead_idx, double feasibility_check_lookahead_distance)
 {
@@ -2170,7 +2172,7 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
     }
   return true;
 }
-
+*/
 // push poses 
 
 bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
@@ -2207,15 +2209,12 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
         float distance = map_subscriber_->getDistanceAt(teb().Pose(i).x(), teb().Pose(i).y());
         ROS_INFO("Distance at pose: %f", distance);
 
-        teb().Pose(i).position() = processPose(teb().Pose(i));
-
-        //std::cout << "Press Enter to continue..." << std::endl;
-        //std::cin.get();
-
         if (visualization_)
         {
             visualization_->publishInfeasibleRobotPose(teb().Pose(i), *cfg_->robot_model, footprint_spec);
         }
+
+        teb().Pose(i).position() = processPose(teb().Pose(i));
     }
   
     // Checks if the distance between two poses is higher than the robot radius or the orientation diff is bigger than the specified threshold
@@ -2298,7 +2297,7 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
 
                 teb().Pose(g).position() = processPose(teb().Pose(i));
               }
-            }
+            }            
 
             for(int g = 0; g < teb().sizePoses(); g++)
             {
@@ -2310,8 +2309,11 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
         }
     }
   }
+  
+  optimizeTEB(cfg_->optim.no_inner_iterations, cfg_->optim.no_outer_iterations);
+
   return true;
 }
-*/
+
 
 } // namespace teb_local_planner
