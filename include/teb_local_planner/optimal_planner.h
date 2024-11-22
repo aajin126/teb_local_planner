@@ -504,8 +504,6 @@ public:
    */
   void getFullTrajectory(std::vector<TrajectoryPointMsg>& trajectory) const;
 
-  void printDistanceField();
-
   Eigen::Vector2d processPose(PoseSE2& target_pose);
 
   Eigen::Vector2d pushPoseAwayFromObstacle(PoseSE2& pose, unsigned int width, unsigned int height);

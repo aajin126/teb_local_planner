@@ -1726,7 +1726,7 @@ Eigen::Vector2d TebOptimalPlanner::pushPoseAwayFromObstacle(PoseSE2& pose, unsig
     Eigen::Vector2d position = pose.position();
 
     // Get the closest obstacle to the current position
-    Eigen::Vector2d closest_obstacle = map_subscriber_->getClosestObstacle(position.x(), position.y());
+    Eigen::Vector2d closest_obstacle = map_subscriber_->getClosestObstacle(position.x(), position.y(), position.z());
 
     // Check if the closest obstacle is valid
     if (std::isnan(closest_obstacle.x()) || std::isnan(closest_obstacle.y())) {
@@ -1746,7 +1746,7 @@ Eigen::Vector2d TebOptimalPlanner::pushPoseAwayFromObstacle(PoseSE2& pose, unsig
     Eigen::Vector2d direction_away_from_obstacle = - direction_to_obstacle.normalized();
 
     // Determine how much to move away from the obstacle
-    float move_distance = 0.07 * distance_to_obstacle; // Adjust this factor as needed
+    float move_distance = 0.08 * distance_to_obstacle; // Adjust this factor as needed
 
     // Compute the new position
     Eigen::Vector2d new_position = position + (2.5 - move_distance) * direction_away_from_obstacle;
@@ -1762,39 +1762,7 @@ Eigen::Vector2d TebOptimalPlanner::pushPoseAwayFromObstacle(PoseSE2& pose, unsig
     return new_position; // Return the updated position
 }
 
-void TebOptimalPlanner::printDistanceField()
-{
-    if (map_subscriber_->isDataReady())
-    {
-        const float* distance_field = map_subscriber_->getDistanceField();
-        if (distance_field)
-        {
-            unsigned int width = map_subscriber_->getWidth();
-            unsigned int height = map_subscriber_->getHeight();
-
-            ROS_INFO("Distance Field:");
-            for (unsigned int y = 0; y < height; ++y)
-            {
-                for (unsigned int x = 0; x < width; ++x)
-                {
-                    float distance = distance_field[x + y * width];
-                    // Print values with a tab for readability
-                    printf("%6.2f\t", distance);
-                }
-                printf("\n");
-            }
-        }
-        else
-        {
-            ROS_WARN("Distance field is not initialized.");
-        }
-    }
-    else
-    {
-        ROS_WARN("Map subscriber is not initialized.");
-    }
-}
-
+//밀어낼 포즈에 대해 필요한 정보 준비 함수
 Eigen::Vector2d TebOptimalPlanner::processPose(PoseSE2& target_pose)
 {
 
@@ -1834,6 +1802,7 @@ Eigen::Vector2d TebOptimalPlanner::processPose(PoseSE2& target_pose)
     return modified_pose; 
 }
 
+//중복 및 회전 구간을 탐지하는 함수 
 void TebOptimalPlanner::reOptimizeDuplicatedAndCircularPoses(double proximity_threshold, double circular_threshold)
 {
     is_reoptimization_active = true; 
@@ -1894,7 +1863,7 @@ void TebOptimalPlanner::optimizePoseSegment(int start_idx, int end_idx)
     }
 }
 
-/*
+
 // orginal func
 
 bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
@@ -1959,7 +1928,7 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
   }
   return true;
 }
-
+/*
 
 bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
                                              double inscribed_radius, double circumscribed_radius, int look_ahead_idx, double feasibility_check_lookahead_distance)
@@ -2172,7 +2141,7 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
     }
   return true;
 }
-*/
+
 // push poses 
 
 bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
@@ -2314,6 +2283,6 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
 
   return true;
 }
-
+*/
 
 } // namespace teb_local_planner

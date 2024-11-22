@@ -220,6 +220,12 @@ void DistanceFieldUpdater::costmapCallback(const nav_msgs::OccupancyGrid::ConstP
     map_resolution_ = msg->info.resolution;
     map_received_ = true;
 
+    // Log the updated map information
+    ROS_INFO("Map received:");
+    ROS_INFO("  Width: %d", map_width_);
+    ROS_INFO("  Height: %d", map_height_);
+    ROS_INFO("  Resolution: %f", map_resolution_);
+
     std::vector<unsigned char> unsigned_costmap_data(msg->data.size());
 
     for (size_t i = 0; i < msg->data.size(); ++i) {
