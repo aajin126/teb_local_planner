@@ -71,6 +71,7 @@ void TebVisualization::initialize(ros::NodeHandle& nh, const TebConfig& cfg)
   infeasiblefootprint_pub_ = nh.advertise<visualization_msgs::Marker>("infeasiblefootprint_markers", 1000);
   infeasiblefootprintmodel_pub_ = nh.advertise<visualization_msgs::Marker>("infeasiblefootprintmodel_markers", 1000);
   obstacle_pub_ = nh.advertise<visualization_msgs::Marker>("close_obstacle", 1000);
+  gap_pub_ = nh.advertise<visualization_msgs::Marker>("gap_marker", 1);
 
   initialized_ = true; 
 }
@@ -270,94 +271,40 @@ void TebVisualization::visualizeIntermediatePoint(const PoseSE2& pose, const std
   teb_marker_pub_.publish(marker);
 }
 
-void TebVisualization::visualizeObstacle(const PoseSE2& teb_pose, const ObstaclePtr& left_obstacle, const ObstaclePtr& right_obstacle) const
+void TebVisualization::visualizeNarrGap(const std::vector<std::pair<Eigen::Vector2d, Eigen::Vector2d>>& narrow_gaps)
 {
-    if (printErrorWhenNotInitialized())
-        return;
+    visualization_msgs::Marker marker;
+    marker.header.frame_id = "map";
+    marker.header.stamp = ros::Time::now();
+    marker.ns = "Gap";
+    marker.id = 0;
+    marker.type = visualization_msgs::Marker::LINE_LIST;
+    marker.action = visualization_msgs::Marker::ADD;
+    marker.scale.x = 0.02; // 선 두께
+    marker.color.a = 1.0;
+    marker.color.r = 0.0;
+    marker.color.g = 0.4;
+    marker.color.b = 0.6;
 
-    // Visualization of the left obstacle
-    if (left_obstacle)
+    marker.lifetime = ros::Duration(2.0); // 5초 동안 유지
+
+    for (const auto& gap : narrow_gaps)
     {
-        visualization_msgs::Marker left_obstacle_marker;
-        left_obstacle_marker.header.frame_id = cfg_->map_frame;
-        left_obstacle_marker.header.stamp = ros::Time::now();
-        left_obstacle_marker.ns = "LeftObstacleVisualization";
-        left_obstacle_marker.type = visualization_msgs::Marker::SPHERE;
-        left_obstacle_marker.action = visualization_msgs::Marker::ADD;
-        left_obstacle_marker.lifetime = ros::Duration(2.0);
+        geometry_msgs::Point p1, p2;
+        p1.x = gap.first.x();
+        p1.y = gap.first.y();
+        p1.z = 0;
 
-        geometry_msgs::Point left_obstacle_point;
-        left_obstacle_point.x = left_obstacle->getCentroid().x(); // Left obstacle's centroid position
-        left_obstacle_point.y = left_obstacle->getCentroid().y();
-        left_obstacle_point.z = 0;
-        left_obstacle_marker.pose.position = left_obstacle_point;
-        
-        left_obstacle_marker.scale.x = 0.05; // Adjust size of the obstacle marker
-        left_obstacle_marker.scale.y = 0.05;
-        left_obstacle_marker.scale.z = 0.05;
+        p2.x = gap.second.x();
+        p2.y = gap.second.y();
+        p2.z = 0;
 
-        left_obstacle_marker.color.a = 1.0;
-        left_obstacle_marker.color.r = 0.0;
-        left_obstacle_marker.color.g = 1.0;
-        left_obstacle_marker.color.b = 0.0;
-
-        obstacle_pub_.publish(left_obstacle_marker);
+        marker.points.push_back(p1);
+        marker.points.push_back(p2);
     }
 
-    // Visualization of the right obstacle
-    if (right_obstacle)
-    {
-        visualization_msgs::Marker right_obstacle_marker;
-        right_obstacle_marker.header.frame_id = cfg_->map_frame;
-        right_obstacle_marker.header.stamp = ros::Time::now();
-        right_obstacle_marker.ns = "RightObstacleVisualization";
-        right_obstacle_marker.type = visualization_msgs::Marker::SPHERE;
-        right_obstacle_marker.action = visualization_msgs::Marker::ADD;
-        right_obstacle_marker.lifetime = ros::Duration(2.0);
-
-        geometry_msgs::Point right_obstacle_point;
-        right_obstacle_point.x = right_obstacle->getCentroid().x(); // Right obstacle's centroid position
-        right_obstacle_point.y = right_obstacle->getCentroid().y();
-        right_obstacle_point.z = 0;
-        right_obstacle_marker.pose.position = right_obstacle_point;
-        
-        right_obstacle_marker.scale.x = 0.05; // Adjust size of the obstacle marker
-        right_obstacle_marker.scale.y = 0.05;
-        right_obstacle_marker.scale.z = 0.05;
-
-        right_obstacle_marker.color.a = 1.0;
-        right_obstacle_marker.color.r = 0.0;
-        right_obstacle_marker.color.g = 1.0;
-        right_obstacle_marker.color.b = 0.0;
-
-        obstacle_pub_.publish(right_obstacle_marker);
-    }
-
-    // Visualization of the teb_pose
-    visualization_msgs::Marker pose_marker;
-    pose_marker.header.frame_id = cfg_->map_frame;
-    pose_marker.header.stamp = ros::Time::now();
-    pose_marker.ns = "PoseVisualization";
-    pose_marker.type = visualization_msgs::Marker::SPHERE;  // Sphere marker for the teb_pose
-    pose_marker.action = visualization_msgs::Marker::ADD;
-    pose_marker.lifetime = ros::Duration(2.0);
-
-    geometry_msgs::Point pose_point;
-    pose_point.x = teb_pose.x(); // teb_pose position
-    pose_point.y = teb_pose.y();
-    pose_point.z = 0;
-    pose_marker.pose.position = pose_point;
-
-    pose_marker.scale.x = 0.05; // Diameter of the sphere
-    pose_marker.scale.y = 0.05;
-    pose_marker.scale.z = 0.05;
-
-    pose_marker.color.a = 1.0;
-    pose_marker.color.r = 0.0;
-    pose_marker.color.g = 1.0;
-    pose_marker.color.b = 0.0;
-
-    obstacle_pub_.publish(pose_marker);
+    // 퍼블리시
+    gap_pub_.publish(marker);
 }
 
 void TebVisualization::publishObstacles(const ObstContainer& obstacles, double scale) const

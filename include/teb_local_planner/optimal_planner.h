@@ -470,6 +470,8 @@ public:
    * @param[out] omega rotational velocity
    */
   inline void extractVelocity(const PoseSE2& pose1, const PoseSE2& pose2, double dt, double& vx, double& vy, double& omega) const;
+
+  void detectNarrGap(const ObstContainer& obstacles, const Eigen::Vector2d& robot_position);
   
   /**
    * @brief Compute the velocity profile of the trajectory

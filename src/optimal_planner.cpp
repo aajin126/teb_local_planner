@@ -210,6 +210,14 @@ bool TebOptimalPlanner::optimizeTEB(int iterations_innerloop, int iterations_out
   //                 however, we have not tested this mode intensively yet, so we keep
   //                 the legacy fast mode as default until we finish our tests.
   bool fast_mode = !cfg_->obstacles.include_dynamic_obstacles;
+
+  for(int i = 0; i < teb().sizePoses(); i++)
+  {
+      //add
+      Eigen::Vector2d teb_position(teb().Pose(i).x(), teb().Pose(i).y());
+      detectNarrGap(*obstacles_, teb_position);
+  }
+
   
   for(int i=0; i<iterations_outerloop; ++i)
   {
@@ -243,8 +251,6 @@ bool TebOptimalPlanner::optimizeTEB(int iterations_innerloop, int iterations_out
       computeCurrentCost(obst_cost_scale, viapoint_cost_scale, alternative_time_cost);
       computeEdgeCost(obst_cost_scale, viapoint_cost_scale, alternative_time_cost);
     }
-    //computeCurrentCost(obst_cost_scale, viapoint_cost_scale, alternative_time_cost);
-    
 
     clearGraph();
 
@@ -873,9 +879,6 @@ void TebOptimalPlanner::AddEdgesObstacles(double weight_multiplier)
       {
         iter_obstacle->push_back(right_obstacle);
       }
-      visualization_->visualizeObstacle(teb_.Pose(i), left_obstacle, right_obstacle);
-      //std::cout << "Press Enter to continue..." << std::endl;
-      //std::cin.get();
 
       // continue here to ignore obstacles for the first pose, but use them later to create the EdgeVelocityObstacleRatio edges
       if (i == 0)
@@ -1585,6 +1588,65 @@ bool TebOptimalPlanner::getVelocityCommand(double& vx, double& vy, double& omega
   return true;
 }
 
+//store cloest left and right point in the vector
+std::vector<std::pair<Eigen::Vector2d, Eigen::Vector2d>> narrow_gaps;
+
+// add 
+void TebOptimalPlanner::detectNarrGap(const ObstContainer& obstacles, const Eigen::Vector2d& teb_position)
+{
+    if (obstacles.empty())
+        return;
+
+    // 로봇 기준 좌표계를 사용하여 왼쪽 및 오른쪽 장애물을 저장
+    Eigen::Vector2d closest_left(std::numeric_limits<double>::max(), std::numeric_limits<double>::max());
+    Eigen::Vector2d closest_right(std::numeric_limits<double>::max(), std::numeric_limits<double>::max());
+
+    double min_dist_left = std::numeric_limits<double>::max();
+    double min_dist_right = std::numeric_limits<double>::max();
+
+    for (const auto& obst : obstacles)
+    {
+        // 장애물 좌표 가져오기
+        Eigen::Vector2d obst_position = obst->getCentroid(); // Obstacle 클래스의 중심 좌표 가져오기
+        Eigen::Vector2d relative_position = obst_position - teb_position;
+
+        // 로봇 기준 좌표에서 왼쪽/오른쪽 장애물을 분리
+        if (relative_position.y() > 0)
+        {
+            double dist = relative_position.norm();
+            if (dist < min_dist_left)
+            {
+                min_dist_left = dist;
+                closest_left = obst_position;
+            }
+        }
+        else
+        {
+            double dist = relative_position.norm();
+            if (dist < min_dist_right)
+            {
+                min_dist_right = dist;
+                closest_right = obst_position;
+            }
+        }
+    }
+
+    // 통로가 존재하는지 확인 (왼쪽과 오른쪽 장애물 사이의 최소 거리 조건)
+    double gap_threshold = 0.4; // 최소 통로 폭 (로봇 크기의 지름)
+    if (min_dist_left < std::numeric_limits<double>::max() &&
+        min_dist_right < std::numeric_limits<double>::max() &&
+        (closest_right - closest_left).norm() > gap_threshold)
+    {
+      narrow_gaps.push_back({closest_left, closest_right});
+      ROS_INFO("Narrow passage detected!");
+      visualization_->visualizeNarrGap(narrow_gaps);
+    }
+    else
+    {
+        ROS_WARN("No valid narrow passage detected.");
+    }
+}
+
 void TebOptimalPlanner::getVelocityProfile(std::vector<geometry_msgs::Twist>& velocity_profile) const
 {
   int n = teb_.sizePoses();
@@ -1726,7 +1788,7 @@ Eigen::Vector2d TebOptimalPlanner::pushPoseAwayFromObstacle(PoseSE2& pose, unsig
     Eigen::Vector2d position = pose.position();
 
     // Get the closest obstacle to the current position
-    Eigen::Vector2d closest_obstacle = map_subscriber_->getClosestObstacle(position.x(), position.y(), position.z());
+    Eigen::Vector2d closest_obstacle = map_subscriber_->getClosestObstacle(position.x(), position.y());
 
     // Check if the closest obstacle is valid
     if (std::isnan(closest_obstacle.x()) || std::isnan(closest_obstacle.y())) {
@@ -1735,7 +1797,7 @@ Eigen::Vector2d TebOptimalPlanner::pushPoseAwayFromObstacle(PoseSE2& pose, unsig
     }
 
     // Calculate the direction vector from the current position to the closest obstacle
-    Eigen::Vector2d direction_to_obstacle = closest_obstacle - position;
+    Eigen::Vector2d direction_to_obstacle = position - closest_obstacle;
 
     // Calculate the distance to the closest obstacle
     float distance_to_obstacle = direction_to_obstacle.norm();
@@ -1743,13 +1805,10 @@ Eigen::Vector2d TebOptimalPlanner::pushPoseAwayFromObstacle(PoseSE2& pose, unsig
     ROS_INFO("Distance between obstacle and pose : %lf", distance_to_obstacle);
 
     // Calculate the direction vector away from the obstacle
-    Eigen::Vector2d direction_away_from_obstacle = - direction_to_obstacle.normalized();
-
-    // Determine how much to move away from the obstacle
-    float move_distance = 0.08 * distance_to_obstacle; // Adjust this factor as needed
+    Eigen::Vector2d direction_away_from_obstacle = direction_to_obstacle.normalized();
 
     // Compute the new position
-    Eigen::Vector2d new_position = position + (2.5 - move_distance) * direction_away_from_obstacle;
+    Eigen::Vector2d new_position = position + (distance_to_obstacle - 2.5) * direction_away_from_obstacle;
 
     // Update the pose with the new position
     pose.position() = new_position;

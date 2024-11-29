@@ -366,6 +366,8 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
   double inscribed_radius = robot_inscribed_radius_;
 
   ROS_DEBUG("transformed plan size : %d", transformed_plan.size());
+
+
 /*
   if (look_ahead_idx < 0 || look_ahead_idx >= transformed_plan.size())
       look_ahead_idx = transformed_plan.size() - 1;
@@ -765,8 +767,7 @@ bool TebLocalPlannerROS::pruneGlobalPlan(const tf2_ros::Buffer& tf, const geomet
     return false;
   }
   return true;
-}
-      
+}      
 
 bool TebLocalPlannerROS::transformGlobalPlan(const tf2_ros::Buffer& tf, const std::vector<geometry_msgs::PoseStamped>& global_plan,
                   const geometry_msgs::PoseStamped& global_pose, const costmap_2d::Costmap2D& costmap, const std::string& global_frame, double max_plan_length,

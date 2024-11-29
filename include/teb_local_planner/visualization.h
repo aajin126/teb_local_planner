@@ -164,8 +164,7 @@ public:
 
   void visualizeIntermediatePoint(const PoseSE2& pose, const std::string& ns = "IntermediatePoints");
 
-  void visualizeObstacle(const PoseSE2& teb_pose, const ObstaclePtr& left_obstacle, const ObstaclePtr& right_obstacle) const;
-  
+  void visualizeNarrGap(const std::vector<std::pair<Eigen::Vector2d, Eigen::Vector2d>>& narrow_gaps);
   /**
    * @brief Publish obstacle positions to the ros topic \e ../../teb_markers
    * @todo Move filling of the marker message to polygon class in order to avoid checking types.
@@ -280,6 +279,7 @@ protected:
   ros::Publisher infeasiblefootprint_pub_; //!< Publisher for visualization markers
   ros::Publisher infeasiblefootprintmodel_pub_; //!< Publisher for the feedback message for analysis and debug purposes
   ros::Publisher obstacle_pub_;
+  ros::Publisher gap_pub_;
   
   const TebConfig* cfg_; //!< Config class that stores and manages all related parameters
   
