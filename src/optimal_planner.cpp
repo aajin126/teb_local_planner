@@ -148,7 +148,7 @@ void TebOptimalPlanner::registerG2OTypes()
   g2o::Factory* factory = g2o::Factory::instance();
   factory->registerType("VERTEX_POSE", new g2o::HyperGraphElementCreator<VertexPose>);
   factory->registerType("VERTEX_TIMEDIFF", new g2o::HyperGraphElementCreator<VertexTimeDiff>);
-
+  factory->registerType("EDGE_VELOCITY_OBSTACLE_RATIO", new g2o::HyperGraphElementCreator<EdgeVelocityObstacleRatio>);
   factory->registerType("EDGE_TIME_OPTIMAL", new g2o::HyperGraphElementCreator<EdgeTimeOptimal>);
   factory->registerType("EDGE_SHORTEST_PATH", new g2o::HyperGraphElementCreator<EdgeShortestPath>);
   factory->registerType("EDGE_VELOCITY", new g2o::HyperGraphElementCreator<EdgeVelocity>);
@@ -825,6 +825,7 @@ void TebOptimalPlanner::AddEdgesObstacles(double weight_multiplier)
   const int first_vertex = cfg_->optim.weight_velocity_obstacle_ratio == 0 ? 1 : 0;
   for (int i = first_vertex; i < teb_.sizePoses() - 1; ++i)
   {  
+      ROS_INFO("vertex : %d", i);
       double left_min_dist = std::numeric_limits<double>::max();
       double right_min_dist = std::numeric_limits<double>::max();
       ObstaclePtr left_obstacle;
@@ -859,6 +860,7 @@ void TebOptimalPlanner::AddEdgesObstacles(double weight_multiplier)
               {
                   left_min_dist = dist;
                   left_obstacle = obst;
+                  
               }
           }
           else
@@ -867,6 +869,7 @@ void TebOptimalPlanner::AddEdgesObstacles(double weight_multiplier)
               {
                   right_min_dist = dist;
                   right_obstacle = obst;
+                  
               }
           }
       }   
@@ -874,10 +877,12 @@ void TebOptimalPlanner::AddEdgesObstacles(double weight_multiplier)
       if (left_obstacle)
       {
         iter_obstacle->push_back(left_obstacle);
+        ROS_INFO("left_min_dist : %lf", left_min_dist);
       }
       if (right_obstacle)
       {
         iter_obstacle->push_back(right_obstacle);
+        ROS_INFO("right_min_dist : %lf", right_min_dist);
       }
 
       // continue here to ignore obstacles for the first pose, but use them later to create the EdgeVelocityObstacleRatio edges
@@ -1421,24 +1426,48 @@ void TebOptimalPlanner::computeCurrentCost(double obst_cost_scale, double viapoi
   {
     double cur_cost = (*it)->chi2();
 
+    ROS_INFO("Error cost of active Edges: %lf", cur_cost);
+
     if (dynamic_cast<EdgeObstacle*>(*it) != nullptr
         || dynamic_cast<EdgeInflatedObstacle*>(*it) != nullptr
         || dynamic_cast<EdgeDynamicObstacle*>(*it) != nullptr)
     {
+      std::cout << "Edge type: EDGE_OBSTACLE" << std::endl;
       cur_cost *= obst_cost_scale;
+      ROS_INFO("Multiply obst_cost_scale to cur_cost: %lf", cur_cost);
+
     }
+
+    else if (dynamic_cast<EdgeShortestPath*>(*it) != nullptr)
+        std::cout << "Edge type: EDGE_SHORTEST_PATH" << std::endl;
+    else if (dynamic_cast<EdgeVelocity*>(*it) != nullptr)
+        std::cout << "Edge type: EDGE_VELOCITY" << std::endl;
+    else if (dynamic_cast<EdgeAcceleration*>(*it) != nullptr)
+        std::cout << "Edge type: EDGE_ACCELERATION" << std::endl;
+    else if (dynamic_cast<EdgeAccelerationStart*>(*it) != nullptr)
+        std::cout << "Edge type: EDGE_ACCELERATION_START" << std::endl;
+    else if (dynamic_cast<EdgeAccelerationGoal*>(*it) != nullptr)
+        std::cout << "Edge type: EDGE_ACCELERATION_GOAL" << std::endl;
+    else if (dynamic_cast<EdgeKinematicsDiffDrive*>(*it) != nullptr)
+        std::cout << "Edge type: EDGE_KINEMATICS_DIFF_DRIVE" << std::endl;
+    else if (dynamic_cast<EdgeVelocityObstacleRatio*>(*it) != nullptr)
+        std::cout << "Edge type: EDGE_VELOCITY_OBSTACLE_RATIO" << std::endl;
     else if (dynamic_cast<EdgeViaPoint*>(*it) != nullptr)
     {
-      ROS_INFO("viapoint");
+      std::cout << "Edge type: EDGE_VIA_POINT" << std::endl;
       cur_cost *= viapoint_cost_scale;
+      ROS_INFO("Multiply viapoint_cost_scale to cur_cost: %lf", cur_cost);
     }
     else if (dynamic_cast<EdgeTimeOptimal*>(*it) != nullptr && alternative_time_cost) // unactivated
     {
+      std::cout << "Edge type: EDGE_TIME_OPTIMAL" << std::endl;
       continue; // skip these edges if alternative_time_cost is active
     }
     cost_ += cur_cost;
+    ROS_INFO("Sum Error cost of active Edges and sum of all time diffs: %lf", cost_);
   }
 
+  /*
   std::ofstream outfile;
   outfile.open("/home/glab/txt/edgecost(11).txt", std::ios_base::app);
   
@@ -1446,7 +1475,7 @@ void TebOptimalPlanner::computeCurrentCost(double obst_cost_scale, double viapoi
   outfile << "Trajectory cost: " << cost_ << std::endl;
 
   outfile.close();
-
+  */
 
   // delete temporary created graph
   if (!graph_exist_flag) 
