@@ -6,7 +6,8 @@
 #include <teb_local_planner/visualization.h>
 #include <teb_local_planner/teb_local_planner_ros.h>
 #include <geometry_msgs/PoseStamped.h>
-#include <tf/transform_listener.h>
+#include <geometry_msgs/Pose.h>
+#include <nav_msgs/Odometry.h>
 #include <random>
 #include <vector>
 #include <cmath>
@@ -22,7 +23,7 @@ public:
     std::vector<std::pair<geometry_msgs::Point, double>> detectNarrowPassages(const geometry_msgs::Pose& robot_pose)
     {
         std::vector<std::pair<geometry_msgs::Point, double>> narrow_passages;
-        
+
         // Generate Sobol-like samples within the local costmap bounds
         std::vector<geometry_msgs::Point> samples = generateSamples();
 
@@ -32,7 +33,7 @@ public:
             double medial_radius = findMedialBallRadius(sample);
 
             // Define a threshold for identifying narrow passages
-            if (medial_radius < thre_) 
+            if (medial_radius < thre_)
             {
                 narrow_passages.emplace_back(sample, medial_radius);
             }
@@ -51,7 +52,6 @@ private:
         std::vector<geometry_msgs::Point> samples;
 
         // Get bounds of the local costmap
-        // Create points using a uniform distribution for x and y coordinates.
         double origin_x = costmap_->getOriginX();
         double origin_y = costmap_->getOriginY();
         double width = costmap_->getSizeInMetersX();
@@ -99,38 +99,36 @@ private:
     }
 };
 
+geometry_msgs::Pose getRobotPoseFromOdom(const nav_msgs::Odometry::ConstPtr& odom_msg)
+{
+    geometry_msgs::Pose robot_pose;
+    robot_pose = odom_msg->pose.pose;
+    return robot_pose;
+}
+
 int main(int argc, char** argv)
-{   ros::init(argc, argv, "narrow_passage_detector");
+{
+    ros::init(argc, argv, "narrow_passage_detector");
     ros::NodeHandle nh;
 
     // Load parameters and initialize
     double thre = 0.7; // Example robot radius
     unsigned int num_samples = 10; // Number of samples for detection
 
-    // Initialize tf2 Buffer and TransformListener
-    tf2_ros::Buffer tf_buffer;
-    tf2_ros::TransformListener tf_listener(tf_buffer);
-
     // Create the Costmap2DROS object
-    costmap_2d::Costmap2DROS* local_costmap = new costmap_2d::Costmap2DROS("local_costmap", tf_buffer);
-
+    costmap_2d::Costmap2DROS* local_costmap = new costmap_2d::Costmap2DROS("local_costmap", nh);
     costmap_2d::Costmap2D* costmap = local_costmap->getCostmap();
 
-    // Get the robot's current pose from the Transform Listener
-    geometry_msgs::Pose robot_pose;
-
-    try
+    // Subscribe to the odom topic to get the robot's pose
+    nav_msgs::Odometry::ConstPtr odom_msg = ros::topic::waitForMessage<nav_msgs::Odometry>("/odom", nh);
+    if (!odom_msg)
     {
-        geometry_msgs::TransformStamped transform_stamped = tf_buffer.lookupTransform("map", "base_link", ros::Time(0), ros::Duration(3.0));
-        robot_pose.position.x = transform_stamped.transform.translation.x;
-        robot_pose.position.y = transform_stamped.transform.translation.y;
-        robot_pose.orientation = transform_stamped.transform.rotation;
-    }
-    catch (tf2::TransformException& ex)
-    {
-        ROS_ERROR("%s", ex.what());
+        ROS_ERROR("Failed to receive odometry message");
+        delete local_costmap;
         return -1;
     }
+
+    geometry_msgs::Pose robot_pose = getRobotPoseFromOdom(odom_msg);
 
     // Create the NarrowPassageDetector with the robot's pose and costmap
     NarrowPassageDetector detector(thre, costmap, num_samples);

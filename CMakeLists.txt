@@ -3,6 +3,8 @@ project(teb_local_planner)
 
 # Set to Release in order to speed up the program significantly
 set(CMAKE_BUILD_TYPE Release) #None, Debug, Release, RelWithDebInfo, MinSizeRel
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 ## Find catkin macros and libraries
 find_package(catkin REQUIRED COMPONENTS
