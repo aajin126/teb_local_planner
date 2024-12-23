@@ -210,14 +210,14 @@ bool TebOptimalPlanner::optimizeTEB(int iterations_innerloop, int iterations_out
   //                 however, we have not tested this mode intensively yet, so we keep
   //                 the legacy fast mode as default until we finish our tests.
   bool fast_mode = !cfg_->obstacles.include_dynamic_obstacles;
-
+/*
   for(int i = 0; i < teb().sizePoses(); i++)
   {
       //add
       Eigen::Vector2d teb_position(teb().Pose(i).x(), teb().Pose(i).y());
       detectNarrGap(*obstacles_, teb_position);
   }
-
+*/
   
   for(int i=0; i<iterations_outerloop; ++i)
   {
@@ -1419,7 +1419,7 @@ void TebOptimalPlanner::computeCurrentCost(double obst_cost_scale, double viapoi
     // TEST we use SumOfAllTimeDiffs() here, because edge cost depends on number of samples, which is not always the same for similar TEBs,
     // since we are using an AutoResize Function with hysteresis.
   }
-  
+  /*  
   // now we need pointers to all edges -> calculate error for each edge-type
   // since we aren't storing edge pointers, we need to check every edge
   for (std::vector<g2o::OptimizableGraph::Edge*>::const_iterator it = optimizer_->activeEdges().begin(); it!= optimizer_->activeEdges().end(); it++)
@@ -1467,7 +1467,7 @@ void TebOptimalPlanner::computeCurrentCost(double obst_cost_scale, double viapoi
     ROS_INFO("Sum Error cost of active Edges and sum of all time diffs: %lf", cost_);
   }
 
-  /*
+
   std::ofstream outfile;
   outfile.open("/home/glab/txt/edgecost(11).txt", std::ios_base::app);
   
@@ -1661,10 +1661,10 @@ void TebOptimalPlanner::detectNarrGap(const ObstContainer& obstacles, const Eige
     }
 
     // 통로가 존재하는지 확인 (왼쪽과 오른쪽 장애물 사이의 최소 거리 조건)
-    double gap_threshold = 0.4; // 최소 통로 폭 (로봇 크기의 지름)
+    double gap_threshold = 0.8; // 최소 통로 폭 (로봇 크기의 지름)
     if (min_dist_left < std::numeric_limits<double>::max() &&
         min_dist_right < std::numeric_limits<double>::max() &&
-        (closest_right - closest_left).norm() > gap_threshold)
+        (closest_right - closest_left).norm() < gap_threshold)
     {
       narrow_gaps.push_back({closest_left, closest_right});
       ROS_INFO("Narrow passage detected!");

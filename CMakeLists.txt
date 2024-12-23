@@ -208,6 +208,7 @@ target_link_libraries(teb_local_planner
 
 add_executable(test_optim_node src/test_optim_node.cpp)
 add_executable(distance_map src/distance_map_deadreck.cpp)
+add_executable(NPdetector src/NPdetector.cpp)
 
 target_link_libraries(test_optim_node
    teb_local_planner
