@@ -219,6 +219,7 @@ target_link_libraries(test_optim_node
 )
 
 target_link_libraries(distance_map ${catkin_LIBRARIES})
+target_link_libraries(NPdetector ${catkin_LIBRARIES})
 
 #############
 ## Install ##
