@@ -12,12 +12,13 @@
 #include <random>
 #include <vector>
 #include <cmath>
+#include <visualization_msgs/Marker.h>
 
 class NarrowPassageDetector
 {
 public:
-    NarrowPassageDetector(double thre, const costmap_2d::Costmap2D* costmap, unsigned int num_samples)
-        : thre_(thre), costmap_(costmap), num_samples_(num_samples)
+    NarrowPassageDetector(double thre, const costmap_2d::Costmap2D* costmap, unsigned int num_samples, ros::Publisher& marker_pub)
+        : thre_(thre), costmap_(costmap), num_samples_(num_samples), marker_pub_(marker_pub)
     {
     }
 
@@ -27,6 +28,9 @@ public:
 
         // Generate Sobol-like samples within the local costmap bounds
         std::vector<geometry_msgs::Point> samples = generateSamples();
+
+        // Visualize sampled points
+        visualizeSamples(samples);
 
         for (const auto& sample : samples)
         {
@@ -38,6 +42,9 @@ public:
             {
                 narrow_passages.emplace_back(sample, medial_radius);
             }
+
+            // Visualize medial ball
+            visualizeMedialBall(sample, medial_radius);
         }
 
         return narrow_passages;
@@ -47,6 +54,7 @@ private:
     double thre_;
     const costmap_2d::Costmap2D* costmap_;
     unsigned int num_samples_;
+    ros::Publisher& marker_pub_;
 
     std::vector<geometry_msgs::Point> generateSamples()
     {
@@ -77,29 +85,110 @@ private:
     double findMedialBallRadius(const geometry_msgs::Point& point)
     {
         unsigned int mx, my;
+
+        // 점이 costmap 내부에 있는지 확인
         if (!costmap_->worldToMap(point.x, point.y, mx, my))
         {
             ROS_WARN("Point (%.2f, %.2f) is outside the costmap bounds.", point.x, point.y);
-            return 0.0;
+            return 0.0; // 맵 밖이면 반경 0 반환
         }
 
-        double min_distance = std::numeric_limits<double>::max();
+        const double max_radius = std::min(costmap_->getSizeInMetersX(), costmap_->getSizeInMetersY()) / 2.0;
+        const double step_size = 0.1; // 반경 증가 간격
+        double radius = 0.0;
 
-        for (unsigned int i = 0; i < costmap_->getSizeInCellsX(); ++i)
+        while (radius <= max_radius)
         {
-            for (unsigned int j = 0; j < costmap_->getSizeInCellsY(); ++j)
+            bool obstacle_found = false;
+
+            // 현재 반경에서 10도 간격으로 원형 경계 샘플링
+            for (double angle = 0; angle < 2 * M_PI; angle += M_PI / 18)
             {
-                if (costmap_->getCost(i, j) >= costmap_2d::INSCRIBED_INFLATED_OBSTACLE)
+                double sample_x = point.x + radius * std::cos(angle);
+                double sample_y = point.y + radius * std::sin(angle);
+
+                unsigned int sx, sy;
+                if (costmap_->worldToMap(sample_x, sample_y, sx, sy))
                 {
-                    double wx, wy;
-                    costmap_->mapToWorld(i, j, wx, wy);
-                    double distance = std::hypot(wx - point.x, wy - point.y);
-                    min_distance = std::min(min_distance, distance);
+                    // 장애물 레이어에서만 확인
+                    if (costmap_->getCost(sx, sy) == costmap_2d::LETHAL_OBSTACLE)
+                    {
+                        obstacle_found = true;
+                        break;
+                    }
+                }
+                else
+                {
+                    // 원이 맵 밖으로 나가면 장애물로 간주
+                    obstacle_found = true;
+                    break;
                 }
             }
+
+        if (obstacle_found)
+        {
+            return radius; // 장애물에 닿으면 반경 반환
         }
 
-        return min_distance;
+        radius += step_size; // 반경 증가
+    }
+
+    // 최대 반경 초과 시 제한
+    return max_radius;
+    }
+
+    void visualizeSamples(const std::vector<geometry_msgs::Point>& samples)
+    {
+        visualization_msgs::Marker marker;
+        marker.header.frame_id = "map";
+        marker.header.stamp = ros::Time::now();
+        marker.ns = "samples";
+        marker.id = 0;
+        marker.type = visualization_msgs::Marker::POINTS;
+        marker.action = visualization_msgs::Marker::ADD;
+
+        marker.scale.x = 0.1;
+        marker.scale.y = 0.1;
+        marker.color.a = 1.0;
+        marker.color.r = 0.0;
+        marker.color.g = 1.0;
+        marker.color.b = 0.0;
+
+        for (const auto& sample : samples)
+        {
+            geometry_msgs::Point p;
+            p.x = sample.x;
+            p.y = sample.y;
+            p.z = 0.0;
+            marker.points.push_back(p);
+        }
+
+        marker_pub_.publish(marker);
+    }
+
+    void visualizeMedialBall(const geometry_msgs::Point& center, double radius)
+    {
+        visualization_msgs::Marker marker;
+        marker.header.frame_id = "map";
+        marker.header.stamp = ros::Time::now();
+        marker.ns = "medial_balls";
+        marker.id = center.x * 1000 + center.y * 1000; // Unique ID for each sphere
+        marker.type = visualization_msgs::Marker::SPHERE;
+        marker.action = visualization_msgs::Marker::ADD;
+
+        marker.pose.position.x = center.x;
+        marker.pose.position.y = center.y;
+        marker.pose.position.z = 0.0;
+        marker.scale.x = radius * 2;
+        marker.scale.y = radius * 2;
+        marker.scale.z = 0.1;
+
+        marker.color.a = 0.5;
+        marker.color.r = 1.0;
+        marker.color.g = 0.0;
+        marker.color.b = 0.0;
+
+        marker_pub_.publish(marker);
     }
 };
 
@@ -147,8 +236,11 @@ int main(int argc, char** argv)
     // Subscribe to Odometry topic
     ros::Subscriber odom_sub = nh.subscribe<nav_msgs::Odometry>("/odom", 10, odomCallback);
 
+    // Create Marker publisher
+    ros::Publisher marker_pub = nh.advertise<visualization_msgs::Marker>("visualization_marker", 10);
+
     // Create the NarrowPassageDetector
-    NarrowPassageDetector detector(threshold, costmap, num_samples);
+    NarrowPassageDetector detector(threshold, costmap, num_samples, marker_pub);
 
     ros::Rate rate(10); // Loop rate: 10Hz
     while (ros::ok())
