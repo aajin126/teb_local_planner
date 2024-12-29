@@ -26,12 +26,11 @@ public:
         {
             double medial_radius = findMedialBallRadius(sample);
 
-            if (medial_radius < thre_)
+            if (medial_radius < thre_ && medial_radius >= 0.25)
             {
                 narrow_passages.emplace_back(sample, medial_radius);
+                visualizeMedialBall(sample, medial_radius);
             }
-
-            visualizeMedialBall(sample, medial_radius);
         }
 
         return narrow_passages;
@@ -77,37 +76,72 @@ private:
     }
 
     double findMedialBallRadius(const geometry_msgs::Point& point)
+{
+    double max_radius = std::min(costmap_->info.width, costmap_->info.height) * costmap_->info.resolution / 2.0;
+    double step_size = 0.1;
+    double radius = 0.2;
+    geometry_msgs::Point center = point;
+
+    std::vector<geometry_msgs::Point> boundary_points;
+    std::vector<geometry_msgs::Point> fixed_points; // 고정된 점들을 저장하는 리스트
+    bool boundary_reached = false;
+
+    while (radius <= max_radius)
     {
-        double max_radius = std::min(costmap_->info.width, costmap_->info.height) * costmap_->info.resolution / 2.0;
-        double step_size = 0.1;
-        double radius = 0.0;
+        boundary_reached = false;
+        boundary_points.clear(); // 매 루프마다 경계 점들을 초기화
 
-        while (radius <= max_radius)
+        // 원 위의 점들을 살펴봄
+        for (double angle = 0; angle < 2 * M_PI; angle += M_PI / 36)
         {
-            bool boundary_reached = false;
+            double sample_x = center.x + radius * std::cos(angle);
+            double sample_y = center.y + radius * std::sin(angle);
 
-            for (double angle = 0; angle < 2 * M_PI; angle += M_PI / 18)
+            geometry_msgs::Point sample_point;
+            sample_point.x = sample_x;
+            sample_point.y = sample_y;
+            sample_point.z = 0.0;  // 기본값 설정
+
+            // 고정된 점이 아니라면 경계 점을 확인
+            if (isObstacleOrUnknown(sample_x, sample_y) && std::find(fixed_points.begin(), fixed_points.end(), sample_point) == fixed_points.end())
             {
-                double sample_x = point.x + radius * std::cos(angle);
-                double sample_y = point.y + radius * std::sin(angle);
-
-                if (isObstacleOrUnknown(sample_x, sample_y))
-                {
-                    boundary_reached = true;
-                    break;
-                }
+                boundary_points.push_back(sample_point);
+                boundary_reached = true;
             }
-
-            if (boundary_reached)
-            {
-                return radius;
-            }
-
-            radius += step_size;
         }
 
-        return max_radius;
+        // 두 개 이상의 점이 경계에 닿았다면, 원을 더 이상 확장하지 않고 중심을 이동시킴
+        if (boundary_reached && boundary_points.size() > 1)
+        {
+            // 경계 점들을 고정시킴
+            fixed_points.insert(fixed_points.end(), boundary_points.begin(), boundary_points.end());
+
+            // 원 중심을 고정된 점들로부터 벡터를 계산하여 이동
+            for (const auto& fixed_point : fixed_points)
+            {
+                // 고정된 점과 center 사이의 벡터 계산
+                double vector_x = fixed_point.x - center.x;
+                double vector_y = fixed_point.y - center.y;
+
+                // 벡터의 반대방향으로 이동 (벡터의 방향을 반전)
+                double move_x = center.x - vector_x;
+                double move_y = center.y - vector_y;
+
+                // 중심을 이동
+                center.x = move_x;
+                center.y = move_y;
+            }
+
+            // 최종적으로 반지름을 반환
+            return radius;
+        }
+
+        // 한 점만 장애물에 닿은 경우에는 원의 반지름을 계속 확장
+        radius += step_size;
     }
+
+    return max_radius;
+}
 
     bool isObstacleOrUnknown(double x, double y)
     {
@@ -168,6 +202,7 @@ private:
         marker.color.g = 0.0;
         marker.color.b = 0.0;
 
+        // Draw the medial ball centered at the new position
         for (double angle = 0; angle <= 2 * M_PI; angle += M_PI / 36)
         {
             geometry_msgs::Point p;
@@ -176,6 +211,10 @@ private:
             p.z = 0.0;
             marker.points.push_back(p);
         }
+
+        ros::Duration lifetime(1.0);
+        marker.lifetime = lifetime;
+
         marker_pub_.publish(marker);
     }
 };
@@ -193,8 +232,8 @@ int main(int argc, char** argv)
     ros::init(argc, argv, "narrow_passage_detector");
     ros::NodeHandle nh;
 
-    double threshold = 0.7;
-    unsigned int num_samples = 10;
+    double threshold = 0.6;
+    unsigned int num_samples = 5;
 
     ros::Subscriber costmap_sub = nh.subscribe<nav_msgs::OccupancyGrid>("/move_base/local_costmap/costmap", 5, costmapCallback);
     ros::Publisher marker_pub = nh.advertise<visualization_msgs::Marker>("visualization_marker", 5);
