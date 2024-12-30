@@ -24,12 +24,13 @@ public:
 
         for (const auto& sample : samples)
         {
-            double medial_radius = findMedialBallRadius(sample);
+            double medial_radius = findMedialBallRadius(sample).first;
+            geometry_msgs::Point final_center = findMedialBallRadius(sample).second;
 
             if (medial_radius < thre_ && medial_radius >= 0.25)
             {
-                narrow_passages.emplace_back(sample, medial_radius);
-                visualizeMedialBall(sample, medial_radius);
+                narrow_passages.emplace_back(final_center, medial_radius);
+                visualizeMedialBall(final_center, medial_radius);
             }
         }
 
@@ -75,73 +76,99 @@ private:
         return samples;
     }
 
-    double findMedialBallRadius(const geometry_msgs::Point& point)
-{
-    double max_radius = std::min(costmap_->info.width, costmap_->info.height) * costmap_->info.resolution / 2.0;
-    double step_size = 0.1;
-    double radius = 0.2;
-    geometry_msgs::Point center = point;
-
-    std::vector<geometry_msgs::Point> boundary_points;
-    std::vector<geometry_msgs::Point> fixed_points; // 고정된 점들을 저장하는 리스트
-    bool boundary_reached = false;
-
-    while (radius <= max_radius)
+    double calculateAngle(const geometry_msgs::Point& p1, const geometry_msgs::Point& p2, const geometry_msgs::Point& center)
     {
-        boundary_reached = false;
-        boundary_points.clear(); // 매 루프마다 경계 점들을 초기화
+        double vector1_x = p1.x - center.x;
+        double vector1_y = p1.y - center.y;
+        double vector2_x = p2.x - center.x;
+        double vector2_y = p2.y - center.y;
 
-        // 원 위의 점들을 살펴봄
-        for (double angle = 0; angle < 2 * M_PI; angle += M_PI / 36)
+        double dot_product = vector1_x * vector2_x + vector1_y * vector2_y;
+        double magnitude1 = std::sqrt(vector1_x * vector1_x + vector1_y * vector1_y);
+        double magnitude2 = std::sqrt(vector2_x * vector2_x + vector2_y * vector2_y);
+
+        if (magnitude1 > 0 && magnitude2 > 0)
         {
-            double sample_x = center.x + radius * std::cos(angle);
-            double sample_y = center.y + radius * std::sin(angle);
+            double cosine_angle = dot_product / (magnitude1 * magnitude2);
 
-            geometry_msgs::Point sample_point;
-            sample_point.x = sample_x;
-            sample_point.y = sample_y;
-            sample_point.z = 0.0;  // 기본값 설정
+            // 클램프를 사용하지 않고 범위를 제한
+            if (cosine_angle < -1.0)
+                cosine_angle = -1.0;
+            else if (cosine_angle > 1.0)
+                cosine_angle = 1.0;
 
-            // 고정된 점이 아니라면 경계 점을 확인
-            if (isObstacleOrUnknown(sample_x, sample_y) && std::find(fixed_points.begin(), fixed_points.end(), sample_point) == fixed_points.end())
-            {
-                boundary_points.push_back(sample_point);
-                boundary_reached = true;
-            }
+            return std::acos(cosine_angle); // 각도 (라디안)
         }
-
-        // 두 개 이상의 점이 경계에 닿았다면, 원을 더 이상 확장하지 않고 중심을 이동시킴
-        if (boundary_reached && boundary_points.size() > 1)
-        {
-            // 경계 점들을 고정시킴
-            fixed_points.insert(fixed_points.end(), boundary_points.begin(), boundary_points.end());
-
-            // 원 중심을 고정된 점들로부터 벡터를 계산하여 이동
-            for (const auto& fixed_point : fixed_points)
-            {
-                // 고정된 점과 center 사이의 벡터 계산
-                double vector_x = fixed_point.x - center.x;
-                double vector_y = fixed_point.y - center.y;
-
-                // 벡터의 반대방향으로 이동 (벡터의 방향을 반전)
-                double move_x = center.x - vector_x;
-                double move_y = center.y - vector_y;
-
-                // 중심을 이동
-                center.x = move_x;
-                center.y = move_y;
-            }
-
-            // 최종적으로 반지름을 반환
-            return radius;
-        }
-
-        // 한 점만 장애물에 닿은 경우에는 원의 반지름을 계속 확장
-        radius += step_size;
+        return 0.0;
     }
 
-    return max_radius;
-}
+    std::pair<double, geometry_msgs::Point> findMedialBallRadius(const geometry_msgs::Point& point)
+    {
+        double max_radius = std::min(costmap_->info.width, costmap_->info.height) * costmap_->info.resolution / 2.0;
+        double step_size = 0.01;
+        double radius = 0.2;
+        geometry_msgs::Point center = point;
+
+        while (radius <= max_radius)
+        {
+            std::vector<geometry_msgs::Point> boundary_points;
+
+            // 원의 경계 점 계산
+            for (double angle = 0; angle < 2 * M_PI; angle += M_PI / 36)
+            {
+                double sample_x = center.x + radius * std::cos(angle);
+                double sample_y = center.y + radius * std::sin(angle);
+
+                if (isObstacleOrUnknown(sample_x, sample_y))
+                {
+                    geometry_msgs::Point boundary_point;
+                    boundary_point.x = sample_x;
+                    boundary_point.y = sample_y;
+                    boundary_point.z = 0.0; // 기본값 설정
+                    boundary_points.push_back(boundary_point);
+                }
+            }
+
+            // 경계 점이 발견되지 않으면 반지름 증가
+            if (boundary_points.empty())
+            {
+                radius += step_size;
+                continue;
+            }
+
+            // 경계 점이 두 개 이상일 경우 종료 조건
+            if (boundary_points.size() > 1)
+            {
+                const auto& last_boundary_point = boundary_points.back();
+                double angle = calculateAngle(boundary_points.front(), last_boundary_point, center);
+
+                if (angle > M_PI / 2.0)
+                {
+                    return {radius, center};
+                }
+                
+            }
+
+            // 중심 이동 계산
+            const auto& boundary_point = boundary_points.front();
+
+            double vector_x = boundary_point.x - center.x;
+            double vector_y = boundary_point.y - center.y;
+
+            double magnitude = std::sqrt(vector_x * vector_x + vector_y * vector_y);
+            if (magnitude > 0)
+            {
+                center.x -= (vector_x / magnitude) * step_size;
+                center.y -= (vector_y / magnitude) * step_size;
+            }
+
+            // 반지름 증가
+            radius += step_size;
+
+        }
+
+        return {radius, center}; // 최대 반지름에 도달한 경우 반환
+    }
 
     bool isObstacleOrUnknown(double x, double y)
     {
