@@ -635,16 +635,16 @@ bool TebOptimalPlanner::buildGraph(double weight_multiplier)
   }  
   
   // add Edges (local cost functions)
-  if (cfg_->obstacles.legacy_obstacle_association)
-    AddEdgesObstaclesLegacy(weight_multiplier);
-  else
-  {
-    AddEdgesObstacles(weight_multiplier);
-    ROS_DEBUG("SUCCESSFULLY ADD EDGES OBSTACLES");
-  }
+   if (cfg_->obstacles.legacy_obstacle_association)
+     AddEdgesObstaclesLegacy(weight_multiplier);
+   else
+   {
+     AddEdgesObstacles(weight_multiplier);
+     ROS_DEBUG("SUCCESSFULLY ADD EDGES OBSTACLES");
+   }
   
-  if (cfg_->obstacles.include_dynamic_obstacles)
-    AddEdgesDynamicObstacles();
+   if (cfg_->obstacles.include_dynamic_obstacles)
+     AddEdgesDynamicObstacles();
   
   AddEdgesViaPoints();
   

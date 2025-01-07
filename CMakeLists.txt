@@ -3,7 +3,7 @@ project(teb_local_planner)
 
 # Set to Release in order to speed up the program significantly
 set(CMAKE_BUILD_TYPE Release) #None, Debug, Release, RelWithDebInfo, MinSizeRel
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 ## Find catkin macros and libraries
@@ -175,11 +175,14 @@ catkin_package(
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
-include_directories(include)
+include_directories( include /usr/include/pcl-1.10 )
 include_directories(
   ${EXTERNAL_INCLUDE_DIRS}
   ${catkin_INCLUDE_DIRS}
 )
+
+link_directories(${PCL_LIBRARY_DIRS})
+add_definitions(${PCL_DEFINITIONS})
 
 ## Build the teb_local_planner library
 
@@ -203,6 +206,7 @@ add_dependencies(teb_local_planner ${PROJECT_NAME}_generate_messages_cpp)
 
 target_link_libraries(teb_local_planner
    ${EXTERNAL_LIBS}
+   ${PCL_LIBRARIES}
    ${catkin_LIBRARIES}
 )
 
