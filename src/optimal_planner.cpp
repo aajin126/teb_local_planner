@@ -54,7 +54,7 @@
 #include <costmap_2d/layered_costmap.h>
 #include <teb_local_planner/pose_se2.h>
 
-#include "teb_local_planner/sdt_dead_reckoning.h"
+// #include "teb_local_planner/sdt_dead_reckoning.h"
 
 #include <nav_msgs/Path.h>
 #include <geometry_msgs/PoseStamped.h>
@@ -82,7 +82,7 @@ TebOptimalPlanner::TebOptimalPlanner(const TebConfig& cfg, ObstContainer* obstac
   initialize(cfg, obstacles, visual, via_points);
 
   ros::NodeHandle nh;
-  map_subscriber_ = std::make_shared<DistanceFieldUpdater>(nh);
+  //map_subscriber_ = std::make_shared<DistanceFieldUpdater>(nh);
 }
 
 TebOptimalPlanner::~TebOptimalPlanner()
@@ -1805,90 +1805,90 @@ Eigen::Vector2d TebOptimalPlanner::pushPoseAwayFromObstacle(PoseSE2& pose, unsig
 }
 */
 
-Eigen::Vector2d TebOptimalPlanner::pushPoseAwayFromObstacle(PoseSE2& pose, unsigned int width, unsigned int height)
-{
-    // Ensure map subscriber is valid and data is ready
-    if (!map_subscriber_ || !map_subscriber_->isDataReady()) {
-        ROS_WARN("Map data not available. Cannot push pose away from obstacle.");
-        return pose.position(); // Return the current position if no map data
-    }
+// Eigen::Vector2d TebOptimalPlanner::pushPoseAwayFromObstacle(PoseSE2& pose, unsigned int width, unsigned int height)
+// {
+//     // Ensure map subscriber is valid and data is ready
+//     if (!map_subscriber_ || !map_subscriber_->isDataReady()) {
+//         ROS_WARN("Map data not available. Cannot push pose away from obstacle.");
+//         return pose.position(); // Return the current position if no map data
+//     }
 
-    // Retrieve the current position from the pose
-    Eigen::Vector2d position = pose.position();
+//     // Retrieve the current position from the pose
+//     Eigen::Vector2d position = pose.position();
 
-    // Get the closest obstacle to the current position
-    Eigen::Vector2d closest_obstacle = map_subscriber_->getClosestObstacle(position.x(), position.y());
+//     // Get the closest obstacle to the current position
+//     Eigen::Vector2d closest_obstacle = map_subscriber_->getClosestObstacle(position.x(), position.y());
 
-    // Check if the closest obstacle is valid
-    if (std::isnan(closest_obstacle.x()) || std::isnan(closest_obstacle.y())) {
-        ROS_WARN("Invalid closest obstacle coordinates.");
-        return pose.position(); // Return the current position if the closest obstacle is invalid
-    }
+//     // Check if the closest obstacle is valid
+//     if (std::isnan(closest_obstacle.x()) || std::isnan(closest_obstacle.y())) {
+//         ROS_WARN("Invalid closest obstacle coordinates.");
+//         return pose.position(); // Return the current position if the closest obstacle is invalid
+//     }
 
-    // Calculate the direction vector from the current position to the closest obstacle
-    Eigen::Vector2d direction_to_obstacle = position - closest_obstacle;
+//     // Calculate the direction vector from the current position to the closest obstacle
+//     Eigen::Vector2d direction_to_obstacle = position - closest_obstacle;
 
-    // Calculate the distance to the closest obstacle
-    float distance_to_obstacle = direction_to_obstacle.norm();
+//     // Calculate the distance to the closest obstacle
+//     float distance_to_obstacle = direction_to_obstacle.norm();
 
-    ROS_INFO("Distance between obstacle and pose : %lf", distance_to_obstacle);
+//     ROS_INFO("Distance between obstacle and pose : %lf", distance_to_obstacle);
 
-    // Calculate the direction vector away from the obstacle
-    Eigen::Vector2d direction_away_from_obstacle = direction_to_obstacle.normalized();
+//     // Calculate the direction vector away from the obstacle
+//     Eigen::Vector2d direction_away_from_obstacle = direction_to_obstacle.normalized();
 
-    // Compute the new position
-    Eigen::Vector2d new_position = position + (distance_to_obstacle - 2.5) * direction_away_from_obstacle;
+//     // Compute the new position
+//     Eigen::Vector2d new_position = position + (distance_to_obstacle - 2.5) * direction_away_from_obstacle;
 
-    // Update the pose with the new position
-    pose.position() = new_position;
+//     // Update the pose with the new position
+//     pose.position() = new_position;
 
-    ROS_INFO("New Position x: %f, y: %f", new_position.x(), new_position.y());
+//     ROS_INFO("New Position x: %f, y: %f", new_position.x(), new_position.y());
 
-    // Visualization and debugging
-    visualization_->visualizeIntermediatePoint(pose);
+//     // Visualization and debugging
+//     visualization_->visualizeIntermediatePoint(pose);
 
-    return new_position; // Return the updated position
-}
+//     return new_position; // Return the updated position
+// }
 
-//밀어낼 포즈에 대해 필요한 정보 준비 함수
-Eigen::Vector2d TebOptimalPlanner::processPose(PoseSE2& target_pose)
-{
+// //밀어낼 포즈에 대해 필요한 정보 준비 함수
+// Eigen::Vector2d TebOptimalPlanner::processPose(PoseSE2& target_pose)
+// {
 
-    Eigen::Vector2d modified_pose = target_pose.position(); 
+//     Eigen::Vector2d modified_pose = target_pose.position(); 
     
-    // Check if the map subscriber has received the map data
-    if (map_subscriber_->isDataReady())
-    {
-        ROS_DEBUG("Map subscriber is not null");
-        unsigned int width = map_subscriber_->getWidth();
-        unsigned int height = map_subscriber_->getHeight();
-        const float* distance_field = map_subscriber_->getDistanceField();
+//     // Check if the map subscriber has received the map data
+//     if (map_subscriber_->isDataReady())
+//     {
+//         ROS_DEBUG("Map subscriber is not null");
+//         unsigned int width = map_subscriber_->getWidth();
+//         unsigned int height = map_subscriber_->getHeight();
+//         const float* distance_field = map_subscriber_->getDistanceField();
 
-        ROS_DEBUG("Width: %u, Height: %u", width, height);
+//         ROS_DEBUG("Width: %u, Height: %u", width, height);
 
-        if (distance_field)
-        {
-            ROS_DEBUG("Distance field is not null");
+//         if (distance_field)
+//         {
+//             ROS_DEBUG("Distance field is not null");
 
-            PoseSE2 modifiable_pose = target_pose;
+//             PoseSE2 modifiable_pose = target_pose;
 
-            ROS_DEBUG("Push pose away from obstacle");
-            modified_pose = pushPoseAwayFromObstacle(modifiable_pose, width, height);
+//             ROS_DEBUG("Push pose away from obstacle");
+//             modified_pose = pushPoseAwayFromObstacle(modifiable_pose, width, height);
 
-            ROS_INFO("Modified pose position: [%f, %f]", modifiable_pose.position().x(), modifiable_pose.position().y());
-        }
-        else
-        {
-            ROS_DEBUG("Distance field is null");
-        }
-    }
-    else
-    {
-        ROS_DEBUG("Map subscriber is null or data is not ready");
-    }
+//             ROS_INFO("Modified pose position: [%f, %f]", modifiable_pose.position().x(), modifiable_pose.position().y());
+//         }
+//         else
+//         {
+//             ROS_DEBUG("Distance field is null");
+//         }
+//     }
+//     else
+//     {
+//         ROS_DEBUG("Map subscriber is null or data is not ready");
+//     }
 
-    return modified_pose; 
-}
+//     return modified_pose; 
+// }
 
 //중복 및 회전 구간을 탐지하는 함수 
 void TebOptimalPlanner::reOptimizeDuplicatedAndCircularPoses(double proximity_threshold, double circular_threshold)
@@ -1950,8 +1950,6 @@ void TebOptimalPlanner::optimizePoseSegment(int start_idx, int end_idx)
         teb().Pose(i) = pose_segment[j];
     }
 }
-
-
 // orginal func
 
 bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,

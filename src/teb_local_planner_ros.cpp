@@ -133,7 +133,7 @@ void TebLocalPlannerROS::initialize(std::string name, tf2_ros::Buffer* tf, costm
     global_frame_ = costmap_ros_->getGlobalFrameID();
     cfg_.map_frame = global_frame_; // TODO
     robot_base_frame_ = costmap_ros_->getBaseFrameID();
-
+   
     //Initialize a costmap to polygon converter
     if (!cfg_.obstacles.costmap_converter_plugin.empty())
     {
@@ -197,8 +197,6 @@ void TebLocalPlannerROS::initialize(std::string name, tf2_ros::Buffer* tf, costm
     ROS_WARN("teb_local_planner has already been initialized, doing nothing.");
   }
 }
-
-
 
 bool TebLocalPlannerROS::setPlan(const std::vector<geometry_msgs::PoseStamped>& orig_global_plan)
 {
@@ -285,6 +283,8 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
   // update via-points container
   if (!custom_via_points_active_)
     updateViaPointsContainer(transformed_plan, cfg_.trajectory.global_plan_viapoint_sep);
+  else
+    updateCustomViaPointsContainer(transformed_plan, *costmap_);
 
   nav_msgs::Odometry base_odom;
   odom_helper_.getOdom(base_odom);
@@ -366,47 +366,6 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
   double inscribed_radius = robot_inscribed_radius_;
 
   ROS_DEBUG("transformed plan size : %d", transformed_plan.size());
-
-
-/*
-  if (look_ahead_idx < 0 || look_ahead_idx >= transformed_plan.size())
-      look_ahead_idx = transformed_plan.size() - 1;
-
-  ROS_DEBUG("look ahead idx : %d", look_ahead_idx);
-
-  for (int i=0; i <= look_ahead_idx; ++i)
-  {           
-      if (i<look_ahead_idx)
-      {
-        // Quaternion을 Yaw 값으로 변환
-        double yaw1 = tf2::getYaw(transformed_plan[i].pose.orientation);
-        double yaw2 = tf2::getYaw(transformed_plan[i + 1].pose.orientation);
-
-        ROS_DEBUG("yaw[i] : %lf , yaw[i+1] : %lf", yaw1, yaw2);
-
-        double delta_rot = g2o::normalize_theta(yaw2) - g2o::normalize_theta(yaw1);
-
-        ROS_DEBUG("delta_rot : %lf", delta_rot);
-
-        // Point를 Eigen::Vector2d로 변환
-        Eigen::Vector2d pos1(transformed_plan[i].pose.position.x, transformed_plan[i].pose.position.y);
-        Eigen::Vector2d pos2(transformed_plan[i + 1].pose.position.x, transformed_plan[i + 1].pose.position.y);
-
-        Eigen::Vector2d delta_dist = pos2 - pos1;
-
-        if(fabs(delta_rot) > cfg_.trajectory.min_resolution_collision_check_angular || delta_dist.norm() > inscribed_radius)
-        {
-          int n_additional_samples = std::max(std::ceil(fabs(delta_rot) / cfg_.trajectory.min_resolution_collision_check_angular), std::ceil(delta_dist.norm() / inscribed_radius)) - 1;
-
-          ROS_DEBUG("initial planning -> additional_samples number : %d", n_additional_samples);
-          PoseSE2 intermediate_pose = transformed_plan[i].pose;
-          visualization_->visualizeIntermediatePoint(intermediate_pose);
-          ROS_DEBUG("pose %d turn into intermediate_pose 0", i);
-
-         }
-      }
-  }
-  */
   
   // Now perform the actual planning
   // bool success = planner_->plan(robot_pose_, robot_goal_, robot_vel_, cfg_.goal_tolerance.free_goal_vel); // straight line init
@@ -525,7 +484,7 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
   // Now visualize everything    
   planner_->visualize();
   visualization_->publishObstacles(obstacles_, costmap_->getResolution());
-  visualization_->publishViaPoints(via_points_);
+  visualization_->publishCustomViaPoints(via_points_);
   visualization_->publishGlobalPlan(global_plan_);
   return mbf_msgs::ExePathResult::SUCCESS;
 }
@@ -540,6 +499,253 @@ bool TebLocalPlannerROS::isGoalReached()
     return true;
   }
   return false;
+}
+
+std::vector<std::pair<geometry_msgs::Point, double>> TebLocalPlannerROS::detectNarrowPassages(const std::vector<geometry_msgs::PoseStamped>& transformed_plan, const costmap_2d::Costmap2D& costmap)
+{
+  std::vector<std::pair<geometry_msgs::Point, double>> medial_axis_point;
+
+  std::vector<geometry_msgs::Point> samples = generateSamples(transformed_plan, *costmap_);
+  visualization_->visualizeSamples(samples);
+
+  double obst_radius = 0.5;
+
+  std::vector<geometry_msgs::Point> obstacle_points; // Store samples with obstacles
+
+  for (const auto& sample : samples)
+  {
+    auto obstacles_in_circle = getObstaclePointsInCircle(sample, obst_radius);
+
+    if (obstacles_in_circle)
+    {
+      visualization_->visualizeNarrowSpace(sample, obst_radius);
+      obstacle_points.push_back(sample);
+    }
+  }
+
+  // 장애물이 포함된 샘플로 Medial Ball 생성
+  for (const auto& point : obstacle_points)
+  {
+    //auto medial_ball = findMedialBallWithCostmapKDTree(point, *costmap_);
+    double medial_radius = findMedialBallRadius(point, *costmap_).second;
+    geometry_msgs::Point final_center = findMedialBallRadius(point, *costmap_).first;
+
+    // threshold 이상인 경우 추가하지 않음
+    if (medial_radius < thre && medial_radius >= 0.25)
+    {
+      medial_axis_point.emplace_back(final_center, medial_radius);
+      visualization_->visualizeMedialBall(final_center, medial_radius);
+    }
+  }
+
+  return medial_axis_point;
+}
+
+double TebLocalPlannerROS::euclideanDistance(const geometry_msgs::Point& p1, const geometry_msgs::Point& p2)
+{
+  return std::sqrt(std::pow(p1.x - p2.x, 2) + std::pow(p1.y - p2.y, 2));
+}
+
+std::vector<geometry_msgs::Point> TebLocalPlannerROS::generateSamples(const std::vector<geometry_msgs::PoseStamped>& transformed_plan, const costmap_2d::Costmap2D& costmap)
+{   
+  std::vector<geometry_msgs::Point> samples;
+
+  double origin_x = costmap.getOriginX();
+  double origin_y = costmap.getOriginY();
+  double resolution = costmap.getResolution();
+  unsigned int width = costmap.getSizeInCellsX();
+  unsigned int height = costmap.getSizeInCellsY();
+
+  std::random_device rd;
+  std::mt19937 gen(rd());
+  std::uniform_int_distribution<> dis_x(0, width - 1);
+  std::uniform_int_distribution<> dis_y(0, height - 1);
+
+  // Parameters for the sampling bias
+  double rho = 0.8;         // Expansion coefficient
+  double lambda = 1.0;      // Decay rate for exponential bias
+  double threshold_distance = 0.5;
+
+  while (samples.size() < num_samples)
+  {
+    int mx = dis_x(gen);
+    int my = dis_y(gen);
+
+    // Local costmap에서 FREE_SPACE 확인
+    if (costmap.getCost(mx, my) == costmap_2d::FREE_SPACE) 
+    {
+      geometry_msgs::Point sample;
+      sample.x = origin_x + mx * resolution;
+      sample.y = origin_y + my * resolution;
+
+      // **Check if the sample is within a threshold distance to the global path**
+      bool within_threshold = false;
+      for (const auto& pose : transformed_plan)
+      {
+        double d_v = euclideanDistance(sample, pose.pose.position);
+        if (d_v <= threshold_distance)
+        {
+          within_threshold = true;
+          break;  // No need to check further if already within threshold
+        }
+      }
+
+      // If sample is within threshold distance from any point in the global path, accept it
+      if (within_threshold)
+      {
+        // Apply exponential bias (optional, if you want to prioritize sampling near the path)
+        double d_G = 0.0;  // You could calculate this distance as needed for bias
+        double sampling_weight = lambda * std::exp(-lambda * d_G);
+
+        if (std::uniform_real_distribution<>(0, 1)(gen) < sampling_weight)
+        {
+          samples.push_back(sample);
+        }
+      }
+    }
+  }
+
+  return samples;
+}
+
+double TebLocalPlannerROS::calculateAngle(const geometry_msgs::Point& p1, const geometry_msgs::Point& p2, const geometry_msgs::Point& center)
+{
+  double vector1_x = p1.x - center.x;
+  double vector1_y = p1.y - center.y;
+  double vector2_x = p2.x - center.x;
+  double vector2_y = p2.y - center.y;
+
+  double dot_product = vector1_x * vector2_x + vector1_y * vector2_y;
+  double magnitude1 = std::sqrt(vector1_x * vector1_x + vector1_y * vector1_y);
+  double magnitude2 = std::sqrt(vector2_x * vector2_x + vector2_y * vector2_y);
+
+  if (magnitude1 > 0 && magnitude2 > 0)
+  {
+    double cosine_angle = dot_product / (magnitude1 * magnitude2);
+
+    //범위 제한
+    if (cosine_angle < -1.0)
+      cosine_angle = -1.0;
+    else if (cosine_angle > 1.0)
+      cosine_angle = 1.0;
+
+    return std::acos(cosine_angle); // 각도 (라디안)
+  }
+  return 0.0;
+}
+
+bool TebLocalPlannerROS::getObstaclePointsInCircle(const geometry_msgs::Point& center, double radius)
+{
+  std::vector<geometry_msgs::Point> grid_obstacle_points;
+  int min_obstacles = 5; // 최소 장애물 점 개수
+
+  for (double angle = 0; angle < 2 * M_PI; angle += M_PI / 36)
+  {
+    double r_x = center.x + radius * std::cos(angle);
+    double r_y = center.y + radius * std::sin(angle);
+
+    if (isObstacleOrUnknown(r_x, r_y,*costmap_))
+    {
+      geometry_msgs::Point o_point;
+      o_point.x = r_x;
+      o_point.y = r_y;
+      o_point.z = 0.0;
+      grid_obstacle_points.push_back(o_point);
+    }
+  }
+
+  ROS_INFO("Number of obstacle points detected: %lu", grid_obstacle_points.size());
+
+  // 최소 개수 이상의 장애물 점이 있어야 유효한 장애물로 간주
+  if (grid_obstacle_points.size() < min_obstacles)
+  {
+    return false;
+  }
+
+  return true;
+}
+
+std::pair<geometry_msgs::Point, double> TebLocalPlannerROS::findMedialBallRadius(const geometry_msgs::Point& point, const costmap_2d::Costmap2D& costmap)
+{
+  double max_radius = std::min(costmap.getSizeInCellsX(), costmap.getSizeInCellsY()) * costmap.getResolution() / 2.0;
+  double step_size = 0.01;
+  double radius = 0.2;
+  geometry_msgs::Point center = point;
+
+  while (radius <= max_radius)
+  {
+    std::vector<geometry_msgs::Point> boundary_points;
+
+    // 원의 경계 점 계산
+    for (double angle = 0; angle < 2 * M_PI; angle += M_PI / 36)
+    {
+      double sample_x = center.x + radius * std::cos(angle);
+      double sample_y = center.y + radius * std::sin(angle);
+
+      if (isObstacleOrUnknown(sample_x, sample_y,*costmap_))
+      {
+        geometry_msgs::Point boundary_point;
+        boundary_point.x = sample_x;
+        boundary_point.y = sample_y;
+        boundary_point.z = 0.0; // 기본값 설정
+        boundary_points.push_back(boundary_point);
+      }
+    }
+
+    // 경계 점이 발견되지 않으면 반지름 증가
+    if (boundary_points.empty())
+    {
+      radius += step_size;
+      continue;
+    }
+
+    // 경계 점이 두 개 이상일 경우 종료 조건
+    if (boundary_points.size() > 1)
+    {
+        const auto& last_boundary_point = boundary_points.back();
+        double angle = calculateAngle(boundary_points.front(), last_boundary_point, center);
+
+        if (angle > M_PI / 2.0)
+        {
+          return {center, radius}; 
+        }
+                
+    }
+
+    // 중심 이동 계산
+    const auto& boundary_point = boundary_points.front();
+
+    double vector_x = boundary_point.x - center.x;
+    double vector_y = boundary_point.y - center.y;
+
+    double magnitude = std::sqrt(vector_x * vector_x + vector_y * vector_y);
+    if (magnitude > 0)
+    {
+      center.x -= (vector_x / magnitude) * step_size;
+      center.y -= (vector_y / magnitude) * step_size;
+    }
+
+    // 반지름 증가
+    radius += step_size;
+
+    }
+
+  return {center, radius}; // 최대 반지름에 도달한 경우 반환
+}
+
+bool TebLocalPlannerROS::isObstacleOrUnknown(double x, double y, const costmap_2d::Costmap2D& costmap)
+{
+  unsigned int mx, my;
+
+  if (!costmap.worldToMap(x, y, mx, my))
+  {
+    return false; 
+  }
+
+  unsigned char cost = costmap.getCost(mx, my);
+
+  // LETHAL_OBSTACLE(>=100) 또는 NO_INFORMATION(-1)일 경우 장애물로 간주
+  return cost == costmap_2d::LETHAL_OBSTACLE || cost == costmap_2d::NO_INFORMATION;
 }
 
 void TebLocalPlannerROS::updateObstacleContainerWithCostmap()
@@ -713,7 +919,63 @@ void TebLocalPlannerROS::updateViaPointsContainer(const std::vector<geometry_msg
   }
   
 }
-      
+
+void TebLocalPlannerROS::updateCustomViaPointsContainer(const std::vector<geometry_msgs::PoseStamped>& transformed_plan, const costmap_2d::Costmap2D& costmap)
+{
+    // Clear the existing via-points
+    via_points_.clear();
+    ROS_DEBUG("clear via point");
+
+    // Get medial axis points
+    auto medial_axis_points = detectNarrowPassages(transformed_plan, *costmap_);
+    ROS_DEBUG("get medial axis points");
+
+    // Return if no medial axis points are available
+    if (medial_axis_points.empty())
+        return;
+
+    // Create a vector to store the closest plan index for each medial axis point
+    std::vector<std::pair<int, Eigen::Vector2d>> indexed_medial_points;
+
+    // Map each medial axis point to its closest transformed_plan index
+    for (const auto& medial_point_pair : medial_axis_points)
+    {
+        const auto& medial_point = medial_point_pair.first; // geometry_msgs::Point
+        Eigen::Vector2d medial_point_vec(medial_point.x, medial_point.y);
+
+        int closest_plan_index = -1;
+        double min_distance = std::numeric_limits<double>::max();
+
+        for (size_t i = 0; i < transformed_plan.size(); ++i)
+        {
+            const auto& plan_pose = transformed_plan[i];
+            Eigen::Vector2d plan_point_vec(plan_pose.pose.position.x, plan_pose.pose.position.y);
+            double distance = (medial_point_vec - plan_point_vec).squaredNorm();
+
+            if (distance < min_distance)
+            {
+                min_distance = distance;
+                closest_plan_index = i;
+            }
+        }
+
+        // Save the closest plan index and the medial point
+        indexed_medial_points.emplace_back(closest_plan_index, medial_point_vec);
+    }
+
+    // Sort the indexed medial points by the closest plan index
+    std::sort(indexed_medial_points.begin(), indexed_medial_points.end(),
+              [](const std::pair<int, Eigen::Vector2d>& a, const std::pair<int, Eigen::Vector2d>& b) {
+                  return a.first < b.first;
+              });
+
+    // Add sorted medial points to via_points_
+    for (const auto& indexed_point : indexed_medial_points)
+    {
+        via_points_.emplace_back(indexed_point.second);
+    }
+}
+
 Eigen::Vector2d TebLocalPlannerROS::tfPoseToEigenVector2dTransRot(const tf::Pose& tf_vel)
 {
   Eigen::Vector2d vel;
@@ -1100,6 +1362,7 @@ void TebLocalPlannerROS::customObstacleCB(const costmap_converter::ObstacleArray
 void TebLocalPlannerROS::customViaPointsCB(const nav_msgs::Path::ConstPtr& via_points_msg)
 {
   ROS_INFO_ONCE("Via-points received. This message is printed once.");
+
   if (cfg_.trajectory.global_plan_viapoint_sep > 0)
   {
     ROS_WARN("Via-points are already obtained from the global plan (global_plan_viapoint_sep>0)."
@@ -1114,6 +1377,7 @@ void TebLocalPlannerROS::customViaPointsCB(const nav_msgs::Path::ConstPtr& via_p
   {
     via_points_.emplace_back(pose.pose.position.x, pose.pose.position.y);
   }
+
   custom_via_points_active_ = !via_points_.empty();
 }
      

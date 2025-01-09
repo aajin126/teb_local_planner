@@ -60,7 +60,7 @@
 #include <g2o/core/optimization_algorithm_levenberg.h>
 #include <g2o/solvers/csparse/linear_solver_csparse.h>
 #include <g2o/solvers/cholmod/linear_solver_cholmod.h>
-#include "teb_local_planner/sdt_dead_reckoning.h"
+// #include "teb_local_planner/sdt_dead_reckoning.h"
 
 // messages
 #include <nav_msgs/Path.h>
@@ -727,7 +727,7 @@ protected:
   boost::shared_ptr<g2o::SparseOptimizer> optimizer_; //!< g2o optimizer for trajectory optimization
   std::pair<bool, geometry_msgs::Twist> vel_start_; //!< Store the initial velocity at the start pose
   std::pair<bool, geometry_msgs::Twist> vel_goal_; //!< Store the final velocity at the goal pose
-  std::shared_ptr<DistanceFieldUpdater> map_subscriber_;
+  //std::shared_ptr<DistanceFieldUpdater> map_subscriber_;
 
   std::vector<int> redundant_indices;
 

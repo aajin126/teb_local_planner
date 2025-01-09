@@ -54,6 +54,7 @@
 #include <teb_local_planner/homotopy_class_planner.h>
 #include <teb_local_planner/visualization.h>
 #include <teb_local_planner/recovery_behaviors.h>
+#include <teb_local_planner/NPdetector.h>
 
 // message types
 #include <nav_msgs/Path.h>
@@ -118,7 +119,6 @@ public:
     * @return True if the plan was updated successfully, false otherwise
     */
   bool setPlan(const std::vector<geometry_msgs::PoseStamped>& orig_global_plan);
-
   /**
     * @brief Given the current position, orientation, and velocity of the robot, compute velocity commands to send to the base
     * @param cmd_vel Will be filled with the velocity command to be passed to the robot base
@@ -165,6 +165,14 @@ public:
     */
   bool isGoalReached();
 
+  std::vector<std::pair<geometry_msgs::Point, double>> detectNarrowPassages(const std::vector<geometry_msgs::PoseStamped>& transformed_plan, const costmap_2d::Costmap2D& costmap);
+  double euclideanDistance(const geometry_msgs::Point& p1, const geometry_msgs::Point& p2);
+  std::vector<geometry_msgs::Point> generateSamples(const std::vector<geometry_msgs::PoseStamped>& transformed_plan, const costmap_2d::Costmap2D& costmap);
+  double calculateAngle(const geometry_msgs::Point& p1, const geometry_msgs::Point& p2, const geometry_msgs::Point& center);
+  bool getObstaclePointsInCircle(const geometry_msgs::Point& center, double radius);
+  std::pair<geometry_msgs::Point, double> findMedialBallRadius(const geometry_msgs::Point& point, const costmap_2d::Costmap2D& costmap);
+  bool isObstacleOrUnknown(double x, double y, const costmap_2d::Costmap2D& costmap);
+  
   /**
     * @brief Dummy version to satisfy MBF API
     */
@@ -224,7 +232,6 @@ public:
   //@}
   
 protected:
-
   /**
     * @brief Update internal obstacle vector based on occupied costmap cells
     * @remarks All occupied cells will be added as point obstacles.
@@ -258,7 +265,8 @@ protected:
    * @param min_separation minimum separation between two consecutive via-points
    */
   void updateViaPointsContainer(const std::vector<geometry_msgs::PoseStamped>& transformed_plan, double min_separation);
-  
+
+  void updateCustomViaPointsContainer(const std::vector<geometry_msgs::PoseStamped>& transformed_plan, const costmap_2d::Costmap2D& costmap);
   
   /**
     * @brief Callback for the dynamic_reconfigure node.
@@ -398,6 +406,11 @@ private:
   // external objects (store weak pointers)
   costmap_2d::Costmap2DROS* costmap_ros_; //!< Pointer to the costmap ros wrapper, received from the navigation stack
   costmap_2d::Costmap2D* costmap_; //!< Pointer to the 2d costmap (obtained from the costmap ros wrapper)
+
+  // Create an instance of NarrowPassageDetector
+  double thre = 0.6;  // 임계값 설정
+  unsigned int num_samples = 10;  // 샘플 개수 설정
+  
   tf2_ros::Buffer* tf_; //!< pointer to tf buffer
     
   // internal objects (memory management owned)

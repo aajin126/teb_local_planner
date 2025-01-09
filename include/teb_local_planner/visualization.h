@@ -136,6 +136,10 @@ public:
    * @param ns Namespace for the marker objects
    * @param color Color of the footprint
    */
+  
+  void visualizeSamples(const std::vector<geometry_msgs::Point>& samples);
+  void visualizeMedialBall(const geometry_msgs::Point& center, double radius);
+  void visualizeNarrowSpace(const geometry_msgs::Point& center, double radius);
 
   void publishInfeasibleRobotFootprintModel(const PoseSE2& current_pose, const BaseRobotFootprintModel& robot_model, const std::string& ns = "RobotInfeasibleFootprintModel",
                                   const std_msgs::ColorRGBA& color = toColorMsg(0.5, 0.0, 0.8, 0.0));
@@ -187,6 +191,9 @@ public:
    * @param ns_prefix Namespace prefix for the marker objects (the strings "Edges" and "Vertices" will be appended)
    * @tparam GraphType boost::graph object in which vertices has the field/member \c pos.
    */
+
+  void publishCustomViaPoints(const std::vector< Eigen::Vector2d, Eigen::aligned_allocator<Eigen::Vector2d> >& via_points, const std::string& ns = "ViaPoints") const;
+
   template <typename GraphType>
   void publishGraph(const GraphType& graph, const std::string& ns_prefix = "Graph");
   
@@ -280,6 +287,8 @@ protected:
   ros::Publisher infeasiblefootprintmodel_pub_; //!< Publisher for the feedback message for analysis and debug purposes
   ros::Publisher obstacle_pub_;
   ros::Publisher gap_pub_;
+  ros::Publisher via_point_pub_;
+  ros::Publisher marker_pub_; 
   
   const TebConfig* cfg_; //!< Config class that stores and manages all related parameters
   

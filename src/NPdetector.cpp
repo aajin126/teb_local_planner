@@ -4,16 +4,57 @@
 #include <geometry_msgs/Point.h>
 #include <nav_msgs/OccupancyGrid.h>
 #include <visualization_msgs/Marker.h>
+#include <geometry_msgs/PoseStamped.h>
 #include <nav_msgs/Path.h>
 #include <vector>
 #include <random>
 #include <cmath>
+#include <ros/ros.h>
+
+// base local planner base class and utilities
+#include <nav_core/base_local_planner.h>
+#include <mbf_costmap_core/costmap_controller.h>
+#include <base_local_planner/goal_functions.h>
+#include <base_local_planner/odometry_helper_ros.h>
+#include <base_local_planner/costmap_model.h>
+
+
+// timed-elastic-band related classes
+#include <teb_local_planner/optimal_planner.h>
+#include <teb_local_planner/homotopy_class_planner.h>
+#include <teb_local_planner/visualization.h>
+#include <teb_local_planner/recovery_behaviors.h>
+
+// message types
+#include <nav_msgs/Path.h>
+#include <nav_msgs/Odometry.h>
+#include <geometry_msgs/PoseStamped.h>
+#include <visualization_msgs/MarkerArray.h>
+#include <visualization_msgs/Marker.h>
+#include <costmap_converter/ObstacleMsg.h>
+
+// transforms
+#include <tf2/utils.h>
+#include <tf2_ros/buffer.h>
+
+// costmap
+#include <costmap_2d/costmap_2d_ros.h>
+#include <costmap_converter/costmap_converter_interface.h>
+
+
+// dynamic reconfigure
+#include <teb_local_planner/TebLocalPlannerReconfigureConfig.h>
+#include <dynamic_reconfigure/server.h>
+
+// boost classes
+#include <boost/bind.hpp>
+#include <boost/shared_ptr.hpp>
 
 class NarrowPassageDetector
 {
 public:
-    NarrowPassageDetector(double thre, const nav_msgs::OccupancyGrid::ConstPtr& costmap, unsigned int num_samples, ros::Publisher& marker_pub, const nav_msgs::Path::ConstPtr& global_plan)
-        : thre_(thre), costmap_(costmap), num_samples_(num_samples), marker_pub_(marker_pub),global_plan_(global_plan)
+    NarrowPassageDetector(double thre, const nav_msgs::OccupancyGrid::ConstPtr& local_costmap, const nav_msgs::OccupancyGrid::ConstPtr& global_costmap, unsigned int num_samples, const nav_msgs::Path::ConstPtr& global_plan)
+        : thre_(thre), local_costmap_(local_costmap), global_costmap_(global_costmap), num_samples_(num_samples), global_plan_(global_plan)
     {
     }
 
@@ -22,7 +63,7 @@ public:
         std::vector<std::pair<geometry_msgs::Point, double>> medial_axis_point;
 
         std::vector<geometry_msgs::Point> samples = generateSamples();
-        visualizeSamples(samples);
+        // visualization_->visualizeSamples(samples);
 
         double obst_radius = 0.5;
 
@@ -34,7 +75,7 @@ public:
 
             if (obstacles_in_circle)
             {
-                visualizeNarrowSpace(sample, obst_radius);
+                // visualization_->visualizeNarrowSpace(sample, obst_radius);
                 obstacle_points.push_back(sample);
             }
         }
@@ -50,7 +91,7 @@ public:
             if (medial_radius < thre_ && medial_radius >= 0.25)
             {
                 medial_axis_point.emplace_back(final_center, medial_radius);
-                visualizeMedialBall(final_center, medial_radius);
+                // visualization_->visualizeMedialBall(final_center, medial_radius);
             }
         }
 
@@ -59,10 +100,10 @@ public:
 
 private:
     double thre_;
-    nav_msgs::OccupancyGrid::ConstPtr costmap_;
+    nav_msgs::OccupancyGrid::ConstPtr local_costmap_;
+    nav_msgs::OccupancyGrid::ConstPtr global_costmap_;
     nav_msgs::Path::ConstPtr global_plan_;
     unsigned int num_samples_;
-    ros::Publisher& marker_pub_;
 
     double euclideanDistance(const geometry_msgs::Point& p1, const geometry_msgs::Point& p2)
     {
@@ -73,11 +114,11 @@ private:
     {   
         std::vector<geometry_msgs::Point> samples;
 
-        double origin_x = costmap_->info.origin.position.x;
-        double origin_y = costmap_->info.origin.position.y;
-        double resolution = costmap_->info.resolution;
-        unsigned int width = costmap_->info.width;
-        unsigned int height = costmap_->info.height;
+        double origin_x = global_costmap_->info.origin.position.x;
+        double origin_y = global_costmap_->info.origin.position.y;
+        double resolution = global_costmap_->info.resolution;
+        unsigned int width = global_costmap_->info.width;
+        unsigned int height = global_costmap_->info.height;
 
         std::random_device rd;
         std::mt19937 gen(rd());
@@ -95,7 +136,7 @@ private:
             int my = dis_y(gen);
             int index = my * width + mx;
 
-            if (costmap_->data[index] == 0) // FREE_SPACE only
+            if (global_costmap_->data[index] == 0) // FREE_SPACE only
             {
                 geometry_msgs::Point sample;
                 sample.x = origin_x + mx * resolution;
@@ -174,31 +215,6 @@ private:
                 o_point.y = r_y;
                 o_point.z = 0.0;
                 grid_obstacle_points.push_back(o_point);
-
-                // 시각화용 Marker 메시지 생성
-                visualization_msgs::Marker marker;
-                marker.header.frame_id = "map"; // 좌표계
-                marker.header.stamp = ros::Time::now();
-                marker.ns = "obstacle_points";
-                marker.id = 0; // Marker ID
-                marker.type = visualization_msgs::Marker::POINTS;
-                marker.action = visualization_msgs::Marker::ADD;
-
-                // 점의 크기 설정
-                marker.scale.x = 0.1; // 점의 폭
-                marker.scale.y = 0.1; // 점의 높이
-
-                // 색상 설정 (예: 빨간색)
-                marker.color.r = 1.0;
-                marker.color.g = 0.0;
-                marker.color.b = 0.0;
-                marker.color.a = 1.0; // 투명도
-
-                // 장애물 점 추가
-                marker.points = grid_obstacle_points;
-
-                // Marker 메시지 퍼블리시
-                marker_pub_.publish(marker);
             }
         }
 
@@ -212,6 +228,8 @@ private:
 
         return true;
     }
+
+    // Find Medial ball using KD-Tree
 
     // struct ObstacleData
     // {
@@ -334,7 +352,7 @@ private:
 
     std::pair<geometry_msgs::Point, double> findMedialBallRadius(const geometry_msgs::Point& point)
     {
-        double max_radius = std::min(costmap_->info.width, costmap_->info.height) * costmap_->info.resolution / 2.0;
+        double max_radius = std::min(local_costmap_->info.width, local_costmap_->info.height) * local_costmap_->info.resolution / 2.0;
         double step_size = 0.01;
         double radius = 0.2;
         geometry_msgs::Point center = point;
@@ -402,166 +420,171 @@ private:
 
     bool isObstacleOrUnknown(double x, double y)
     {
-        int mx = static_cast<int>((x - costmap_->info.origin.position.x) / costmap_->info.resolution);
-        int my = static_cast<int>((y - costmap_->info.origin.position.y) / costmap_->info.resolution);
+        int mx = static_cast<int>((x - global_costmap_->info.origin.position.x) / global_costmap_->info.resolution);
+        int my = static_cast<int>((y - global_costmap_->info.origin.position.y) / global_costmap_->info.resolution);
 
-        if (mx < 0 || my < 0 || mx >= static_cast<int>(costmap_->info.width) || my >= static_cast<int>(costmap_->info.height))
+        if (mx < 0 || my < 0 || mx >= static_cast<int>(global_costmap_->info.width) || my >= static_cast<int>(global_costmap_->info.height))
         {
-            return false; // Out of bounds
+            return true; // Out of bounds
         }
 
-        int index = my * costmap_->info.width + mx;
-        return costmap_->data[index] == 100 || costmap_->data[index] == -1; // LETHAL_OBSTACLE or NO_INFORMATION
+        int index = my * global_costmap_->info.width + mx;
+        return global_costmap_->data[index] >= 100 || global_costmap_->data[index] == -1; // LETHAL_OBSTACLE or NO_INFORMATION
     }
 
-    void visualizeSamples(const std::vector<geometry_msgs::Point>& samples)
-    {
-        visualization_msgs::Marker marker;
-        marker.header.frame_id = "map";
-        marker.header.stamp = ros::Time::now();
-        marker.ns = "samples";
-        marker.id = 0;
-        marker.type = visualization_msgs::Marker::POINTS;
-        marker.action = visualization_msgs::Marker::ADD;
+    // void visualizeSamples(const std::vector<geometry_msgs::Point>& samples)
+    // {
+    //     visualization_msgs::Marker marker;
+    //     marker.header.frame_id = "map";
+    //     marker.header.stamp = ros::Time::now();
+    //     marker.ns = "samples";
+    //     marker.id = 0;
+    //     marker.type = visualization_msgs::Marker::POINTS;
+    //     marker.action = visualization_msgs::Marker::ADD;
 
-        marker.scale.x = 0.1;
-        marker.scale.y = 0.1;
-        marker.color.a = 1.0;
-        marker.color.r = 0.0;
-        marker.color.g = 1.0;
-        marker.color.b = 0.0;
+    //     marker.scale.x = 0.1;
+    //     marker.scale.y = 0.1;
+    //     marker.color.a = 1.0;
+    //     marker.color.r = 0.0;
+    //     marker.color.g = 1.0;
+    //     marker.color.b = 0.0;
 
-        for (const auto& sample : samples)
-        {
-            geometry_msgs::Point p;
-            p.x = sample.x;
-            p.y = sample.y;
-            p.z = 0.0;
-            marker.points.push_back(p);
-        }
+    //     for (const auto& sample : samples)
+    //     {
+    //         geometry_msgs::Point p;
+    //         p.x = sample.x;
+    //         p.y = sample.y;
+    //         p.z = 0.0;
+    //         marker.points.push_back(p);
+    //     }
 
-        marker_pub_.publish(marker);
-    }
+    //     marker_pub_.publish(marker);
+    // }
 
-    void visualizeMedialBall(const geometry_msgs::Point& center, double radius)
-    {
-        visualization_msgs::Marker marker;
-        marker.header.frame_id = "map";
-        marker.header.stamp = ros::Time::now();
-        marker.ns = "medial_balls";
-        marker.id = static_cast<int>(center.x * 1000 + center.y * 1000);
-        marker.type = visualization_msgs::Marker::LINE_STRIP;
-        marker.action = visualization_msgs::Marker::ADD;
+    // void visualizeMedialBall(const geometry_msgs::Point& center, double radius)
+    // {
+    //     visualization_msgs::Marker marker;
+    //     marker.header.frame_id = "map";
+    //     marker.header.stamp = ros::Time::now();
+    //     marker.ns = "medial_balls";
+    //     marker.id = static_cast<int>(center.x * 1000 + center.y * 1000);
+    //     marker.type = visualization_msgs::Marker::LINE_STRIP;
+    //     marker.action = visualization_msgs::Marker::ADD;
 
-        marker.scale.x = 0.02;
-        marker.color.a = 1.0;
-        marker.color.r = 1.0;
-        marker.color.g = 0.0;
-        marker.color.b = 0.0;
+    //     marker.scale.x = 0.02;
+    //     marker.color.a = 1.0;
+    //     marker.color.r = 1.0;
+    //     marker.color.g = 0.0;
+    //     marker.color.b = 0.0;
 
-        // Draw the medial ball centered at the new position
-        for (double angle = 0; angle <= 2 * M_PI; angle += M_PI / 36)
-        {
-            geometry_msgs::Point p;
-            p.x = center.x + radius * std::cos(angle);
-            p.y = center.y + radius * std::sin(angle);
-            p.z = 0.0;
-            marker.points.push_back(p);
-        }
+    //     // Draw the medial ball centered at the new position
+    //     for (double angle = 0; angle <= 2 * M_PI; angle += M_PI / 36)
+    //     {
+    //         geometry_msgs::Point p;
+    //         p.x = center.x + radius * std::cos(angle);
+    //         p.y = center.y + radius * std::sin(angle);
+    //         p.z = 0.0;
+    //         marker.points.push_back(p);
+    //     }
 
-        ros::Duration lifetime(1.0);
-        marker.lifetime = lifetime;
+    //     ros::Duration lifetime(1.0);
+    //     marker.lifetime = lifetime;
 
-        marker_pub_.publish(marker);
-    }
+    //     marker_pub_.publish(marker);
+    // }
 
-    void visualizeNarrowSpace(const geometry_msgs::Point& center, double radius)
-    {
-        visualization_msgs::Marker marker;
-        marker.header.frame_id = "map"; // Replace "map" with the appropriate frame if needed
-        marker.header.stamp = ros::Time::now();
-        marker.ns = "narrow_space";
-        marker.id = static_cast<int>(center.x * 1000 + center.y * 1000); // Unique ID for each marker
-        marker.type = visualization_msgs::Marker::CYLINDER; // Use CYLINDER to represent the narrow space
-        marker.action = visualization_msgs::Marker::ADD;
+    // void visualizeNarrowSpace(const geometry_msgs::Point& center, double radius)
+    // {
+    //     visualization_msgs::Marker marker;
+    //     marker.header.frame_id = "map"; // Replace "map" with the appropriate frame if needed
+    //     marker.header.stamp = ros::Time::now();
+    //     marker.ns = "narrow_space";
+    //     marker.id = static_cast<int>(center.x * 1000 + center.y * 1000); // Unique ID for each marker
+    //     marker.type = visualization_msgs::Marker::CYLINDER; // Use CYLINDER to represent the narrow space
+    //     marker.action = visualization_msgs::Marker::ADD;
 
-        // Set the position of the marker
-        marker.pose.position.x = center.x;
-        marker.pose.position.y = center.y;
-        marker.pose.position.z = 0.0; // Adjust the height as needed
-        marker.pose.orientation.x = 0.0;
-        marker.pose.orientation.y = 0.0;
-        marker.pose.orientation.z = 0.0;
-        marker.pose.orientation.w = 1.0;
+    //     // Set the position of the marker
+    //     marker.pose.position.x = center.x;
+    //     marker.pose.position.y = center.y;
+    //     marker.pose.position.z = 0.0; // Adjust the height as needed
+    //     marker.pose.orientation.x = 0.0;
+    //     marker.pose.orientation.y = 0.0;
+    //     marker.pose.orientation.z = 0.0;
+    //     marker.pose.orientation.w = 1.0;
 
-        // Set the scale (diameter = 2 * radius)
-        marker.scale.x = 2 * radius;
-        marker.scale.y = 2 * radius;
-        marker.scale.z = 0.1; // Height of the cylinder (can be adjusted as needed)
+    //     // Set the scale (diameter = 2 * radius)
+    //     marker.scale.x = 2 * radius;
+    //     marker.scale.y = 2 * radius;
+    //     marker.scale.z = 0.1; // Height of the cylinder (can be adjusted as needed)
 
-        // Set the color (e.g., red for narrow spaces)
-        marker.color.a = 0.2; // Transparency
-        marker.color.r = 0.0;
-        marker.color.g = 1.0;
-        marker.color.b = 0.0;
+    //     // Set the color (e.g., red for narrow spaces)
+    //     marker.color.a = 0.2; // Transparency
+    //     marker.color.r = 0.0;
+    //     marker.color.g = 1.0;
+    //     marker.color.b = 0.0;
 
-        // Set lifetime (optional, so it doesn't persist forever)
-        marker.lifetime = ros::Duration(1.0); // Adjust the duration as needed
+    //     // Set lifetime (optional, so it doesn't persist forever)
+    //     marker.lifetime = ros::Duration(1.0); // Adjust the duration as needed
 
-        // Publish the marker
-        marker_pub_.publish(marker);
-    }
+    //     // Publish the marker
+    //     marker_pub_.publish(marker);
+    // }
 };
 
-nav_msgs::OccupancyGrid::ConstPtr latest_costmap_msg;
-nav_msgs::Path::ConstPtr global_plan_msg;
+// nav_msgs::OccupancyGrid::ConstPtr latest_local_costmap_msg;
+// nav_msgs::OccupancyGrid::ConstPtr latest_global_costmap_msg;
+// nav_msgs::Path::ConstPtr global_plan_msg;
 
-void costmapCallback(const nav_msgs::OccupancyGrid::ConstPtr& msg)
-{
-    latest_costmap_msg = msg;
-    ROS_INFO_THROTTLE(5, "Costmap data updated.");
-}
+// void localcostmapCallback(const nav_msgs::OccupancyGrid::ConstPtr& msg)
+// {
+//     latest_local_costmap_msg = msg;
+//     ROS_INFO_THROTTLE(5, "Costmap data updated.");
+// }
+// void globalcostmapCallback(const nav_msgs::OccupancyGrid::ConstPtr& msg)
+// {
+//     latest_global_costmap_msg = msg;
+//     ROS_INFO_THROTTLE(5, "Costmap data updated.");
+// }
 
-void globalPlanCallback(const nav_msgs::Path::ConstPtr& msg)
-{
-    global_plan_msg = msg;
-    ROS_INFO_THROTTLE(5, "Global path updated.");
-}
+// void globalPlanCallback(const nav_msgs::Path::ConstPtr& msg)
+// {
+//     global_plan_msg = msg;
+//     ROS_INFO_THROTTLE(5, "Global path updated.");
+// }
 
-int main(int argc, char** argv)
-{
-    ros::init(argc, argv, "medial_axis_detector");
-    ros::NodeHandle nh;
+// int main(int argc, char** argv)
+// {
+//     ros::init(argc, argv, "medial_axis_detector");
+//     ros::NodeHandle nh;
 
-    double threshold = 0.6;
-    unsigned int num_samples = 5;
+//     ros::Subscriber local_costmap_sub = nh.subscribe<nav_msgs::OccupancyGrid>("/move_base/local_costmap/costmap", 5, localcostmapCallback);
+//     ros::Subscriber gobal_costmap_sub = nh.subscribe<nav_msgs::OccupancyGrid>("/move_base/global_costmap/costmap", 5, globalcostmapCallback);
+//     ros::Subscriber global_plan = nh.subscribe<nav_msgs::Path>("/move_base/TebLocalPlannerROS/global_plan", 5, globalPlanCallback);
+    
+//     ros::Publisher marker_pub = nh.advertise<visualization_msgs::Marker>("visualization_marker", 5);
 
-    ros::Subscriber costmap_sub = nh.subscribe<nav_msgs::OccupancyGrid>("/move_base/local_costmap/costmap", 5, costmapCallback);
-    ros::Subscriber global_plan = nh.subscribe<nav_msgs::Path>("/move_base/TebLocalPlannerROS/global_plan", 5, globalPlanCallback);
-    ros::Publisher marker_pub = nh.advertise<visualization_msgs::Marker>("visualization_marker", 5);
+//     ros::Rate rate(10);
+//     while (ros::ok())
+//     {
+//         if (latest_local_costmap_msg && latest_global_costmap_msg && global_plan_msg)
+//         {
+//             NarrowPassageDetector detector(threshold, latest_local_costmap_msg, latest_global_costmap_msg, num_samples, marker_pub, global_plan_msg);
+//             std::vector<std::pair<geometry_msgs::Point, double>> medial_axis_point = detector.detectNarrowPassages();
 
-    ros::Rate rate(10);
-    while (ros::ok())
-    {
-        if (latest_costmap_msg && global_plan_msg)
-        {
-            NarrowPassageDetector detector(threshold, latest_costmap_msg, num_samples, marker_pub, global_plan_msg);
-            std::vector<std::pair<geometry_msgs::Point, double>> medial_axis_point = detector.detectNarrowPassages();
+//             for (const auto& point : medial_axis_point)
+//             {
+//                 ROS_INFO("Narrow passage detected at (x=%.2f, y=%.2f) with medial radius %.2f",
+//                          point.first.x, point.first.y, point.second);
+//             }
+//         }
+//         else
+//         {
+//             ROS_WARN_THROTTLE(5, "Waiting for costmap and global plan data...");
+//         }
 
-            for (const auto& point : medial_axis_point)
-            {
-                ROS_INFO("Narrow passage detected at (x=%.2f, y=%.2f) with medial radius %.2f",
-                         point.first.x, point.first.y, point.second);
-            }
-        }
-        else
-        {
-            ROS_WARN_THROTTLE(5, "Waiting for costmap and global plan data...");
-        }
+//         ros::spinOnce();
+//         rate.sleep();
+//     }
 
-        ros::spinOnce();
-        rate.sleep();
-    }
-
-    return 0;
-}
+//     return 0;
+// }

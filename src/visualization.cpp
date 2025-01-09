@@ -72,6 +72,8 @@ void TebVisualization::initialize(ros::NodeHandle& nh, const TebConfig& cfg)
   infeasiblefootprintmodel_pub_ = nh.advertise<visualization_msgs::Marker>("infeasiblefootprintmodel_markers", 1000);
   obstacle_pub_ = nh.advertise<visualization_msgs::Marker>("close_obstacle", 1000);
   gap_pub_ = nh.advertise<visualization_msgs::Marker>("gap_marker", 1);
+  via_point_pub_ = nh.advertise<visualization_msgs::Marker>("via_point_marker", 1);
+  marker_pub_ = nh.advertise<visualization_msgs::Marker>("visualization_marker", 5);
 
   initialized_ = true; 
 }
@@ -121,9 +123,105 @@ void TebVisualization::publishLocalPlanAndPoses(const TimedElasticBand& teb) con
     }
     local_plan_pub_.publish(teb_path);
     teb_poses_pub_.publish(teb_poses);
-}
+  }
 
+  void TebVisualization::visualizeSamples(const std::vector<geometry_msgs::Point>& samples)
+  {
+    visualization_msgs::Marker marker;
+    marker.header.frame_id = "map";
+    marker.header.stamp = ros::Time::now();
+    marker.ns = "samples";
+    marker.id = 0;
+    marker.type = visualization_msgs::Marker::POINTS;
+    marker.action = visualization_msgs::Marker::ADD;
 
+    marker.scale.x = 0.1;
+    marker.scale.y = 0.1;
+    marker.color.a = 1.0;
+    marker.color.r = 0.0;
+    marker.color.g = 1.0;
+    marker.color.b = 0.0;
+
+    for (const auto& sample : samples)
+    {
+      geometry_msgs::Point p;
+      p.x = sample.x;
+      p.y = sample.y;
+      p.z = 0.0;
+      marker.points.push_back(p);
+    }
+
+    marker_pub_.publish(marker);
+  }
+
+  void TebVisualization::visualizeMedialBall(const geometry_msgs::Point& center, double radius)
+  {
+    visualization_msgs::Marker marker;
+    marker.header.frame_id = "map";
+    marker.header.stamp = ros::Time::now();
+    marker.ns = "medial_balls";
+    marker.id = static_cast<int>(center.x * 1000 + center.y * 1000);
+    marker.type = visualization_msgs::Marker::LINE_STRIP;
+    marker.action = visualization_msgs::Marker::ADD;
+
+    marker.scale.x = 0.02;
+    marker.color.a = 1.0;
+    marker.color.r = 1.0;
+    marker.color.g = 0.0;
+    marker.color.b = 0.0;
+
+    // Draw the medial ball centered at the new position
+    for (double angle = 0; angle <= 2 * M_PI; angle += M_PI / 36)
+    {
+      geometry_msgs::Point p;
+      p.x = center.x + radius * std::cos(angle);
+      p.y = center.y + radius * std::sin(angle);
+      p.z = 0.0;
+      marker.points.push_back(p);
+    }
+
+    ros::Duration lifetime(1.0);
+    marker.lifetime = lifetime;
+
+    marker_pub_.publish(marker);
+  }
+
+  void TebVisualization::visualizeNarrowSpace(const geometry_msgs::Point& center, double radius)
+  {
+    visualization_msgs::Marker marker;
+    marker.header.frame_id = "map"; // Replace "map" with the appropriate frame if needed
+    marker.header.stamp = ros::Time::now();
+    marker.ns = "narrow_space";
+    marker.id = static_cast<int>(center.x * 1000 + center.y * 1000); // Unique ID for each marker
+    marker.type = visualization_msgs::Marker::CYLINDER; // Use CYLINDER to represent the narrow space
+    marker.action = visualization_msgs::Marker::ADD;
+
+    // Set the position of the marker
+    marker.pose.position.x = center.x;
+    marker.pose.position.y = center.y;
+    marker.pose.position.z = 0.0; // Adjust the height as needed
+    marker.pose.orientation.x = 0.0;
+    marker.pose.orientation.y = 0.0;
+    marker.pose.orientation.z = 0.0;
+    marker.pose.orientation.w = 1.0;
+
+    // Set the scale (diameter = 2 * radius)
+    marker.scale.x = 2 * radius;
+    marker.scale.y = 2 * radius;
+    marker.scale.z = 0.1; // Height of the cylinder (can be adjusted as needed)
+
+    // Set the color (e.g., red for narrow spaces)
+    marker.color.a = 0.2; // Transparency
+    marker.color.r = 0.0;
+    marker.color.g = 1.0;
+    marker.color.b = 0.0;
+
+    // Set lifetime (optional, so it doesn't persist forever)
+    marker.lifetime = ros::Duration(1.0); // Adjust the duration as needed
+
+    // Publish the marker
+    marker_pub_.publish(marker);
+  }
 
 void TebVisualization::publishRobotFootprintModel(const PoseSE2& current_pose, const BaseRobotFootprintModel& robot_model,
                                                   const std::string& ns, const std_msgs::ColorRGBA &color)
@@ -523,6 +621,40 @@ void TebVisualization::publishViaPoints(const std::vector< Eigen::Vector2d, Eige
 
   teb_marker_pub_.publish( marker );
 }
+
+void TebVisualization::publishCustomViaPoints(const std::vector< Eigen::Vector2d, Eigen::aligned_allocator<Eigen::Vector2d> >& via_points, const std::string& ns) const
+{
+  if ( via_points.empty() || printErrorWhenNotInitialized() )
+    return;
+  
+  visualization_msgs::Marker marker;
+  marker.header.frame_id = cfg_->map_frame;
+  marker.header.stamp = ros::Time::now();
+  marker.ns = ns;
+  marker.id = 0;
+  marker.type = visualization_msgs::Marker::POINTS;
+  marker.action = visualization_msgs::Marker::ADD;
+  marker.lifetime = ros::Duration(2.0);
+  
+  for (std::size_t i=0; i < via_points.size(); ++i)
+  {
+    geometry_msgs::Point point;
+    point.x = via_points[i].x();
+    point.y = via_points[i].y();
+    point.z = 0;
+    marker.points.push_back(point);
+  }
+  
+  marker.scale.x = 0.1;
+  marker.scale.y = 0.1;
+  marker.color.a = 1.0;
+  marker.color.r = 0.0;
+  marker.color.g = 0.0;
+  marker.color.b = 1.0;
+
+  via_point_pub_.publish( marker );
+}
+
 
 void TebVisualization::publishTebContainer(const TebOptPlannerContainer& teb_planner, const std::string& ns)
 {

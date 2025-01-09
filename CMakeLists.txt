@@ -196,7 +196,7 @@ add_library(teb_local_planner
    src/homotopy_class_planner.cpp
    src/teb_local_planner_ros.cpp
    src/graph_search.cpp
-   src/sdt_dead_reckoning.cpp
+##   src/NPdetector.cpp
 )
 
 # Dynamic reconfigure: make sure configure headers are built before any node using them
@@ -214,7 +214,7 @@ target_link_libraries(teb_local_planner
 
 add_executable(test_optim_node src/test_optim_node.cpp)
 add_executable(distance_map src/distance_map_deadreck.cpp)
-add_executable(NPdetector src/NPdetector.cpp)
+# add_executable(NPdetector src/NPdetector.cpp)
 
 target_link_libraries(test_optim_node
    teb_local_planner
@@ -223,7 +223,7 @@ target_link_libraries(test_optim_node
 )
 
 target_link_libraries(distance_map ${catkin_LIBRARIES})
-target_link_libraries(NPdetector ${catkin_LIBRARIES})
+# target_link_libraries(NPdetector ${catkin_LIBRARIES})
 
 #############
 ## Install ##
