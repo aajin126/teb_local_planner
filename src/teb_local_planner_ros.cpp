@@ -131,6 +131,7 @@ void TebLocalPlannerROS::initialize(std::string name, tf2_ros::Buffer* tf, costm
     costmap_model_ = boost::make_shared<base_local_planner::CostmapModel>(*costmap_);
 
     global_frame_ = costmap_ros_->getGlobalFrameID();
+
     cfg_.map_frame = global_frame_; // TODO
     robot_base_frame_ = costmap_ros_->getBaseFrameID();
    
@@ -219,6 +220,92 @@ bool TebLocalPlannerROS::setPlan(const std::vector<geometry_msgs::PoseStamped>& 
   
   return true;
 }
+
+
+// bool TebLocalPlannerROS::setPlan(const std::vector<geometry_msgs::PoseStamped>& orig_global_plan)
+// {
+//   static bool manual_plan_set_ = false; // 수동 Plan 설정 여부 플래그
+
+//   // check if plugin is initialized
+//   if (!initialized_)
+//   {
+//     ROS_ERROR("teb_local_planner has not been initialized, please call initialize() before using this planner");
+//     return false;
+//   }
+
+//   if (!manual_plan_set_)
+//   {
+//     // 수동으로 Global Plan 설정
+//     global_plan_.clear();
+//     geometry_msgs::PoseStamped pose;
+
+//     // Example manual plan (사용자가 정의한 Plan)
+//     std::vector<std::pair<double, double>> manual_plan = {
+//     {-0.426784, 4.42194}, {-0.461211, 4.41846}, {-0.48614, 4.41657}, {-0.511011, 4.41404}, 
+//     {-0.535795, 4.41076}, {-0.560446, 4.40659}, {-0.584909, 4.40144}, {-0.60911, 4.39517}, 
+//     {-0.632978, 4.38773}, {-0.65641, 4.37902}, {-0.679485, 4.3694}, {-0.702521, 4.35969}, 
+//     {-0.725526, 4.3499}, {-0.748472, 4.33998}, {-0.771368, 4.32994}, {-0.794212, 4.31978}, 
+//     {-0.817076, 4.30967}, {-0.839912, 4.2995}, {-0.862722, 4.28926}, {-0.885549, 4.27907}, 
+//     {-0.90837, 4.26886}, {-0.931262, 4.25881}, {-0.954282, 4.24906}, {-0.977492, 4.23977}, 
+//     {-1.00091, 4.23103}, {-1.02457, 4.22296}, {-1.04826, 4.21495}, {-1.07193, 4.20693}, 
+//     {-1.09559, 4.19884}, {-1.11923, 4.1907}, {-1.14284, 4.18247}, {-1.16641, 4.17416}, 
+//     {-1.18998, 4.16582}, {-1.21354, 4.15746}, {-1.23709, 4.14907}, {-1.26063, 4.14064}, 
+//     {-1.28415, 4.13216}, {-1.30764, 4.12363}, {-1.33113, 4.11507}, {-1.35461, 4.10648}, 
+//     {-1.3781, 4.09792}, {-1.40155, 4.08924}, {-1.425, 4.08059}, {-1.44845, 4.07193}, 
+//     {-1.47192, 4.06332}, {-1.49545, 4.05485}, {-1.51907, 4.04666}, {-1.54281, 4.03883}, 
+//     {-1.5667, 4.03146}, {-1.59075, 4.02463}, {-1.61483, 4.01791}, {-1.63882, 4.01089}, 
+//     {-1.66268, 4.00342}, {-1.68635, 3.99537}, {-1.70974, 3.98656}, {-1.73278, 3.97684}, 
+//     {-1.75561, 3.96667}, {-1.77847, 3.95654}, {-1.80138, 3.94653}, {-1.82432, 3.9366}, 
+//     {-1.84763, 3.92756}, {-1.86978, 3.91596}, {-1.89234, 3.90519}, {-1.91683, 3.90019}, 
+//     {-1.94171, 3.89772}, {-1.96671, 3.89803}, {-1.9875, 3.89191}, {-2.01249, 3.88999}, 
+//     {-2.03608, 3.88888}, {-2.05962, 3.88777}, {-2.08307, 3.88555}, {-2.10711, 3.88333}, 
+//     {-2.13183, 3.87999}, {-2.15671, 3.87555}, {-2.1817, 3.87302}, {-2.2067, 3.87263}, 
+//     {-2.2317, 3.87275}, {-2.25669, 3.87222}, {-2.28167, 3.87222}, {-2.30657, 3.87222}, 
+//     {-2.32689, 3.87222}, {-2.35123, 3.87222}, {-2.36351, 3.87222}, {-2.37678, 3.87194}, 
+//     {-2.38987, 3.87333}, {-2.40788, 3.87444}, {-2.43001, 3.87555}, {-2.45193, 3.87444}, 
+//     {-2.47358, 3.87333}, {-2.48393, 3.87444}, {-2.50747, 3.8748}, {-2.53208, 3.87918}, 
+//     {-2.55666, 3.88372}, {-2.5811, 3.88902}, {-2.6047, 3.89727}, {-2.62736, 3.90782}, 
+//     {-2.64964, 3.91916}, {-2.67338, 3.92701}, {-2.69682, 3.9357}, {-2.72011, 3.94478}, 
+//     {-2.74326, 3.95422}, {-2.7663, 3.96393}, {-2.78945, 3.97336}, {-2.8124, 3.98327}, 
+//     {-2.83519, 3.99354}, {-2.85785, 4.00411}, {-2.88042, 4.01487}, {-2.90303, 4.02553}, 
+//     {-2.92551, 4.03648}, {-2.94787, 4.04766}, {-2.97014, 4.059}, {-2.99235, 4.0705}, 
+//     {-3.01479, 4.08151}, {-3.03721, 4.09256}, {-3.05952, 4.10385}, {-3.08179, 4.1152}, 
+//     {-3.10503, 4.12442}, {-3.12841, 4.13329}, {-3.15184, 4.14201}, {-3.17532, 4.15057}, 
+//     {-3.19844, 4.16009}, {-3.22125, 4.17033}, {-3.24446, 4.17962}, {-3.26769, 4.18885}, 
+//     {-3.29094, 4.19804}, {-3.3142, 4.20721}, {-3.33745, 4.21639}, {-3.36073, 4.22551}, 
+//     {-3.38405, 4.23452}, {-3.4073, 4.24372}, {-3.4305, 4.25301}, {-3.45364, 4.26248}, 
+//     {-3.47678, 4.27194}, {-3.52678, 4.32194}, {-3.495294, 4.35859}};
+
+//     // Manual Plan 추가
+//     for (const auto& point : manual_plan)
+//     {
+//       pose.header.frame_id = "map"; 
+//       pose.header.stamp = ros::Time::now(); 
+//       pose.pose.position.x = point.first;
+//       pose.pose.position.y = point.second;
+//       pose.pose.position.z = 0.0; // Assume 2D plan
+//       pose.pose.orientation.x = 0.0;
+//       pose.pose.orientation.y = 0.0;
+//       pose.pose.orientation.z = 0.0;
+//       pose.pose.orientation.w = 1.0; // Default orientation
+//       global_plan_.push_back(pose);
+//     }                         
+
+//     ROS_INFO("Manual global plan has been set.");
+
+//     manual_plan_set_ = true; // 플래그 설정
+//   }
+//   else
+//   {
+//     ROS_WARN("Global plan update is ignored since a manual plan has been set.");
+//   }
+
+//   // reset goal_reached_ flag
+//   goal_reached_ = false;
+
+//   return true;
+// }
+
 
 bool TebLocalPlannerROS::computeVelocityCommands(geometry_msgs::Twist& cmd_vel)
 {
@@ -995,7 +1082,7 @@ bool TebLocalPlannerROS::pruneGlobalPlan(const tf2_ros::Buffer& tf, const geomet
   {
     // transform robot pose into the plan frame (we do not wait here, since pruning not crucial, if missed a few times)
     geometry_msgs::TransformStamped global_to_plan_transform = tf.lookupTransform(global_plan.front().header.frame_id, global_pose.header.frame_id, ros::Time(0));
-    geometry_msgs::PoseStamped robot;
+    geometry_msgs::PoseStamped robot; 
     tf2::doTransform(global_pose, robot, global_to_plan_transform);
     
     double dist_thresh_sq = dist_behind_robot*dist_behind_robot;
