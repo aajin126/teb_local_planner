@@ -573,6 +573,8 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
   visualization_->publishObstacles(obstacles_, costmap_->getResolution());
   visualization_->publishCustomViaPoints(via_points_);
   visualization_->publishGlobalPlan(global_plan_);
+  std::cout << "Press Enter to continue..." << std::endl;
+  std::cin.get();
   return mbf_msgs::ExePathResult::SUCCESS;
 }
 
