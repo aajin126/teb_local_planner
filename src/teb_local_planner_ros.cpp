@@ -68,7 +68,7 @@ namespace teb_local_planner
 
 TebLocalPlannerROS::TebLocalPlannerROS() : costmap_ros_(NULL), tf_(NULL), costmap_model_(NULL),
                                            costmap_converter_loader_("costmap_converter", "costmap_converter::BaseCostmapToPolygons"),
-                                           dynamic_recfg_(NULL), custom_via_points_active_(false), goal_reached_(false), no_infeasible_plans_(0),
+                                           dynamic_recfg_(NULL), custom_via_points_active_(true), goal_reached_(false), no_infeasible_plans_(0),
                                            last_preferred_rotdir_(RotType::none), initialized_(false)
 {
 }
@@ -573,8 +573,8 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
   visualization_->publishObstacles(obstacles_, costmap_->getResolution());
   visualization_->publishCustomViaPoints(via_points_);
   visualization_->publishGlobalPlan(global_plan_);
-  std::cout << "Press Enter to continue..." << std::endl;
-  std::cin.get();
+  // std::cout << "Press Enter to continue..." << std::endl;
+  // std::cin.get();
   return mbf_msgs::ExePathResult::SUCCESS;
 }
 
@@ -590,6 +590,7 @@ bool TebLocalPlannerROS::isGoalReached()
   return false;
 }
 
+// Medial Ball Heuristic Algorithm
 std::vector<std::pair<geometry_msgs::Point, double>> TebLocalPlannerROS::detectNarrowPassages(const std::vector<geometry_msgs::PoseStamped>& transformed_plan, const costmap_2d::Costmap2D& costmap)
 {
   std::vector<std::pair<geometry_msgs::Point, double>> medial_axis_point;
@@ -612,6 +613,16 @@ std::vector<std::pair<geometry_msgs::Point, double>> TebLocalPlannerROS::detectN
     }
   }
 
+  double goal_threshold = 0.3;
+
+  geometry_msgs::Point robot_position;
+  robot_position.x = robot_pose_.x();
+  robot_position.y = robot_pose_.y();
+  double yaw = robot_pose_.theta();  // 직접 theta 값을 사용
+  // 로봇의 진행 방향 벡터: (cos(yaw), sin(yaw))
+  double heading_x = cos(yaw);
+  double heading_y = sin(yaw);
+
   // 장애물이 포함된 샘플로 Medial Ball 생성
   for (const auto& point : obstacle_points)
   {
@@ -619,8 +630,22 @@ std::vector<std::pair<geometry_msgs::Point, double>> TebLocalPlannerROS::detectN
     double medial_radius = findMedialBallRadius(point, *costmap_).second;
     geometry_msgs::Point final_center = findMedialBallRadius(point, *costmap_).first;
 
+    // 로봇과 medial point 사이의 벡터 계산
+    double dx = final_center.x - robot_position.x;
+    double dy = final_center.y - robot_position.y;
+    // 진행 방향 벡터와의 내적 계산 (로봇 앞쪽인지 확인)
+    double dot = dx * heading_x + dy * heading_y;
+    // 내적이 음수이면 medial point는 로봇의 뒷쪽에 위치하므로 건너뜁니다.
+
+    if (dot < 0)
+      continue;
+
+    double distance_to_goal = euclideanDistance(final_center, transformed_plan.back().pose.position);
+
+    ROS_INFO("distance to goal : %lf", distance_to_goal);
+
     // threshold 이상인 경우 추가하지 않음
-    if (medial_radius < thre && medial_radius >= 0.25)
+    if (medial_radius < thre && medial_radius >= 0.1 && distance_to_goal > goal_threshold)
     {
       medial_axis_point.emplace_back(final_center, medial_radius);
       visualization_->visualizeMedialBall(final_center, medial_radius);
@@ -653,7 +678,7 @@ std::vector<geometry_msgs::Point> TebLocalPlannerROS::generateSamples(const std:
   // Parameters for the sampling bias
   double rho = 0.8;         // Expansion coefficient
   double lambda = 1.0;      // Decay rate for exponential bias
-  double threshold_distance = 0.5;
+  double threshold_distance = 0.25;
 
   while (samples.size() < num_samples)
   {
