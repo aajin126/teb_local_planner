@@ -68,7 +68,7 @@ namespace teb_local_planner
 
 TebLocalPlannerROS::TebLocalPlannerROS() : costmap_ros_(NULL), tf_(NULL), costmap_model_(NULL),
                                            costmap_converter_loader_("costmap_converter", "costmap_converter::BaseCostmapToPolygons"),
-                                           dynamic_recfg_(NULL), custom_via_points_active_(false), goal_reached_(false), no_infeasible_plans_(0),
+                                           dynamic_recfg_(NULL), custom_via_points_active_(true), goal_reached_(false), no_infeasible_plans_(0),
                                            last_preferred_rotdir_(RotType::none), initialized_(false)
 {
 }
@@ -352,10 +352,10 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
   robot_vel_.linear.y = robot_vel_tf.pose.position.y;
   robot_vel_.angular.z = tf2::getYaw(robot_vel_tf.pose.orientation);
   
-  // prune global plan to cut off parts of the past (spatially before the robot)
+  // 1. prune global plan to cut off parts of the past (spatially before the robot)
   pruneGlobalPlan(*tf_, robot_pose, global_plan_, cfg_.trajectory.global_plan_prune_distance);
 
-  // Transform global plan to the frame of interest (w.r.t. the local costmap)
+  // 2. Transform global plan to the frame of interest (w.r.t. the local costmap)
   std::vector<geometry_msgs::PoseStamped> transformed_plan;
   int goal_idx;
   geometry_msgs::TransformStamped tf_plan_to_global;
@@ -367,7 +367,7 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
     return mbf_msgs::ExePathResult::INTERNAL_ERROR;
   }
 
-  // update via-points container
+  // 3. update via-points container
   if (!custom_via_points_active_)
     updateViaPointsContainer(transformed_plan, cfg_.trajectory.global_plan_viapoint_sep);
   else
@@ -376,7 +376,7 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
   nav_msgs::Odometry base_odom;
   odom_helper_.getOdom(base_odom);
 
-  // check if global goal is reached
+  // 4. check if global goal is reached
   geometry_msgs::PoseStamped global_goal;
   tf2::doTransform(global_plan_.back(), global_goal, tf_plan_to_global);
   double dx = global_goal.pose.position.x - robot_pose_.x();
@@ -459,7 +459,7 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
   ROS_DEBUG("planning based transformed plan");
 
   // bool success = planner_->plan(costmap_model_.get(), footprint_spec_, transformed_plan, robot_inscribed_radius_, robot_circumscribed_radius, &robot_vel_, cfg_.goal_tolerance.free_goal_vel);
-  
+  // local planning (using TEB)
   bool success = planner_->plan(transformed_plan, &robot_vel_, cfg_.goal_tolerance.free_goal_vel);
 
   ROS_DEBUG("Plan result: %s", success ? "successful" : "failed");
@@ -598,9 +598,9 @@ std::vector<std::pair<geometry_msgs::Point, double>> TebLocalPlannerROS::detectN
   std::vector<geometry_msgs::Point> samples = generateSamples(transformed_plan, *costmap_);
   visualization_->visualizeSamples(samples);
 
-  double obst_radius = 0.5;
+  double obst_radius = 0.6;
 
-  std::vector<geometry_msgs::Point> obstacle_points; // Store samples with obstacles
+  std::vector<geometry_msgs::Point> narrow_points; // Store samples with obstacles
 
   for (const auto& sample : samples)
   {
@@ -609,7 +609,7 @@ std::vector<std::pair<geometry_msgs::Point, double>> TebLocalPlannerROS::detectN
     if (obstacles_in_circle)
     {
       visualization_->visualizeNarrowSpace(sample, obst_radius);
-      obstacle_points.push_back(sample);
+      narrow_points.push_back(sample);
     }
   }
 
@@ -624,11 +624,11 @@ std::vector<std::pair<geometry_msgs::Point, double>> TebLocalPlannerROS::detectN
   double heading_y = sin(yaw);
 
   // 장애물이 포함된 샘플로 Medial Ball 생성
-  for (const auto& point : obstacle_points)
+  for (const auto& point : narrow_points)
   {
-    //auto medial_ball = findMedialBallWithCostmapKDTree(point, *costmap_);
-    double medial_radius = findMedialBallRadius(point, *costmap_).second;
-    geometry_msgs::Point final_center = findMedialBallRadius(point, *costmap_).first;
+    auto medial_result = findMedialBallRadius(point, *costmap_);
+    double medial_radius = medial_result.second;
+    geometry_msgs::Point final_center = medial_result.first;
 
     // 로봇과 medial point 사이의 벡터 계산
     double dx = final_center.x - robot_position.x;
@@ -645,7 +645,7 @@ std::vector<std::pair<geometry_msgs::Point, double>> TebLocalPlannerROS::detectN
     ROS_INFO("distance to goal : %lf", distance_to_goal);
 
     // threshold 이상인 경우 추가하지 않음
-    if (medial_radius < thre && medial_radius >= 0.1 && distance_to_goal > goal_threshold)
+    if (medial_radius < thre && medial_radius >= 0.05 && distance_to_goal > goal_threshold)
     {
       medial_axis_point.emplace_back(final_center, medial_radius);
       visualization_->visualizeMedialBall(final_center, medial_radius);
@@ -660,61 +660,97 @@ double TebLocalPlannerROS::euclideanDistance(const geometry_msgs::Point& p1, con
   return std::sqrt(std::pow(p1.x - p2.x, 2) + std::pow(p1.y - p2.y, 2));
 }
 
-std::vector<geometry_msgs::Point> TebLocalPlannerROS::generateSamples(const std::vector<geometry_msgs::PoseStamped>& transformed_plan, const costmap_2d::Costmap2D& costmap)
-{   
-  std::vector<geometry_msgs::Point> samples;
+// 2D 포인트 구조체 (파일 범위에 정의)
+struct Point2D {
+  double x, y;
+};
 
+// nanoflann용 포인트 클라우드 래퍼 (파일 범위에 정의)
+// local class 내에서 template member 함수 선언이 불가능하므로, 여기서 정의합니다.
+struct PointCloud2D {
+  std::vector<Point2D> pts;
+
+  inline size_t kdtree_get_point_count() const { return pts.size(); }
+  inline double kdtree_get_pt(const size_t idx, const size_t dim) const {
+    return (dim == 0) ? pts[idx].x : pts[idx].y;
+  }
+  // nanoflann에선 이 함수가 옵션이므로, 항상 false를 반환하면 됩니다.
+  template <class BBOX>
+  bool kdtree_get_bbox(BBOX& /*bb*/) const { return false; }
+};
+
+// PointCloud2D obstacle_cloud_;
+// typedef nanoflann::KDTreeSingleIndexAdaptor<
+//     nanoflann::L2_Simple_Adaptor<double, PointCloud2D>,
+//     PointCloud2D,
+//     2
+// > KDTree2D;
+// std::unique_ptr<KDTree2D> obstacle_kd_tree_;
+
+std::vector<geometry_msgs::Point> TebLocalPlannerROS::generateSamples(
+    const std::vector<geometry_msgs::PoseStamped>& transformed_plan,
+    const costmap_2d::Costmap2D& costmap)
+{
+  // transformed_plan의 x,y 좌표를 kd-tree용 포인트 클라우드로 변환
+  PointCloud2D cloud;
+  cloud.pts.reserve(transformed_plan.size());
+  for (const auto& pose : transformed_plan)
+    cloud.pts.push_back({ pose.pose.position.x, pose.pose.position.y });
+
+  // nanoflann 2D kd-tree 구축
+  typedef nanoflann::KDTreeSingleIndexAdaptor<
+      nanoflann::L2_Simple_Adaptor<double, PointCloud2D>,
+      PointCloud2D,
+      2 /* dimension */
+  > KDTree2D;
+  KDTree2D kd_tree(2, cloud, nanoflann::KDTreeSingleIndexAdaptorParams(10));
+  kd_tree.buildIndex();
+
+  // Costmap 정보 및 난수 생성기 초기화
+  std::vector<geometry_msgs::Point> samples;
   double origin_x = costmap.getOriginX();
   double origin_y = costmap.getOriginY();
   double resolution = costmap.getResolution();
   unsigned int width = costmap.getSizeInCellsX();
   unsigned int height = costmap.getSizeInCellsY();
-
   std::random_device rd;
   std::mt19937 gen(rd());
   std::uniform_int_distribution<> dis_x(0, width - 1);
   std::uniform_int_distribution<> dis_y(0, height - 1);
 
-  // Parameters for the sampling bias
-  double rho = 0.8;         // Expansion coefficient
-  double lambda = 1.0;      // Decay rate for exponential bias
-  double threshold_distance = 0.25;
+  // 샘플링 파라미터
+  double lambda = 1.0;               // 지수 편향 감쇠 계수
+  double threshold_distance = 0.2;
+  double threshold_distance_sq = threshold_distance * threshold_distance;
 
+  // 원하는 샘플 개수(num_samples)는 클래스 멤버 또는 상수로 정의되어 있다고 가정
   while (samples.size() < num_samples)
   {
     int mx = dis_x(gen);
     int my = dis_y(gen);
 
-    // Local costmap에서 FREE_SPACE 확인
-    if (costmap.getCost(mx, my) == costmap_2d::FREE_SPACE) 
+    // costmap에서 FREE_SPACE 셀만 사용
+    if (costmap.getCost(mx, my) == costmap_2d::FREE_SPACE)
     {
       geometry_msgs::Point sample;
       sample.x = origin_x + mx * resolution;
       sample.y = origin_y + my * resolution;
 
-      // **Check if the sample is within a threshold distance to the global path**
-      bool within_threshold = false;
-      for (const auto& pose : transformed_plan)
-      {
-        double d_v = euclideanDistance(sample, pose.pose.position);
-        if (d_v <= threshold_distance)
-        {
-          within_threshold = true;
-          break;  // No need to check further if already within threshold
-        }
-      }
+      // kd-tree로 sample에 대해 최근접 이웃 검색 (2D)
+      double query_pt[2] = { sample.x, sample.y };
+      size_t nearest_idx;
+      double out_dist_sq;
+      nanoflann::KNNResultSet<double> resultSet(1);
+      resultSet.init(&nearest_idx, &out_dist_sq);
+      kd_tree.findNeighbors(resultSet, query_pt, nanoflann::SearchParameters(10));
 
-      // If sample is within threshold distance from any point in the global path, accept it
-      if (within_threshold)
+      // 글로벌 경로와의 제곱 거리가 임계값 이내이면 채택
+      if (out_dist_sq <= threshold_distance_sq)
       {
-        // Apply exponential bias (optional, if you want to prioritize sampling near the path)
-        double d_G = 0.0;  // You could calculate this distance as needed for bias
+        double d_G = std::sqrt(out_dist_sq);  // 실제 거리 계산
         double sampling_weight = lambda * std::exp(-lambda * d_G);
-
         if (std::uniform_real_distribution<>(0, 1)(gen) < sampling_weight)
-        {
           samples.push_back(sample);
-        }
       }
     }
   }
@@ -748,35 +784,63 @@ double TebLocalPlannerROS::calculateAngle(const geometry_msgs::Point& p1, const 
   return 0.0;
 }
 
+// helper func: 주어진 grid 좌표 (mx, my)가 costmap 범위 내에 있고 장애물(또는 정보 없음)인지 검사.
+// if obstalce  1, or return 0.
+int TebLocalPlannerROS::checkAndCount(int mx, int my)
+{
+  if (mx < 0 || my < 0 || 
+      mx >= static_cast<int>(costmap_->getSizeInCellsX()) || 
+      my >= static_cast<int>(costmap_->getSizeInCellsY()))
+    return 0;
+    
+  unsigned char cost = costmap_->getCost(mx, my);
+  return (cost == costmap_2d::LETHAL_OBSTACLE || cost == costmap_2d::NO_INFORMATION) ? 1 : 0;
+}
+
 bool TebLocalPlannerROS::getObstaclePointsInCircle(const geometry_msgs::Point& center, double radius)
 {
-  std::vector<geometry_msgs::Point> grid_obstacle_points;
-  int min_obstacles = 5; // 최소 장애물 점 개수
+  int min_obstacles = 2;  // narrow하다고 판단하기 위한 최소 장애물 점 개수
 
-  for (double angle = 0; angle < 2 * M_PI; angle += M_PI / 36)
-  {
-    double r_x = center.x + radius * std::cos(angle);
-    double r_y = center.y + radius * std::sin(angle);
+  // 중심 좌표를 costmap의 grid index로 변환
+  unsigned int center_mx, center_my;
+  if (!costmap_->worldToMap(center.x, center.y, center_mx, center_my))
+    return false;  // center가 costmap 범위 밖이면 그냥 false
+  
+  // 반경을 grid 단위(셀 수)로 변환 (해상도로 나누어 정수화)
+  double resolution = costmap_->getResolution();
+  int grid_radius = std::max(1, static_cast<int>(radius / resolution));
 
-    if (isObstacleOrUnknown(r_x, r_y,*costmap_))
-    {
-      geometry_msgs::Point o_point;
-      o_point.x = r_x;
-      o_point.y = r_y;
-      o_point.z = 0.0;
-      grid_obstacle_points.push_back(o_point);
+  int obstacleCount = 0;
+
+  // Bresenham의 원 알고리즘을 사용하여 원 둘레상의 셀을 계산
+  int x = grid_radius;
+  int y = 0;
+  int err = 1 - x;  // 초기 결정 변수
+
+  while (y <= x) {
+    // 원의 8분할 대칭 영역에 해당하는 셀들을 검사
+    obstacleCount += checkAndCount(center_mx + x, center_my + y);
+    obstacleCount += checkAndCount(center_mx + y, center_my + x);
+    obstacleCount += checkAndCount(center_mx - x, center_my + y);
+    obstacleCount += checkAndCount(center_mx - y, center_my + x);
+    obstacleCount += checkAndCount(center_mx - x, center_my - y);
+    obstacleCount += checkAndCount(center_mx - y, center_my - x);
+    obstacleCount += checkAndCount(center_mx + x, center_my - y);
+    obstacleCount += checkAndCount(center_mx + y, center_my - x);
+
+    if (obstacleCount >= min_obstacles)
+      return true;  // 충분한 장애물이 있으면 바로 true 반환
+
+    y++;
+    if (err < 0) {
+      err += 2 * y + 1;
+    } else {
+      x--;
+      err += 2 * (y - x + 1);
     }
   }
 
-  ROS_INFO("Number of obstacle points detected: %lu", grid_obstacle_points.size());
-
-  // 최소 개수 이상의 장애물 점이 있어야 유효한 장애물로 간주
-  if (grid_obstacle_points.size() < min_obstacles)
-  {
-    return false;
-  }
-
-  return true;
+  return (obstacleCount >= min_obstacles);
 }
 
 std::pair<geometry_msgs::Point, double> TebLocalPlannerROS::findMedialBallRadius(const geometry_msgs::Point& point, const costmap_2d::Costmap2D& costmap)
@@ -819,7 +883,7 @@ std::pair<geometry_msgs::Point, double> TebLocalPlannerROS::findMedialBallRadius
         const auto& last_boundary_point = boundary_points.back();
         double angle = calculateAngle(boundary_points.front(), last_boundary_point, center);
 
-        if (angle > M_PI / 2.0)
+        if (angle > 5.0 * M_PI / 6.0)
         {
           return {center, radius}; 
         }
@@ -861,6 +925,110 @@ bool TebLocalPlannerROS::isObstacleOrUnknown(double x, double y, const costmap_2
   // LETHAL_OBSTACLE(>=100) 또는 NO_INFORMATION(-1)일 경우 장애물로 간주
   return cost == costmap_2d::LETHAL_OBSTACLE || cost == costmap_2d::NO_INFORMATION;
 }
+
+
+// void TebLocalPlannerROS::updateObstacleKDTree()
+// {
+//   // costmap 정보 가져오기
+//   unsigned int size_x = costmap_->getSizeInCellsX();
+//   unsigned int size_y = costmap_->getSizeInCellsY();
+//   double origin_x = costmap_->getOriginX();
+//   double origin_y = costmap_->getOriginY();
+//   double resolution = costmap_->getResolution();
+
+//   // 기존 포인트 클라우드를 비우고, costmap 전체 셀을 순회하여 장애물(또는 정보 없음)인 셀의 중심 좌표 추가
+//   obstacle_cloud_.pts.clear();
+//   for (unsigned int i = 0; i < size_x; ++i) {
+//     for (unsigned int j = 0; j < size_y; ++j) {
+//       unsigned char cost = costmap_->getCost(i, j);
+//       if (cost == costmap_2d::LETHAL_OBSTACLE || cost == costmap_2d::NO_INFORMATION) {
+//         double wx = origin_x + (i + 0.5) * resolution;
+//         double wy = origin_y + (j + 0.5) * resolution;
+//         obstacle_cloud_.pts.push_back({ wx, wy });
+//       }
+//     }
+//   }
+
+//   // kd-tree 재구축
+//   obstacle_kd_tree_.reset(new KDTree2D(2, obstacle_cloud_, nanoflann::KDTreeSingleIndexAdaptorParams(10)));
+//   obstacle_kd_tree_->buildIndex();
+//   ROS_INFO("Obstacle kd-tree updated with %lu points", obstacle_cloud_.pts.size());
+// }
+
+// std::pair<geometry_msgs::Point, double> TebLocalPlannerROS::findMedialBallRadius(const geometry_msgs::Point& initial_point)
+// {
+//   // 먼저 최신 장애물 정보를 반영하도록 kd-tree 갱신
+//   updateObstacleKDTree();
+
+//   // Parameters for gradient ascent
+//   const double step_size = 0.01;      // 한 번에 이동할 거리
+//   const int max_iterations = 10;     // 최대 반복 횟수
+//   const double tol = 1e-4;            // 기울기 허용 오차
+//   const double balance_thresh = 0.1;  // 두 장애물 간 거리 차이 허용 비율
+
+//   // 초기 후보 점
+//   geometry_msgs::Point candidate = initial_point;
+
+//   for (int iter = 0; iter < max_iterations; ++iter)
+//   {
+//     // 후보 점에서 가장 가까운 장애물까지의 거리 d0
+//     double query_pt[2] = { candidate.x, candidate.y };
+//     std::vector<size_t> indices(1);
+//     std::vector<double> dists_sq(1);
+//     nanoflann::KNNResultSet<double> knn(1);
+//     knn.init(indices.data(), dists_sq.data());
+//     obstacle_kd_tree_->findNeighbors(knn, query_pt, nanoflann::SearchParameters(10));
+//     double d0 = std::sqrt(dists_sq[0]);
+
+//     // x 방향 미분 근사
+//     geometry_msgs::Point candidate_dx = candidate;
+//     candidate_dx.x += step_size;
+//     double query_dx[2] = { candidate_dx.x, candidate_dx.y };
+//     std::vector<size_t> indices_dx(1);
+//     std::vector<double> dists_sq_dx(1);
+//     nanoflann::KNNResultSet<double> knn_dx(1);
+//     knn_dx.init(indices_dx.data(), dists_sq_dx.data());
+//     obstacle_kd_tree_->findNeighbors(knn_dx, query_dx, nanoflann::SearchParameters(10));
+//     double d_dx = std::sqrt(dists_sq_dx[0]);
+//     double grad_x = (d_dx - d0) / step_size;
+
+//     // y 방향 미분 근사
+//     geometry_msgs::Point candidate_dy = candidate;
+//     candidate_dy.y += step_size;
+//     double query_dy[2] = { candidate_dy.x, candidate_dy.y };
+//     std::vector<size_t> indices_dy(1);
+//     std::vector<double> dists_sq_dy(1);
+//     nanoflann::KNNResultSet<double> knn_dy(1);
+//     knn_dy.init(indices_dy.data(), dists_sq_dy.data());
+//     obstacle_kd_tree_->findNeighbors(knn_dy, query_dy, nanoflann::SearchParameters(10));
+//     double d_dy = std::sqrt(dists_sq_dy[0]);
+//     double grad_y = (d_dy - d0) / step_size;
+
+//     double grad_norm = std::sqrt(grad_x * grad_x + grad_y * grad_y);
+//     if (grad_norm < tol)
+//       break;  // 수렴
+
+//     // 후보 점을 기울기 방향으로 업데이트
+//     candidate.x += step_size * (grad_x / grad_norm);
+//     candidate.y += step_size * (grad_y / grad_norm);
+//   }
+
+//   // 최종 후보 점에서 가장 가까운 두 장애물까지의 거리 측정
+//   double query_pt_final[2] = { candidate.x, candidate.y };
+//   std::vector<size_t> indices_final(2);
+//   std::vector<double> dists_sq_final(2);
+//   nanoflann::KNNResultSet<double> knn_final(2);
+//   knn_final.init(indices_final.data(), dists_sq_final.data());
+//   obstacle_kd_tree_->findNeighbors(knn_final, query_pt_final, nanoflann::SearchParameters(10));
+//   double d1 = std::sqrt(dists_sq_final[0]);
+//   double d2 = std::sqrt(dists_sq_final[1]);
+
+//   // 두 장애물과의 거리가 균형을 이루면 medial point로 판단 (d1과 d2의 차이가 작으면)
+//   if (std::abs(d1 - d2) / d1 < balance_thresh)
+//   {
+//     return { candidate, d1 };  // medial ball의 반지름은 최소 거리
+//   }
+// }
 
 void TebLocalPlannerROS::updateObstacleContainerWithCostmap()
 {  

@@ -80,6 +80,8 @@
 // boost classes
 #include <boost/bind.hpp>
 #include <boost/shared_ptr.hpp>
+#include <nanoflann.hpp>
+#include <mutex>
 
 
 namespace teb_local_planner
@@ -168,8 +170,11 @@ public:
   std::vector<std::pair<geometry_msgs::Point, double>> detectNarrowPassages(const std::vector<geometry_msgs::PoseStamped>& transformed_plan, const costmap_2d::Costmap2D& costmap);
   double euclideanDistance(const geometry_msgs::Point& p1, const geometry_msgs::Point& p2);
   std::vector<geometry_msgs::Point> generateSamples(const std::vector<geometry_msgs::PoseStamped>& transformed_plan, const costmap_2d::Costmap2D& costmap);
+  void updateObstacleKDTree();
   double calculateAngle(const geometry_msgs::Point& p1, const geometry_msgs::Point& p2, const geometry_msgs::Point& center);
+  int checkAndCount(int mx, int my);
   bool getObstaclePointsInCircle(const geometry_msgs::Point& center, double radius);
+  //std::pair<geometry_msgs::Point, double> findMedialBallRadius(const geometry_msgs::Point& point);
   std::pair<geometry_msgs::Point, double> findMedialBallRadius(const geometry_msgs::Point& point, const costmap_2d::Costmap2D& costmap);
   bool isObstacleOrUnknown(double x, double y, const costmap_2d::Costmap2D& costmap);
   
@@ -455,6 +460,7 @@ private:
   std::string global_frame_; //!< The frame in which the controller will run
   std::string robot_base_frame_; //!< Used as the base frame id of the robot
   std::string name_; //!< For use with the ros nodehandle
+  std::mutex obstacle_kd_tree_mutex_;
     
   // flags
   bool initialized_; //!< Keeps track about the correct initialization of this class
