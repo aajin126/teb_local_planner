@@ -211,7 +211,7 @@ void TebVisualization::publishLocalPlanAndPoses(const TimedElasticBand& teb) con
     marker.scale.z = 0.1; // Height of the cylinder (can be adjusted as needed)
 
     // Set the color (e.g., red for narrow spaces)
-    marker.color.a = 0.2; // Transparency
+    marker.color.a = 0.01; // Transparency
     marker.color.r = 0.0;
     marker.color.g = 1.0;
     marker.color.b = 0.0;

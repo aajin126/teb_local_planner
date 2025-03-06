@@ -161,9 +161,9 @@ void TebOptimalPlanner::registerG2OTypes()
   factory->registerType("EDGE_ACCELERATION_HOLONOMIC_GOAL", new g2o::HyperGraphElementCreator<EdgeAccelerationHolonomicGoal>);
   factory->registerType("EDGE_KINEMATICS_DIFF_DRIVE", new g2o::HyperGraphElementCreator<EdgeKinematicsDiffDrive>);
   factory->registerType("EDGE_KINEMATICS_CARLIKE", new g2o::HyperGraphElementCreator<EdgeKinematicsCarlike>);
-  factory->registerType("EDGE_OBSTACLE", new g2o::HyperGraphElementCreator<EdgeObstacle>);
-  factory->registerType("EDGE_INFLATED_OBSTACLE", new g2o::HyperGraphElementCreator<EdgeInflatedObstacle>);
-  factory->registerType("EDGE_DYNAMIC_OBSTACLE", new g2o::HyperGraphElementCreator<EdgeDynamicObstacle>);
+  //factory->registerType("EDGE_OBSTACLE", new g2o::HyperGraphElementCreator<EdgeObstacle>);
+  //factory->registerType("EDGE_INFLATED_OBSTACLEg", new g2o::HyperGraphElementCreator<EdgeInflatedObstacle>);
+  //factory->registerType("EDGE_DYNAMIC_OBSTACLE", new g2o::HyperGraphElementCreator<EdgeDynamicObstacle>);
   factory->registerType("EDGE_VIA_POINT", new g2o::HyperGraphElementCreator<EdgeViaPoint>);
   factory->registerType("EDGE_PREFER_ROTDIR", new g2o::HyperGraphElementCreator<EdgePreferRotDir>);
   return;
@@ -465,9 +465,6 @@ bool TebOptimalPlanner::plan(base_local_planner::CostmapModel* costmap_model, co
                 {
                     ROS_INFO("Footprint position x : %f, y : %f", intermediate_poses[i].x(), intermediate_poses[i].y());
                 }
-            
-                //std::cout << "Press Enter to continue..." << std::endl;
-                //std::cin.get();
 
                 ROS_INFO("optimizeTEB with intermediate pose"); 
 
@@ -480,9 +477,6 @@ bool TebOptimalPlanner::plan(base_local_planner::CostmapModel* costmap_model, co
                                                                         footprint_spec, inscribed_radius, circumscribed_radius);
                   ROS_INFO("Pose cost : %lf", pose_cost);
                 }
-
-                //std::cout << "Press Enter to continue..." << std::endl;
-                //std::cin.get();
             }
           }
       }
@@ -635,16 +629,16 @@ bool TebOptimalPlanner::buildGraph(double weight_multiplier)
   }  
   
   // add Edges (local cost functions)
-   if (cfg_->obstacles.legacy_obstacle_association)
-     AddEdgesObstaclesLegacy(weight_multiplier);
-   else
-   {
-     AddEdgesObstacles(weight_multiplier);
-     ROS_DEBUG("SUCCESSFULLY ADD EDGES OBSTACLES");
-   }
+  //  if (cfg_->obstacles.legacy_obstacle_association)
+  //    AddEdgesObstaclesLegacy(weight_multiplier);
+  //  else
+  //  {
+  //    AddEdgesObstacles(weight_multiplier);
+  //    ROS_DEBUG("SUCCESSFULLY ADD EDGES OBSTACLES");
+  //  }
   
-   if (cfg_->obstacles.include_dynamic_obstacles)
-     AddEdgesDynamicObstacles();
+  //  if (cfg_->obstacles.include_dynamic_obstacles)
+  //    AddEdgesDynamicObstacles();
   
   AddEdgesViaPoints();
   

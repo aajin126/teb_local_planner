@@ -169,7 +169,8 @@ public:
 
   std::vector<std::pair<geometry_msgs::Point, double>> detectNarrowPassages(const std::vector<geometry_msgs::PoseStamped>& transformed_plan, const costmap_2d::Costmap2D& costmap);
   double euclideanDistance(const geometry_msgs::Point& p1, const geometry_msgs::Point& p2);
-  std::vector<geometry_msgs::Point> generateSamples(const std::vector<geometry_msgs::PoseStamped>& transformed_plan, const costmap_2d::Costmap2D& costmap);
+  std::vector<geometry_msgs::Point> generateSamples(const std::vector<geometry_msgs::PoseStamped>& transformed_plan, const costmap_2d::Costmap2D& costmap, bool exist_viapoint, double coverage_radius);
+  //std::vector<geometry_msgs::Point> generateSamples(const std::vector<geometry_msgs::PoseStamped>& transformed_plan, const costmap_2d::Costmap2D& costmap);
   void updateObstacleKDTree();
   double calculateAngle(const geometry_msgs::Point& p1, const geometry_msgs::Point& p2, const geometry_msgs::Point& center);
   int checkAndCount(int mx, int my);
@@ -177,6 +178,8 @@ public:
   //std::pair<geometry_msgs::Point, double> findMedialBallRadius(const geometry_msgs::Point& point);
   std::pair<geometry_msgs::Point, double> findMedialBallRadius(const geometry_msgs::Point& point, const costmap_2d::Costmap2D& costmap);
   bool isObstacleOrUnknown(double x, double y, const costmap_2d::Costmap2D& costmap);
+  bool isObstacleAtPoint(double x, double y, double search_radius);
+  std::vector<std::pair<geometry_msgs::Point, double>> PruneViaPoints(const std::vector<std::pair<geometry_msgs::Point, double>>& via_points, const geometry_msgs::Point& new_start);
   
   /**
     * @brief Dummy version to satisfy MBF API
@@ -460,7 +463,12 @@ private:
   std::string global_frame_; //!< The frame in which the controller will run
   std::string robot_base_frame_; //!< Used as the base frame id of the robot
   std::string name_; //!< For use with the ros nodehandle
-  std::mutex obstacle_kd_tree_mutex_;
+  std::vector<std::pair<geometry_msgs::Point, double>> prev_via_points_;
+  geometry_msgs::Point last_goal_;
+  double goal_tolerance_ = 0.1;
+  bool exist_viapoint = false;
+  double coverage_radius = 0.0;
+
     
   // flags
   bool initialized_; //!< Keeps track about the correct initialization of this class
