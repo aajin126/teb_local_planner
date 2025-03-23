@@ -988,6 +988,7 @@ bool TebLocalPlannerROS::isObstacleAtPoint(double x, double y, double search_rad
 }
 
 //grid base search
+
 std::pair<geometry_msgs::Point, double> TebLocalPlannerROS::findMedialBallRadius(
   const geometry_msgs::Point& point, const costmap_2d::Costmap2D& costmap)
 {
