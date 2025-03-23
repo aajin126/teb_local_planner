@@ -56,6 +56,7 @@
 #include <teb_local_planner/recovery_behaviors.h>
 #include <teb_local_planner/NPdetector.h>
 
+
 // message types
 #include <nav_msgs/Path.h>
 #include <nav_msgs/Odometry.h>
@@ -167,19 +168,41 @@ public:
     */
   bool isGoalReached();
 
+  // std::vector<std::pair<geometry_msgs::Point, double>> detectNarrowPassages(const std::vector<geometry_msgs::PoseStamped>& transformed_plan, const costmap_2d::Costmap2D& costmap);
+  // double euclideanDistance(const geometry_msgs::Point& p1, const geometry_msgs::Point& p2);
+  // std::vector<geometry_msgs::Point> generateSamples(const std::vector<geometry_msgs::PoseStamped>& transformed_plan, const costmap_2d::Costmap2D& costmap, bool exist_viapoint, double coverage_radius, KDTree2D& global_kd_tree);
+  // void updateObstacleKDTree();
+  // double calculateAngle(const geometry_msgs::Point& p1, const geometry_msgs::Point& p2, const geometry_msgs::Point& center);
+  // int checkAndCount(int mx, int my);
+  // bool getObstaclePointsInCircle(const geometry_msgs::Point& center, double radius);
+  // std::pair<geometry_msgs::Point, double> findMedialBallRadius(const geometry_msgs::Point& point, const costmap_2d::Costmap2D& costmap);
+  // bool isObstacleOrUnknown(double x, double y, const costmap_2d::Costmap2D& costmap);
+  // bool isObstacleAtPoint(double x, double y, double search_radius);
+  // std::vector<std::pair<geometry_msgs::Point, double>> PruneViaPoints(const std::vector<std::tuple<geometry_msgs::Point, size_t>>& via_points, const geometry_msgs::Point& current_robot_pos);
+  
   std::vector<std::pair<geometry_msgs::Point, double>> detectNarrowPassages(const std::vector<geometry_msgs::PoseStamped>& transformed_plan, const costmap_2d::Costmap2D& costmap);
-  double euclideanDistance(const geometry_msgs::Point& p1, const geometry_msgs::Point& p2);
-  std::vector<geometry_msgs::Point> generateSamples(const std::vector<geometry_msgs::PoseStamped>& transformed_plan, const costmap_2d::Costmap2D& costmap, bool exist_viapoint, double coverage_radius);
-  //std::vector<geometry_msgs::Point> generateSamples(const std::vector<geometry_msgs::PoseStamped>& transformed_plan, const costmap_2d::Costmap2D& costmap);
-  void updateObstacleKDTree();
   double calculateAngle(const geometry_msgs::Point& p1, const geometry_msgs::Point& p2, const geometry_msgs::Point& center);
   int checkAndCount(int mx, int my);
   bool getObstaclePointsInCircle(const geometry_msgs::Point& center, double radius);
-  //std::pair<geometry_msgs::Point, double> findMedialBallRadius(const geometry_msgs::Point& point);
-  std::pair<geometry_msgs::Point, double> findMedialBallRadius(const geometry_msgs::Point& point, const costmap_2d::Costmap2D& costmap);
-  bool isObstacleOrUnknown(double x, double y, const costmap_2d::Costmap2D& costmap);
+  double euclideanDistance(const geometry_msgs::Point& p1, const geometry_msgs::Point& p2);
+  std::vector<geometry_msgs::Point> generateSamples(const std::vector<geometry_msgs::PoseStamped>& transformed_plan,const costmap_2d::Costmap2D& costmap);
+  void updateObstacleKDTree();
   bool isObstacleAtPoint(double x, double y, double search_radius);
-  std::vector<std::pair<geometry_msgs::Point, double>> PruneViaPoints(const std::vector<std::pair<geometry_msgs::Point, double>>& via_points, const geometry_msgs::Point& new_start);
+  std::pair<geometry_msgs::Point, double> findMedialBallRadius(const geometry_msgs::Point& point, const costmap_2d::Costmap2D& costmap);
+  geometry_msgs::Point performMedialAxisClimb(const geometry_msgs::Point& start_point, const costmap_2d::Costmap2D& costmap, const std::vector<float>& distance_field, double resolution, double origin_x, double origin_y);
+  
+  // std::vector<std::tuple<geometry_msgs::Point, double>> detectNarrowPassages(const std::vector<geometry_msgs::PoseStamped>& transformed_plan, const costmap_2d::Costmap2D& costmap);
+  // void updateGlobalKDTree(const std::vector<geometry_msgs::PoseStamped>& transformed_plan);
+  // double calculateAngle(const geometry_msgs::Point& p1, const geometry_msgs::Point& p2, const geometry_msgs::Point& center);
+  // int checkAndCount(int mx, int my);
+  // //bool isObstacleAtPoint(double x, double y, double search_radius);
+  // double euclideanDistance(const geometry_msgs::Point& p1, const geometry_msgs::Point& p2);
+  // bool sampleRejection(const geometry_msgs::Point& center, double radius);
+  // std::vector<geometry_msgs::Point> generateSamples(const std::vector<geometry_msgs::PoseStamped>& transformed_plan, std::vector<std::tuple<geometry_msgs::Point, double>> medial_points, const costmap_2d::Costmap2D& costmap, bool exist_viapoint);
+  // //void updateObstacleKDTree();
+  // std::vector<std::tuple<geometry_msgs::Point, double>> PruneViaPoints(const std::vector<geometry_msgs::PoseStamped>& transformed_plan, std::vector<std::tuple<geometry_msgs::Point, double>>& via_points, const PoseSE2& current_robot_pos);
+  // bool isObstacleOrUnknown(double x, double y, const costmap_2d::Costmap2D& costmap);
+  // std::tuple<geometry_msgs::Point, double> findMedialBallRadius(const geometry_msgs::Point& point, const costmap_2d::Costmap2D& costmap);
   
   /**
     * @brief Dummy version to satisfy MBF API
@@ -417,7 +440,11 @@ private:
 
   // Create an instance of NarrowPassageDetector
   double thre = 0.6;  // 임계값 설정
-  unsigned int num_samples = 10;  // 샘플 개수 설정
+  unsigned int num_samples = 20;  // 샘플 개수 설정
+
+  // Create an instance of sampleRejection
+  const int rejection_num_samples = 10;
+  const double weight_threshold = 3.0;
   
   tf2_ros::Buffer* tf_; //!< pointer to tf buffer
     
@@ -463,13 +490,16 @@ private:
   std::string global_frame_; //!< The frame in which the controller will run
   std::string robot_base_frame_; //!< Used as the base frame id of the robot
   std::string name_; //!< For use with the ros nodehandle
-  std::vector<std::pair<geometry_msgs::Point, double>> prev_via_points_;
+
+  std::vector<std::tuple<geometry_msgs::Point, double>> last_via_points_;
+  std::vector<std::tuple<geometry_msgs::Point, double>> medial_points;
+  std::vector<geometry_msgs::PoseStamped> last_plan_;
   geometry_msgs::Point last_goal_;
   double goal_tolerance_ = 0.1;
   bool exist_viapoint = false;
-  double coverage_radius = 0.0;
+  double obst_radius = 0.6;
+  
 
-    
   // flags
   bool initialized_; //!< Keeps track about the correct initialization of this class
 

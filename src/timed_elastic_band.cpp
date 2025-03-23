@@ -234,12 +234,6 @@ void TimedElasticBand::autoResize(double dt_ref, double dt_hysteresis, int min_s
   for (int rep = 0; rep < 100 && modified; ++rep) // actually it should be while(), but we want to make sure to not get stuck in some oscillation, hence max 100 repitions.
   {
     modified = false;
-    ROS_INFO("sizeTimeDiffs : %d", sizeTimeDiffs());
-    for(int i = 0; i < sizeTimeDiffs(); i++)
-    {
-      ROS_INFO("size time diff %d : %f" , i, TimeDiff(i));
-    }
-
     for(int i=0; i < sizeTimeDiffs(); ++i) // TimeDiff connects Point(i) with Point(i+1)
     {
       if(TimeDiff(i) > dt_ref + dt_hysteresis && sizeTimeDiffs()<max_samples)

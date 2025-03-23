@@ -136,7 +136,8 @@ public:
    * @param ns Namespace for the marker objects
    * @param color Color of the footprint
    */
-  
+
+  void publishGridSearchPath(const std::vector<geometry_msgs::Point>& grid_search_path);
   void visualizeSamples(const std::vector<geometry_msgs::Point>& samples);
   void visualizeMedialBall(const geometry_msgs::Point& center, double radius);
   void visualizeNarrowSpace(const geometry_msgs::Point& center, double radius);
@@ -289,6 +290,7 @@ protected:
   ros::Publisher gap_pub_;
   ros::Publisher via_point_pub_;
   ros::Publisher marker_pub_; 
+  ros::Publisher grid_path_pub_;
   
   const TebConfig* cfg_; //!< Config class that stores and manages all related parameters
   

@@ -249,7 +249,7 @@ bool TebOptimalPlanner::optimizeTEB(int iterations_innerloop, int iterations_out
     {
       ROS_INFO("iteration outerloop: %f", iterations_outerloop - 1);
       computeCurrentCost(obst_cost_scale, viapoint_cost_scale, alternative_time_cost);
-      computeEdgeCost(obst_cost_scale, viapoint_cost_scale, alternative_time_cost);
+      //computeEdgeCost(obst_cost_scale, viapoint_cost_scale, alternative_time_cost);
     }
 
     clearGraph();
@@ -629,16 +629,16 @@ bool TebOptimalPlanner::buildGraph(double weight_multiplier)
   }  
   
   // add Edges (local cost functions)
-  //  if (cfg_->obstacles.legacy_obstacle_association)
-  //    AddEdgesObstaclesLegacy(weight_multiplier);
-  //  else
-  //  {
-  //    AddEdgesObstacles(weight_multiplier);
-  //    ROS_DEBUG("SUCCESSFULLY ADD EDGES OBSTACLES");
-  //  }
+   if (cfg_->obstacles.legacy_obstacle_association)
+     AddEdgesObstaclesLegacy(weight_multiplier);
+   else
+   {
+     AddEdgesObstacles(weight_multiplier);
+     ROS_DEBUG("SUCCESSFULLY ADD EDGES OBSTACLES");
+   }
   
-  //  if (cfg_->obstacles.include_dynamic_obstacles)
-  //    AddEdgesDynamicObstacles();
+   if (cfg_->obstacles.include_dynamic_obstacles)
+     AddEdgesDynamicObstacles();
   
   AddEdgesViaPoints();
   
@@ -789,10 +789,6 @@ void TebOptimalPlanner::AddEdgesObstacles(double weight_multiplier)
   std::stringstream ss_info_inflated;
   ss_info_inflated << information_inflated;
 
-  // Print the matrices using ROS_DEBUG
-  ROS_DEBUG("Information Matrix:\n%s", ss_info.str().c_str());
-  ROS_DEBUG("Information Inflated Matrix:\n%s", ss_info_inflated.str().c_str());
-
 
   auto iter_obstacle = obstacles_per_vertex_.begin();
 
@@ -819,7 +815,6 @@ void TebOptimalPlanner::AddEdgesObstacles(double weight_multiplier)
   const int first_vertex = cfg_->optim.weight_velocity_obstacle_ratio == 0 ? 1 : 0;
   for (int i = first_vertex; i < teb_.sizePoses() - 1; ++i)
   {  
-      ROS_INFO("vertex : %d", i);
       double left_min_dist = std::numeric_limits<double>::max();
       double right_min_dist = std::numeric_limits<double>::max();
       ObstaclePtr left_obstacle;
@@ -871,12 +866,10 @@ void TebOptimalPlanner::AddEdgesObstacles(double weight_multiplier)
       if (left_obstacle)
       {
         iter_obstacle->push_back(left_obstacle);
-        ROS_INFO("left_min_dist : %lf", left_min_dist);
       }
       if (right_obstacle)
       {
         iter_obstacle->push_back(right_obstacle);
-        ROS_INFO("right_min_dist : %lf", right_min_dist);
       }
 
       // continue here to ignore obstacles for the first pose, but use them later to create the EdgeVelocityObstacleRatio edges
@@ -1033,7 +1026,7 @@ void TebOptimalPlanner::AddEdgesViaPoints()
   for (ViaPointContainer::const_iterator vp_it = via_points_->begin(); vp_it != via_points_->end(); ++vp_it)
   {
     int index = teb_.findClosestTrajectoryPose(*vp_it, NULL, start_pose_idx);
-    ROS_INFO("index : %d", index);
+    //ROS_INFO("index : %d", index);
     if (cfg_->trajectory.via_points_ordered)
       start_pose_idx = index+2; // skip a point to have a DOF inbetween for further via-points
      
@@ -1413,6 +1406,27 @@ void TebOptimalPlanner::computeCurrentCost(double obst_cost_scale, double viapoi
     // TEST we use SumOfAllTimeDiffs() here, because edge cost depends on number of samples, which is not always the same for similar TEBs,
     // since we are using an AutoResize Function with hysteresis.
   }
+
+  for (std::vector<g2o::OptimizableGraph::Edge*>::const_iterator it = optimizer_->activeEdges().begin(); it!= optimizer_->activeEdges().end(); it++)
+  {
+    double cur_cost = (*it)->chi2();
+
+    if (dynamic_cast<EdgeObstacle*>(*it) != nullptr
+        || dynamic_cast<EdgeInflatedObstacle*>(*it) != nullptr
+        || dynamic_cast<EdgeDynamicObstacle*>(*it) != nullptr)
+    {
+      cur_cost *= obst_cost_scale;
+    }
+    else if (dynamic_cast<EdgeViaPoint*>(*it) != nullptr)
+    {
+      cur_cost *= viapoint_cost_scale;
+    }
+    else if (dynamic_cast<EdgeTimeOptimal*>(*it) != nullptr && alternative_time_cost)
+    {
+      continue; // skip these edges if alternative_time_cost is active
+    }
+    cost_ += cur_cost;
+  }
   /*  
   // now we need pointers to all edges -> calculate error for each edge-type
   // since we aren't storing edge pointers, we need to check every edge
@@ -1476,66 +1490,66 @@ void TebOptimalPlanner::computeCurrentCost(double obst_cost_scale, double viapoi
     clearGraph();
 }
 
-void TebOptimalPlanner::computeEdgeCost(double obst_cost_scale, double viapoint_cost_scale, bool alternative_time_cost){
+// void TebOptimalPlanner::computeEdgeCost(double obst_cost_scale, double viapoint_cost_scale, bool alternative_time_cost){
 
-  std::ofstream outfile;
-  outfile.open("/home/glab/txt/edgecost(11).txt", std::ios_base::app);
+//   // std::ofstream outfile;
+//   // outfile.open("/home/glab/txt/edgecost(11).txt", std::ios_base::app);
 
-  int num = teb_.sizePoses();
-  outfile << "TEB number: " << num << std::endl;
+//   // int num = teb_.sizePoses();
+//   // outfile << "TEB number: " << num << std::endl;
 
-  // 엣지 비용 출력
-  for (const auto& edge : optimizer_->activeEdges()) {
-    double edge_cost = edge->chi2(); // 현재 엣지의 비용 계산
-    auto* edge_obstacle = dynamic_cast<EdgeInflatedObstacle*>(edge);
-    auto* edge_velocity = dynamic_cast<EdgeVelocity*>(edge);
-    auto* edge_acceleration = dynamic_cast<EdgeAcceleration*>(edge);
-    auto* edge_timeoptimal = dynamic_cast<EdgeTimeOptimal*>(edge);
-    auto* edge_kinematicsdiffdrive = dynamic_cast<EdgeKinematicsDiffDrive*>(edge);
+//   // 엣지 비용 출력
+//   for (const auto& edge : optimizer_->activeEdges()) {
+//     double edge_cost = edge->chi2(); // 현재 엣지의 비용 계산
+//     auto* edge_obstacle = dynamic_cast<EdgeInflatedObstacle*>(edge);
+//     auto* edge_velocity = dynamic_cast<EdgeVelocity*>(edge);
+//     auto* edge_acceleration = dynamic_cast<EdgeAcceleration*>(edge);
+//     auto* edge_timeoptimal = dynamic_cast<EdgeTimeOptimal*>(edge);
+//     auto* edge_kinematicsdiffdrive = dynamic_cast<EdgeKinematicsDiffDrive*>(edge);
 
-    // 각 엣지 유형에 따라 로그 출력 및 파일에 기록
-    /*
-    if (edge_obstacle) {
-      ROS_INFO("Obstacle Edge cost: %f", edge_cost * obst_cost_scale);
-      outfile << "Obstacle Edge cost: " << edge_cost * obst_cost_scale << std::endl;
-    } else if (edge_velocity) {
-      ROS_INFO("Velocity Edge cost: %f", edge_cost);
-      outfile << "Velocity Edge cost: " << edge_cost << std::endl;
-    } else if (edge_acceleration) {
-      ROS_INFO("Acceleration Edge cost: %f", edge_cost);
-      outfile << "Acceleration Edge cost: " << edge_cost << std::endl;
-    } else if (edge_timeoptimal) {
-      ROS_INFO("Time Optimal Edge cost: %f", edge_cost);
-      outfile << "Time Optimal Edge cost: " << edge_cost << std::endl;
-    } else if (edge_kinematicsdiffdrive) {
-      ROS_INFO("KinematicsDiffDrive Edge cost: %f", edge_cost);
-      outfile << "KinematicsDiffDrive Edge cost: " << edge_cost << std::endl;
-    }
-      */
-  }
+//     // 각 엣지 유형에 따라 로그 출력 및 파일에 기록
 
-  outfile << std::endl << std::endl; // 두 칸 띄우기
+//     if (edge_obstacle) {
+//       ROS_INFO("Obstacle Edge cost: %f", edge_cost * obst_cost_scale);
+//       outfile << "Obstacle Edge cost: " << edge_cost * obst_cost_scale << std::endl;
+//     } else if (edge_velocity) {
+//       ROS_INFO("Velocity Edge cost: %f", edge_cost);
+//       outfile << "Velocity Edge cost: " << edge_cost << std::endl;
+//     } else if (edge_acceleration) {
+//       ROS_INFO("Acceleration Edge cost: %f", edge_cost);
+//       outfile << "Acceleration Edge cost: " << edge_cost << std::endl;
+//     } else if (edge_timeoptimal) {
+//       ROS_INFO("Time Optimal Edge cost: %f", edge_cost);
+//       outfile << "Time Optimal Edge cost: " << edge_cost << std::endl;
+//     } else if (edge_kinematicsdiffdrive) {
+//       ROS_INFO("KinematicsDiffDrive Edge cost: %f", edge_cost);
+//       outfile << "KinematicsDiffDrive Edge cost: " << edge_cost << std::endl;
+//     }
 
-  // 파일 닫기
-  outfile.close();
-}
+//   }
 
-double TebOptimalPlanner::computeCostForPose(double obst_cost_scale, double viapoint_cost_scale, bool alternative_time_cost, const PoseSE2& pose) {
-  /*
-    double cost = 0.0;
+//   outfile << std::endl << std::endl; // 두 칸 띄우기
 
-    // 장애물 비용
-    double obstacle_cost = computeObstacleCost(pose.position());
-    cost += obstacle_cost * cfg_->optim.obst_cost_scale;  // 스케일링 적용
+//   // 파일 닫기
+//   outfile.close();
+// }
+
+// double TebOptimalPlanner::computeCostForPose(double obst_cost_scale, double viapoint_cost_scale, bool alternative_time_cost, const PoseSE2& pose) {
+
+//     double cost = 0.0;
+
+//     // 장애물 비용
+//     double obstacle_cost = computeObstacleCost(pose.position());
+//     cost += obstacle_cost * cfg_->optim.obst_cost_scale;  // 스케일링 적용
 
 
-    // 경유지점 비용
-    double viapoint_cost = computeViaPointCost(pose.position());
-    cost += viapoint_cost * cfg_->optim.viapoint_cost_scale;  // 스케일링 적용
+//     // 경유지점 비용
+//     double viapoint_cost = computeViaPointCost(pose.position());
+//     cost += viapoint_cost * cfg_->optim.viapoint_cost_scale;  // 스케일링 적용
 
-    return cost;
-   */
-}
+//     return cost;
+
+// }
 
 
 void TebOptimalPlanner::extractVelocity(const PoseSE2& pose1, const PoseSE2& pose2, double dt, double& vx, double& vy, double& omega) const

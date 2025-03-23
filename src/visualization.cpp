@@ -74,6 +74,7 @@ void TebVisualization::initialize(ros::NodeHandle& nh, const TebConfig& cfg)
   gap_pub_ = nh.advertise<visualization_msgs::Marker>("gap_marker", 1);
   via_point_pub_ = nh.advertise<visualization_msgs::Marker>("via_point_marker", 1);
   marker_pub_ = nh.advertise<visualization_msgs::Marker>("visualization_marker", 5);
+  grid_path_pub_ = nh.advertise<visualization_msgs::Marker>("grid_path_marker", 10);
 
   initialized_ = true; 
 }
@@ -123,6 +124,36 @@ void TebVisualization::publishLocalPlanAndPoses(const TimedElasticBand& teb) con
     }
     local_plan_pub_.publish(teb_path);
     teb_poses_pub_.publish(teb_poses);
+  }
+
+  void TebVisualization::publishGridSearchPath(const std::vector<geometry_msgs::Point>& path)
+  {
+    // grid search 경로를 나타내는 LINE_STRIP Marker
+    visualization_msgs::Marker grid_path_marker;
+    grid_path_marker.header.frame_id = "map";  // 사용 좌표계에 맞게 수정
+    grid_path_marker.header.stamp = ros::Time::now();
+    grid_path_marker.ns = "grid_search_path";
+    grid_path_marker.id = 0;
+    grid_path_marker.type = visualization_msgs::Marker::LINE_STRIP;
+    grid_path_marker.action = visualization_msgs::Marker::ADD;
+
+    grid_path_marker.scale.x = 0.02;  // 경로 선 두께 (미터 단위)
+    grid_path_marker.color.r = 0.0;
+    grid_path_marker.color.g = 0.0;
+    grid_path_marker.color.b = 1.0;
+    grid_path_marker.color.a = 1.0;
+
+    for (const auto& p : path)
+    {
+        geometry_msgs::Point pt;
+        pt.x = p.x;
+        pt.y = p.y;
+        pt.z = 0.05;  // 살짝 띄워서 RViz에서 뚜렷하게 보이게
+        grid_path_marker.points.push_back(pt);
+    }
+
+
+    grid_path_pub_.publish(grid_path_marker);
   }
 
   void TebVisualization::visualizeSamples(const std::vector<geometry_msgs::Point>& samples)
