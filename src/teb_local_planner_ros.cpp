@@ -1018,133 +1018,152 @@ std::pair<geometry_msgs::Point, double> TebLocalPlannerROS::findMedialBallRadius
     return { medial_center, radius };
 }
 
-geometry_msgs::Point TebLocalPlannerROS::performMedialAxisClimb(
-  const geometry_msgs::Point& start_point,
-  const costmap_2d::Costmap2D& costmap,
-  const std::vector<float>& distance_field,
-  double resolution, double origin_x, double origin_y)
-{
-    unsigned int map_width = costmap.getSizeInCellsX();
-    unsigned int map_height = costmap.getSizeInCellsY();
+//1step grid caching
 
-    // 초기 위치
-    int cur_x = static_cast<int>((start_point.x - origin_x) / resolution);
-    int cur_y = static_cast<int>((start_point.y - origin_y) / resolution);
-    float cur_dist = distance_field[cur_y * map_width + cur_x];
 
-    std::vector<geometry_msgs::Point> grid_search_path;
-    int max_fast_iter = 20;
-    int fast_iter = 0;
+// // Medial axis hill climbing with grid-based initialization and sliding ROI reuse
+// geometry_msgs::Point TebLocalPlannerROS::performMedialAxisClimb(
+//   const geometry_msgs::Point& start_point,
+//   const costmap_2d::Costmap2D& costmap,
+//   const std::vector<float>& distance_field,
+//   double resolution, double origin_x, double origin_y)
+// {
+//     const unsigned int map_width = costmap.getSizeInCellsX();
+//     const unsigned int map_height = costmap.getSizeInCellsY();
 
-    // STEP 1: step=2 hill climbing
-    int step = 2;
-    while (fast_iter < max_fast_iter)
-    {
-        bool moved = false;
-        float best_dist = cur_dist;
-        int best_x = cur_x;
-        int best_y = cur_y;
+//     // Initial position
+//     int start_x = static_cast<int>((start_point.x - origin_x) / resolution);
+//     int start_y = static_cast<int>((start_point.y - origin_y) / resolution);
+//     int cur_x = start_x;
+//     int cur_y = start_y;
+//     int cur_idx = cur_x + cur_y * map_width;
+//     float cur_dist = distance_field[cur_idx];
 
-        for (int dy = -step; dy <= step; dy += step)
-        {
-            for (int dx = -step; dx <= step; dx += step)
-            {
-                if (dx == 0 && dy == 0) continue;
+//     std::vector<geometry_msgs::Point> grid_search_path;
 
-                int nx = cur_x + dx;
-                int ny = cur_y + dy;
+//     // Step 1: Initial grid-based direction detection
+//     int dx_dir = 0, dy_dir = 0;
+//     {
+//         float best_dist = cur_dist;
+//         for (int dy = -1; dy <= 1; ++dy) {
+//             for (int dx = -1; dx <= 1; ++dx) {
+//                 if (dx == 0 && dy == 0) continue;
+//                 int nx = cur_x + dx;
+//                 int ny = cur_y + dy;
+//                 if (nx < 0 || ny < 0 || nx >= static_cast<int>(map_width) || ny >= static_cast<int>(map_height))
+//                     continue;
+//                 float n_dist = distance_field[nx + ny * map_width];
+//                 if (n_dist > best_dist) {
+//                     best_dist = n_dist;
+//                     dx_dir = dx;
+//                     dy_dir = dy;
+//                 }
+//             }
+//         }
+//         if (dx_dir == 0 && dy_dir == 0) {
+//             geometry_msgs::Point medial_center;
+//             medial_center.x = origin_x + (cur_x + 0.5) * resolution;
+//             medial_center.y = origin_y + (cur_y + 0.5) * resolution;
+//             medial_center.z = 0.0;
+//             return medial_center;
+//         }
+//     }
 
-                if (nx < 0 || ny < 0 || nx >= static_cast<int>(map_width) || ny >= static_cast<int>(map_height))
-                    continue;
+//     const int roi_size = 4;
+//     int roi_origin_x = -1, roi_origin_y = -1;
+//     std::vector<std::deque<float>> roi_cache(roi_size, std::deque<float>(roi_size, -1.0f));
 
-                float n_dist = distance_field[ny * map_width + nx];
+//     const int max_iterations = 100;
+//     int iteration = 0;
 
-                if (n_dist > best_dist)
-                {
-                    best_dist = n_dist;
-                    best_x = nx;
-                    best_y = ny;
-                    moved = true;
-                }
-            }
-        }
+//     while (iteration < max_iterations)
+//     {
+//         // Step 2: Determine ROI origin based on direction and align properly
+//         int roi_start_x = cur_x;
+//         int roi_start_y = cur_y;
 
-        if (!moved || std::abs(best_dist - cur_dist) < 1e-3)
-            break;
+//         if ((dx_dir == 0 && std::abs(dy_dir) == 1)) // up/down
+//             roi_start_x = cur_x - roi_size / 2;
+//         else if ((dy_dir == 0 && std::abs(dx_dir) == 1)) // left/right
+//             roi_start_y = cur_y - roi_size / 2;
+//         else { // diagonal → corner
+//             roi_start_x = cur_x - dx_dir * (roi_size - 1);
+//             roi_start_y = cur_y - dy_dir * (roi_size - 1);
+//         }
 
-        // 기록용 (시각화)
-        geometry_msgs::Point p;
-        p.x = origin_x + (cur_x + 0.5) * resolution;
-        p.y = origin_y + (cur_y + 0.5) * resolution;
-        p.z = 0.0;
-        grid_search_path.push_back(p);
+//         // Step 3: Update ROI cache only if ROI origin changed
+//         if (roi_origin_x != roi_start_x || roi_origin_y != roi_start_y)
+//         {
+//             for (int dy = 0; dy < roi_size; ++dy) {
+//                 int ny = roi_start_y + dy;
+//                 for (int dx = 0; dx < roi_size; ++dx) {
+//                     int nx = roi_start_x + dx;
+//                     float val = -1.0f;
+//                     if (nx >= 0 && ny >= 0 && nx < static_cast<int>(map_width) && ny < static_cast<int>(map_height))
+//                         val = distance_field[nx + ny * map_width];
+//                     roi_cache[dy][dx] = val;
+//                 }
+//             }
+//             roi_origin_x = roi_start_x;
+//             roi_origin_y = roi_start_y;
+//         }
 
-        cur_x = best_x;
-        cur_y = best_y;
-        cur_dist = best_dist;
-        fast_iter++;
-    }
+//         // Step 4: Find max inside ROI
+//         int best_x = cur_x, best_y = cur_y;
+//         float best_dist = cur_dist;
 
-    // STEP 2: 1-step 주변 대칭성 (balance) 확인 및 보정 이동
-    auto compute_symmetry_score = [&](int x, int y) -> float {
-        float center = distance_field[y * map_width + x];
-        float score = 0.0;
-        int count = 0;
+//         for (int dy = 0; dy < roi_size; ++dy) {
+//             for (int dx = 0; dx < roi_size; ++dx) {
+//                 float n_dist = roi_cache[dy][dx];
+//                 if (n_dist < 0.0f) continue;
+//                 int nx = roi_start_x + dx;
+//                 int ny = roi_start_y + dy;
 
-        for (int dy = -1; dy <= 1; ++dy) {
-            for (int dx = -1; dx <= 1; ++dx) {
-                if (dx == 0 && dy == 0) continue;
+//                 if (n_dist > best_dist) {
+//                     best_dist = n_dist;
+//                     best_x = nx;
+//                     best_y = ny;
+//                 }
+//             }
+//         }
 
-                int nx = x + dx;
-                int ny = y + dy;
-                if (nx < 0 || ny < 0 || nx >= static_cast<int>(map_width) || ny >= static_cast<int>(map_height))
-                    continue;
+//         // Step 5: Check if local maxima (best point is inside ROI, not on border)
+//         bool on_border = (best_x == roi_start_x || best_x == roi_start_x + roi_size - 1 ||
+//                           best_y == roi_start_y || best_y == roi_start_y + roi_size - 1);
 
-                float neighbor = distance_field[ny * map_width + nx];
-                float delta = std::abs(center - neighbor);
-                score += std::exp(-delta);  // delta 작을수록 score 높음
-                count++;
-            }
-        }
-        return (count > 0) ? score / count : 0.0;
-    };
+//         if (!on_border) break;  // Local maximum found
 
-    float best_symmetry = compute_symmetry_score(cur_x, cur_y);
-    int best_sym_x = cur_x;
-    int best_sym_y = cur_y;
+//         // Step 6: Move to best and update direction
+//         dx_dir = best_x - cur_x;
+//         dy_dir = best_y - cur_y;
+//         if (dx_dir != 0) dx_dir /= std::abs(dx_dir);
+//         if (dy_dir != 0) dy_dir /= std::abs(dy_dir);
 
-    for (int dy = -1; dy <= 1; ++dy) {
-        for (int dx = -1; dx <= 1; ++dx) {
-            if (dx == 0 && dy == 0) continue;
+//         cur_x = best_x;
+//         cur_y = best_y;
+//         cur_idx = cur_x + cur_y * map_width;
+//         cur_dist = distance_field[cur_idx];
 
-            int nx = cur_x + dx;
-            int ny = cur_y + dy;
+//         geometry_msgs::Point p;
+//         p.x = origin_x + (cur_x + 0.5) * resolution;
+//         p.y = origin_y + (cur_y + 0.5) * resolution;
+//         p.z = 0.0;
+//         grid_search_path.push_back(p);
 
-            if (nx < 0 || ny < 0 || nx >= static_cast<int>(map_width) || ny >= static_cast<int>(map_height))
-                continue;
+//         iteration++;
+//     }
 
-            float sym_score = compute_symmetry_score(nx, ny);
-            if (sym_score > best_symmetry) {
-                best_symmetry = sym_score;
-                best_sym_x = nx;
-                best_sym_y = ny;
-            }
-        }
-    }
+//     geometry_msgs::Point medial_center;
+//     medial_center.x = origin_x + (cur_x + 0.5) * resolution;
+//     medial_center.y = origin_y + (cur_y + 0.5) * resolution;
+//     medial_center.z = 0.0;
 
-    // 최종 위치로 설정 (보정된 symmetry 최적 위치)
-    cur_x = best_sym_x;
-    cur_y = best_sym_y;
+//     visualization_->publishGridSearchPath(grid_search_path);
+//     return medial_center;
+// }
 
-    geometry_msgs::Point medial_center;
-    medial_center.x = origin_x + (cur_x + 0.5) * resolution;
-    medial_center.y = origin_y + (cur_y + 0.5) * resolution;
-    medial_center.z = 0.0;
 
-    visualization_->publishGridSearchPath(grid_search_path);
-    return medial_center;
-}
-
+// //2step grid
 // geometry_msgs::Point TebLocalPlannerROS::performMedialAxisClimb(
 //   const geometry_msgs::Point& start_point,
 //   const costmap_2d::Costmap2D& costmap,
@@ -1157,38 +1176,37 @@ geometry_msgs::Point TebLocalPlannerROS::performMedialAxisClimb(
 //     // 초기 위치
 //     int cur_x = static_cast<int>((start_point.x - origin_x) / resolution);
 //     int cur_y = static_cast<int>((start_point.y - origin_y) / resolution);
-//     int cur_idx = cur_x + cur_y * map_width;
-//     float cur_dist = distance_field[cur_idx];
-
-//     bool moved = true;
-//     int max_iterations = 100;
-//     int iteration = 0;
+//     float cur_dist = distance_field[cur_y * map_width + cur_x];
 
 //     std::vector<geometry_msgs::Point> grid_search_path;
-//     // sample point를 medial axis 방향으로 옮기기 위한 hill-climbing 알고리즘
-//     while (moved && iteration < max_iterations)
+//     int max_fast_iter = 20;
+//     int fast_iter = 0;
+
+//     // STEP 1: step=2 hill climbing
+//     int step = 2;
+//     while (fast_iter < max_fast_iter)
 //     {
-//         moved = false;
+//         bool moved = false;
 //         float best_dist = cur_dist;
 //         int best_x = cur_x;
 //         int best_y = cur_y;
 
-//         // 8방향 중 가장 distance 값이 큰 방향으로 이동
-//         for (int dy = -1; dy <= 1; dy++) {
-//             for (int dx = -1; dx <= 1; dx++) {
+//         for (int dy = -step; dy <= step; dy += step)
+//         {
+//             for (int dx = -step; dx <= step; dx += step)
+//             {
 //                 if (dx == 0 && dy == 0) continue;
 
 //                 int nx = cur_x + dx;
 //                 int ny = cur_y + dy;
-//                 // 탐색 위치가 costmap 범위 내에 있는지 확인
+
 //                 if (nx < 0 || ny < 0 || nx >= static_cast<int>(map_width) || ny >= static_cast<int>(map_height))
 //                     continue;
 
-//                 int n_idx = nx + ny * map_width;
-//                 float n_dist = distance_field[n_idx];
+//                 float n_dist = distance_field[ny * map_width + nx];
 
-//                 // Move to the cell with a greater distance.
-//                 if (n_dist > best_dist) {
+//                 if (n_dist > best_dist)
+//                 {
 //                     best_dist = n_dist;
 //                     best_x = nx;
 //                     best_y = ny;
@@ -1197,37 +1215,166 @@ geometry_msgs::Point TebLocalPlannerROS::performMedialAxisClimb(
 //             }
 //         }
 
-//         // 더 먼 셀이 없다면 종료 (local maximum)
-//         if (!moved)
+//         if (!moved || std::abs(best_dist - cur_dist) < 1e-3)
 //             break;
 
-//         // for visualization
+//         // 기록용 (시각화)
 //         geometry_msgs::Point p;
 //         p.x = origin_x + (cur_x + 0.5) * resolution;
 //         p.y = origin_y + (cur_y + 0.5) * resolution;
 //         p.z = 0.0;
 //         grid_search_path.push_back(p);
 
-
-//         // 이동
 //         cur_x = best_x;
 //         cur_y = best_y;
-//         cur_idx = cur_x + cur_y * map_width;
-//         cur_dist = distance_field[cur_idx];
-
-//         iteration++;
+//         cur_dist = best_dist;
+//         fast_iter++;
 //     }
 
-//     // 최종 위치를 좌표로 변환
+//     // STEP 2: 1-step 주변 대칭성 (balance) 확인 및 보정 이동
+//     auto compute_symmetry_score = [&](int x, int y) -> float {
+//         float center = distance_field[y * map_width + x];
+//         float score = 0.0;
+//         int count = 0;
+
+//         for (int dy = -1; dy <= 1; ++dy) {
+//             for (int dx = -1; dx <= 1; ++dx) {
+//                 if (dx == 0 && dy == 0) continue;
+
+//                 int nx = x + dx;
+//                 int ny = y + dy;
+//                 if (nx < 0 || ny < 0 || nx >= static_cast<int>(map_width) || ny >= static_cast<int>(map_height))
+//                     continue;
+
+//                 float neighbor = distance_field[ny * map_width + nx];
+//                 float delta = std::abs(center - neighbor);
+//                 score += std::exp(-delta);  // delta 작을수록 score 높음
+//                 count++;
+//             }
+//         }
+//         return (count > 0) ? score / count : 0.0;
+//     };
+
+//     float best_symmetry = compute_symmetry_score(cur_x, cur_y);
+//     int best_sym_x = cur_x;
+//     int best_sym_y = cur_y;
+
+//     for (int dy = -1; dy <= 1; ++dy) {
+//         for (int dx = -1; dx <= 1; ++dx) {
+//             if (dx == 0 && dy == 0) continue;
+
+//             int nx = cur_x + dx;
+//             int ny = cur_y + dy;
+
+//             if (nx < 0 || ny < 0 || nx >= static_cast<int>(map_width) || ny >= static_cast<int>(map_height))
+//                 continue;
+
+//             float sym_score = compute_symmetry_score(nx, ny);
+//             if (sym_score > best_symmetry) {
+//                 best_symmetry = sym_score;
+//                 best_sym_x = nx;
+//                 best_sym_y = ny;
+//             }
+//         }
+//     }
+
+//     // 최종 위치로 설정 (보정된 symmetry 최적 위치)
+//     cur_x = best_sym_x;
+//     cur_y = best_sym_y;
+
 //     geometry_msgs::Point medial_center;
 //     medial_center.x = origin_x + (cur_x + 0.5) * resolution;
 //     medial_center.y = origin_y + (cur_y + 0.5) * resolution;
 //     medial_center.z = 0.0;
 
 //     visualization_->publishGridSearchPath(grid_search_path);
-    
 //     return medial_center;
 // }
+
+//1 step grid 
+geometry_msgs::Point TebLocalPlannerROS::performMedialAxisClimb(
+  const geometry_msgs::Point& start_point,
+  const costmap_2d::Costmap2D& costmap,
+  const std::vector<float>& distance_field,
+  double resolution, double origin_x, double origin_y)
+{
+    unsigned int map_width = costmap.getSizeInCellsX();
+    unsigned int map_height = costmap.getSizeInCellsY();
+
+    // 초기 위치
+    int cur_x = static_cast<int>((start_point.x - origin_x) / resolution);
+    int cur_y = static_cast<int>((start_point.y - origin_y) / resolution);
+    int cur_idx = cur_x + cur_y * map_width;
+    float cur_dist = distance_field[cur_idx];
+
+    bool moved = true;
+    int max_iterations = 100;
+    int iteration = 0;
+
+    std::vector<geometry_msgs::Point> grid_search_path;
+    // sample point를 medial axis 방향으로 옮기기 위한 hill-climbing 알고리즘
+    while (moved && iteration < max_iterations)
+    {
+        moved = false;
+        float best_dist = cur_dist;
+        int best_x = cur_x;
+        int best_y = cur_y;
+
+        // 8방향 중 가장 distance 값이 큰 방향으로 이동
+        for (int dy = -1; dy <= 1; dy++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                if (dx == 0 && dy == 0) continue;
+
+                int nx = cur_x + dx;
+                int ny = cur_y + dy;
+                // 탐색 위치가 costmap 범위 내에 있는지 확인
+                if (nx < 0 || ny < 0 || nx >= static_cast<int>(map_width) || ny >= static_cast<int>(map_height))
+                    continue;
+
+                int n_idx = nx + ny * map_width;
+                float n_dist = distance_field[n_idx];
+
+                // Move to the cell with a greater distance.
+                if (n_dist > best_dist) {
+                    best_dist = n_dist;
+                    best_x = nx;
+                    best_y = ny;
+                    moved = true;
+                }
+            }
+        }
+
+        // 더 먼 셀이 없다면 종료 (local maximum)
+        if (!moved)
+            break;
+
+        // for visualization
+        geometry_msgs::Point p;
+        p.x = origin_x + (cur_x + 0.5) * resolution;
+        p.y = origin_y + (cur_y + 0.5) * resolution;
+        p.z = 0.0;
+        grid_search_path.push_back(p);
+
+
+        // 이동
+        cur_x = best_x;
+        cur_y = best_y;
+        cur_idx = cur_x + cur_y * map_width;
+        cur_dist = distance_field[cur_idx];
+
+        iteration++;
+    }
+
+    // 최종 위치를 좌표로 변환
+    geometry_msgs::Point medial_center;
+    medial_center.x = origin_x + (cur_x + 0.5) * resolution;
+    medial_center.y = origin_y + (cur_y + 0.5) * resolution;
+    medial_center.z = 0.0;
+
+    visualization_->publishGridSearchPath(grid_search_path);
+    
+    return medial_center;
+}
 
 void TebLocalPlannerROS::updateCustomViaPointsContainer(const std::vector<geometry_msgs::PoseStamped>& transformed_plan, const costmap_2d::Costmap2D& costmap)
 {
