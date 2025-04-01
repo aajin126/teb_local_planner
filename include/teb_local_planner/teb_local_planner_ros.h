@@ -440,7 +440,7 @@ private:
 
   // Create an instance of NarrowPassageDetector
   double thre = 0.7;  // 임계값 설정
-  unsigned int num_samples = 20;  // 샘플 개수 설정
+  unsigned int num_samples =6;  // 샘플 개수 설정
 
   // Create an instance of sampleRejection
   const int rejection_num_samples = 10;

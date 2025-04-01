@@ -1018,151 +1018,6 @@ std::pair<geometry_msgs::Point, double> TebLocalPlannerROS::findMedialBallRadius
     return { medial_center, radius };
 }
 
-//1step grid caching
-
-
-// // Medial axis hill climbing with grid-based initialization and sliding ROI reuse
-// geometry_msgs::Point TebLocalPlannerROS::performMedialAxisClimb(
-//   const geometry_msgs::Point& start_point,
-//   const costmap_2d::Costmap2D& costmap,
-//   const std::vector<float>& distance_field,
-//   double resolution, double origin_x, double origin_y)
-// {
-//     const unsigned int map_width = costmap.getSizeInCellsX();
-//     const unsigned int map_height = costmap.getSizeInCellsY();
-
-//     // Initial position
-//     int start_x = static_cast<int>((start_point.x - origin_x) / resolution);
-//     int start_y = static_cast<int>((start_point.y - origin_y) / resolution);
-//     int cur_x = start_x;
-//     int cur_y = start_y;
-//     int cur_idx = cur_x + cur_y * map_width;
-//     float cur_dist = distance_field[cur_idx];
-
-//     std::vector<geometry_msgs::Point> grid_search_path;
-
-//     // Step 1: Initial grid-based direction detection
-//     int dx_dir = 0, dy_dir = 0;
-//     {
-//         float best_dist = cur_dist;
-//         for (int dy = -1; dy <= 1; ++dy) {
-//             for (int dx = -1; dx <= 1; ++dx) {
-//                 if (dx == 0 && dy == 0) continue;
-//                 int nx = cur_x + dx;
-//                 int ny = cur_y + dy;
-//                 if (nx < 0 || ny < 0 || nx >= static_cast<int>(map_width) || ny >= static_cast<int>(map_height))
-//                     continue;
-//                 float n_dist = distance_field[nx + ny * map_width];
-//                 if (n_dist > best_dist) {
-//                     best_dist = n_dist;
-//                     dx_dir = dx;
-//                     dy_dir = dy;
-//                 }
-//             }
-//         }
-//         if (dx_dir == 0 && dy_dir == 0) {
-//             geometry_msgs::Point medial_center;
-//             medial_center.x = origin_x + (cur_x + 0.5) * resolution;
-//             medial_center.y = origin_y + (cur_y + 0.5) * resolution;
-//             medial_center.z = 0.0;
-//             return medial_center;
-//         }
-//     }
-
-//     const int roi_size = 4;
-//     int roi_origin_x = -1, roi_origin_y = -1;
-//     std::vector<std::deque<float>> roi_cache(roi_size, std::deque<float>(roi_size, -1.0f));
-
-//     const int max_iterations = 100;
-//     int iteration = 0;
-
-//     while (iteration < max_iterations)
-//     {
-//         // Step 2: Determine ROI origin based on direction and align properly
-//         int roi_start_x = cur_x;
-//         int roi_start_y = cur_y;
-
-//         if ((dx_dir == 0 && std::abs(dy_dir) == 1)) // up/down
-//             roi_start_x = cur_x - roi_size / 2;
-//         else if ((dy_dir == 0 && std::abs(dx_dir) == 1)) // left/right
-//             roi_start_y = cur_y - roi_size / 2;
-//         else { // diagonal → corner
-//             roi_start_x = cur_x - dx_dir * (roi_size - 1);
-//             roi_start_y = cur_y - dy_dir * (roi_size - 1);
-//         }
-
-//         // Step 3: Update ROI cache only if ROI origin changed
-//         if (roi_origin_x != roi_start_x || roi_origin_y != roi_start_y)
-//         {
-//             for (int dy = 0; dy < roi_size; ++dy) {
-//                 int ny = roi_start_y + dy;
-//                 for (int dx = 0; dx < roi_size; ++dx) {
-//                     int nx = roi_start_x + dx;
-//                     float val = -1.0f;
-//                     if (nx >= 0 && ny >= 0 && nx < static_cast<int>(map_width) && ny < static_cast<int>(map_height))
-//                         val = distance_field[nx + ny * map_width];
-//                     roi_cache[dy][dx] = val;
-//                 }
-//             }
-//             roi_origin_x = roi_start_x;
-//             roi_origin_y = roi_start_y;
-//         }
-
-//         // Step 4: Find max inside ROI
-//         int best_x = cur_x, best_y = cur_y;
-//         float best_dist = cur_dist;
-
-//         for (int dy = 0; dy < roi_size; ++dy) {
-//             for (int dx = 0; dx < roi_size; ++dx) {
-//                 float n_dist = roi_cache[dy][dx];
-//                 if (n_dist < 0.0f) continue;
-//                 int nx = roi_start_x + dx;
-//                 int ny = roi_start_y + dy;
-
-//                 if (n_dist > best_dist) {
-//                     best_dist = n_dist;
-//                     best_x = nx;
-//                     best_y = ny;
-//                 }
-//             }
-//         }
-
-//         // Step 5: Check if local maxima (best point is inside ROI, not on border)
-//         bool on_border = (best_x == roi_start_x || best_x == roi_start_x + roi_size - 1 ||
-//                           best_y == roi_start_y || best_y == roi_start_y + roi_size - 1);
-
-//         if (!on_border) break;  // Local maximum found
-
-//         // Step 6: Move to best and update direction
-//         dx_dir = best_x - cur_x;
-//         dy_dir = best_y - cur_y;
-//         if (dx_dir != 0) dx_dir /= std::abs(dx_dir);
-//         if (dy_dir != 0) dy_dir /= std::abs(dy_dir);
-
-//         cur_x = best_x;
-//         cur_y = best_y;
-//         cur_idx = cur_x + cur_y * map_width;
-//         cur_dist = distance_field[cur_idx];
-
-//         geometry_msgs::Point p;
-//         p.x = origin_x + (cur_x + 0.5) * resolution;
-//         p.y = origin_y + (cur_y + 0.5) * resolution;
-//         p.z = 0.0;
-//         grid_search_path.push_back(p);
-
-//         iteration++;
-//     }
-
-//     geometry_msgs::Point medial_center;
-//     medial_center.x = origin_x + (cur_x + 0.5) * resolution;
-//     medial_center.y = origin_y + (cur_y + 0.5) * resolution;
-//     medial_center.z = 0.0;
-
-//     visualization_->publishGridSearchPath(grid_search_path);
-//     return medial_center;
-// }
-
-
 // //2step grid
 // geometry_msgs::Point TebLocalPlannerROS::performMedialAxisClimb(
 //   const geometry_msgs::Point& start_point,
@@ -1348,12 +1203,12 @@ geometry_msgs::Point TebLocalPlannerROS::performMedialAxisClimb(
         if (!moved)
             break;
 
-        // for visualization
-        geometry_msgs::Point p;
-        p.x = origin_x + (cur_x + 0.5) * resolution;
-        p.y = origin_y + (cur_y + 0.5) * resolution;
-        p.z = 0.0;
-        grid_search_path.push_back(p);
+        // // for visualization
+        // geometry_msgs::Point p;
+        // p.x = origin_x + (cur_x + 0.5) * resolution;
+        // p.y = origin_y + (cur_y + 0.5) * resolution;
+        // p.z = 0.0;
+        // grid_search_path.push_back(p);
 
 
         // 이동
@@ -1371,10 +1226,11 @@ geometry_msgs::Point TebLocalPlannerROS::performMedialAxisClimb(
     medial_center.y = origin_y + (cur_y + 0.5) * resolution;
     medial_center.z = 0.0;
 
-    visualization_->publishGridSearchPath(grid_search_path);
+    //visualization_->publishGridSearchPath(grid_search_path);
     
     return medial_center;
 }
+
 
 void TebLocalPlannerROS::updateCustomViaPointsContainer(const std::vector<geometry_msgs::PoseStamped>& transformed_plan, const costmap_2d::Costmap2D& costmap)
 {
