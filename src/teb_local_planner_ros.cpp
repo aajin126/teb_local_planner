@@ -359,7 +359,6 @@ bool TebLocalPlannerROS::computeVelocityCommands(geometry_msgs::Twist& cmd_vel)
   std::ofstream outFile("/home/glab/execution_time.txt", std::ios::app); // 파일을 append 모드로 열기
   if (outFile.is_open()) {
       outFile << "Execution time: " << duration << " ms" << std::endl;
-      outFile.close();
   } else {
       std::cerr << "Failed to open file for writing." << std::endl;
   }
@@ -523,7 +522,6 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
   std::ofstream outFile("/home/glab/execution_time.txt", std::ios::app);   
   if (outFile.is_open()) {
       outFile << "Optimization time: " << duration0 << " ms" << std::endl;
-      outFile.close();
   } else {
       std::cerr << "Failed to open file for writing." << std::endl;
   }
@@ -694,30 +692,31 @@ std::vector<std::pair<geometry_msgs::Point, double>> TebLocalPlannerROS::detectN
 {
   std::vector<std::pair<geometry_msgs::Point, double>> medial_axis_point;
 
-  auto start1 = std::chrono::high_resolution_clock::now();
+  //auto start1 = std::chrono::high_resolution_clock::now();
 
   std::vector<geometry_msgs::Point> samples = generateSamples(transformed_plan, *costmap_);
   // 시간 측정 종료
-  auto end1 = std::chrono::high_resolution_clock::now();
+  //auto end1 = std::chrono::high_resolution_clock::now();
 
   // 경과 시간 계산 (마이크로초 단위)
-  auto duration1 = std::chrono::duration<double, std::milli>(end1 - start1).count();
+  //auto duration1 = std::chrono::duration<double, std::milli>(end1 - start1).count();
     
-  std::ofstream outFile("/home/glab/execution_time.txt", std::ios::app); 
-  if (outFile.is_open()) {
-      outFile << "Generate Samples Execution time: " << duration1 << " ms" << std::endl;
-      outFile.close();
-  } else {
-      std::cerr << "Failed to open file for writing." << std::endl;
-  }
+  //std::ofstream outFile("/home/glab/execution_time.txt", std::ios::app); 
+  //if (outFile.is_open()) {
+      //outFile << "Generate Samples Execution time: " << duration1 << " ms" << std::endl;
+  //} else {
+      //std::cerr << "Failed to open file for writing." << std::endl;
+  //}
     
   // 콘솔 출력
-  std::cout << "Generate Samples Execution time: " << duration1 << " ms" << std::endl;
+  //std::cout << "Generate Samples Execution time: " << duration1 << " ms" << std::endl;
   visualization_->visualizeSamples(samples);
 
   double obst_radius = 0.6;
 
   std::vector<geometry_msgs::Point> narrow_points; // Store samples with obstacles
+
+  //auto start7 = std::chrono::high_resolution_clock::now();
 
   for (const auto& sample : samples)
   {
@@ -725,10 +724,21 @@ std::vector<std::pair<geometry_msgs::Point, double>> TebLocalPlannerROS::detectN
 
     if (obstacles_in_circle)
     {
-      visualization_->visualizeNarrowSpace(sample, obst_radius);
+      //visualization_->visualizeNarrowSpace(sample, obst_radius);
       narrow_points.push_back(sample);
     }
   }
+  // 시간 측정 종료
+  //auto end7 = std::chrono::high_resolution_clock::now();
+
+  // 경과 시간 계산 (마이크로초 단위)
+  //auto duration7 = std::chrono::duration<double, std::milli>(end7 - start7).count();
+    
+  // if (outFile.is_open()) {
+  //     outFile << "Obstacle Point check time: " << duration7 << " ms" << std::endl;
+  // } else {
+  //     std::cerr << "Failed to open file for writing." << std::endl;
+  // }
 
   double goal_threshold = 0.3;
 
@@ -740,34 +750,39 @@ std::vector<std::pair<geometry_msgs::Point, double>> TebLocalPlannerROS::detectN
   double heading_x = cos(yaw);
   double heading_y = sin(yaw);
 
+  // 1. costmap info
+  unsigned int map_width = costmap.getSizeInCellsX();
+  unsigned int map_height = costmap.getSizeInCellsY();
+  const unsigned char* costmap_data = costmap.getCharMap();
+
+ // auto start = std::chrono::high_resolution_clock::now();
+  // 2. distance field 생성
+  std::vector<float> distance_field(map_width * map_height, std::numeric_limits<float>::infinity());
+  sdt_dead_reckoning(map_width, map_height, 253, costmap_data, distance_field.data());
+   
+  // 시간 측정 종료
+  //auto end = std::chrono::high_resolution_clock::now();
+
+  // 경과 시간 계산 (마이크로초 단위)
+  //auto duration = std::chrono::duration<double, std::milli>(end - start).count();
+     
+  // 파일에 저장
+  // if (outFile.is_open()) {
+  //     outFile << "Generate Distance Field: " << duration << " ms" << std::endl;
+       
+  // } else {
+  //     std::cerr << "Failed to open file for writing." << std::endl;
+  // }
+
+  //auto start2 = std::chrono::high_resolution_clock::now();
   // 장애물이 포함된 샘플로 Medial Ball 생성
   for (const auto& point : narrow_points)
   {
-    auto start2 = std::chrono::high_resolution_clock::now();
     
-    auto medial_result = findMedialBallRadius(point, *costmap_);
+    
+    auto medial_result = findMedialBallRadius(point, *costmap_, distance_field);
     double medial_radius = medial_result.second;
     geometry_msgs::Point final_center = medial_result.first;
-
-   // 시간 측정 종료
-    auto end2 = std::chrono::high_resolution_clock::now();
-
-    // 경과 시간 계산 (마이크로초 단위)
-    auto duration2 = std::chrono::duration<double, std::milli>(end2 - start2).count();
-      
-    // 파일에 저장
-    std::ofstream outFile("/home/glab/execution_time.txt", std::ios::app); // 파일을 append 모드로 열기
-    if (outFile.is_open()) {
-        outFile << "Create Medial Ball Execution time: " << duration2 << " ms" << std::endl;
-        outFile.close();
-    } else {
-        std::cerr << "Failed to open file for writing." << std::endl;
-    }
-      
-    // 콘솔 출력
-    std::cout << "Create Medial Ball Execution time: " << duration2 << " ms" << std::endl;
-    ROS_INFO("Medial Ball Center: (%.3f, %.3f), Radius: %.3f",final_center.x, final_center.y, medial_radius);
-
 
     // 로봇과 medial point 사이의 벡터 계산
     double dx = final_center.x - robot_position.x;
@@ -791,6 +806,23 @@ std::vector<std::pair<geometry_msgs::Point, double>> TebLocalPlannerROS::detectN
     }
 
   }
+  // // 시간 측정 종료
+  // auto end2 = std::chrono::high_resolution_clock::now();
+
+  // // 경과 시간 계산 (마이크로초 단위)
+  // auto duration2 = std::chrono::duration<double, std::milli>(end2 - start2).count();
+     
+  // // 파일에 저장
+  // if (outFile.is_open()) {
+  //     outFile << "Create Medial Ball Execution time: " << duration2 << " ms" << std::endl;
+  // } else {
+  //     std::cerr << "Failed to open file for writing." << std::endl;
+  // }
+     
+  // // 콘솔 출력
+  // std::cout << "Create Medial Ball Execution time: " << duration2 << " ms" << std::endl;
+  // //ROS_INFO("Medial Ball Center: (%.3f, %.3f), Radius: %.3f",final_center.x, final_center.y, medial_radius);
+
 
   return medial_axis_point;
 }
@@ -988,9 +1020,8 @@ bool TebLocalPlannerROS::isObstacleAtPoint(double x, double y, double search_rad
 }
 
 //grid base search
-
 std::pair<geometry_msgs::Point, double> TebLocalPlannerROS::findMedialBallRadius(
-  const geometry_msgs::Point& point, const costmap_2d::Costmap2D& costmap)
+  const geometry_msgs::Point& point, const costmap_2d::Costmap2D& costmap, const std::vector<float>& distance_field)
 {
     // 1. costmap info
     unsigned int map_width = costmap.getSizeInCellsX();
@@ -998,18 +1029,10 @@ std::pair<geometry_msgs::Point, double> TebLocalPlannerROS::findMedialBallRadius
     double resolution = costmap.getResolution();
     double origin_x = costmap.getOriginX();
     double origin_y = costmap.getOriginY();
-    const unsigned char* costmap_data = costmap.getCharMap();
 
-
-    // 2. distance field 생성
-    std::vector<float> distance_field(map_width * map_height, std::numeric_limits<float>::infinity());
-    sdt_dead_reckoning(map_width, map_height, 253, costmap_data, distance_field.data());
-
-
-
-    // 3. 각 sample point에 대해 projection 수행
+    //각 sample point에 대해 projection 수행
     geometry_msgs::Point medial_center = performMedialAxisClimb(point, *costmap_, distance_field, resolution, origin_x, origin_y);
-        
+
     int grid_x = static_cast<int>((medial_center.x - origin_x) / resolution);
     int grid_y = static_cast<int>((medial_center.y - origin_y) / resolution);
     int idx = grid_x + grid_y * map_width;
@@ -1018,7 +1041,7 @@ std::pair<geometry_msgs::Point, double> TebLocalPlannerROS::findMedialBallRadius
     return { medial_center, radius };
 }
 
-//2step grid
+//1 step grid 
 geometry_msgs::Point TebLocalPlannerROS::performMedialAxisClimb(
   const geometry_msgs::Point& start_point,
   const costmap_2d::Costmap2D& costmap,
@@ -1031,36 +1054,37 @@ geometry_msgs::Point TebLocalPlannerROS::performMedialAxisClimb(
     // 초기 위치
     int cur_x = static_cast<int>((start_point.x - origin_x) / resolution);
     int cur_y = static_cast<int>((start_point.y - origin_y) / resolution);
-    float cur_dist = distance_field[cur_y * map_width + cur_x];
+    int cur_idx = cur_x + cur_y * map_width;
+    float cur_dist = distance_field[cur_idx];
+
+    bool moved = true;
+    int max_iterations = 100;
+    int iteration = 0;
 
     std::vector<geometry_msgs::Point> grid_search_path;
-    int max_fast_iter = 20;
-    int fast_iter = 0;
-
-    // STEP 1: step=2 hill climbing
-    int step = 2;
-    while (fast_iter < max_fast_iter)
+    // sample point를 medial axis 방향으로 옮기기 위한 hill-climbing 알고리즘
+    while (moved && iteration < max_iterations)
     {
-        bool moved = false;
+        moved = false;
         float best_dist = cur_dist;
         int best_x = cur_x;
         int best_y = cur_y;
 
-        for (int dy = -step; dy <= step; dy += step)
-        {
-            for (int dx = -step; dx <= step; dx += step)
-            {
+        // 8방향 중 가장 distance 값이 큰 방향으로 이동
+        for (int dy = -1; dy <= 1; dy++) {
+            for (int dx = -1; dx <= 1; dx++) {
                 if (dx == 0 && dy == 0) continue;
 
                 int nx = cur_x + dx;
                 int ny = cur_y + dy;
-
+                // 탐색 위치가 costmap 범위 내에 있는지 확인
                 if (nx < 0 || ny < 0 || nx >= static_cast<int>(map_width) || ny >= static_cast<int>(map_height))
                     continue;
-                float n_dist = distance_field[ny * map_width + nx];
 
-                if (n_dist > best_dist)
-                {
+                int n_idx = nx + ny * map_width;
+                float n_dist = distance_field[n_idx];
+                // Move to the cell with a greater distance.
+                if (n_dist > best_dist) {
                     best_dist = n_dist;
                     best_x = nx;
                     best_y = ny;
@@ -1069,158 +1093,27 @@ geometry_msgs::Point TebLocalPlannerROS::performMedialAxisClimb(
             }
         }
 
-        if (!moved || std::abs(best_dist - cur_dist) < 1e-3)
+        // 더 먼 셀이 없다면 종료 (local maximum)
+        if (!moved)
             break;
 
+        // 이동
         cur_x = best_x;
         cur_y = best_y;
-        cur_dist = best_dist;
-        fast_iter++;
+        cur_idx = cur_x + cur_y * map_width;
+        cur_dist = distance_field[cur_idx];
+
+        iteration++;
     }
 
-    // STEP 2: 1-step 주변 대칭성 (balance) 확인 및 보정 이동
-    auto compute_symmetry_score = [&](int x, int y) -> float {
-        float center = distance_field[y * map_width + x];
-        float score = 0.0;
-        int count = 0;
-
-        for (int dy = -1; dy <= 1; ++dy) {
-            for (int dx = -1; dx <= 1; ++dx) {
-                if (dx == 0 && dy == 0) continue;
-
-                int nx = x + dx;
-                int ny = y + dy;
-                if (nx < 0 || ny < 0 || nx >= static_cast<int>(map_width) || ny >= static_cast<int>(map_height))
-                    continue;
-
-                float neighbor = distance_field[ny * map_width + nx];
-                float delta = std::abs(center - neighbor);
-                score += std::exp(-delta);  // delta 작을수록 score 높음
-                count++;
-            }
-        }
-        return (count > 0) ? score / count : 0.0;
-    };
-
-    float best_symmetry = compute_symmetry_score(cur_x, cur_y);
-    int best_sym_x = cur_x;
-    int best_sym_y = cur_y;
-
-    for (int dy = -1; dy <= 1; ++dy) {
-        for (int dx = -1; dx <= 1; ++dx) {
-            if (dx == 0 && dy == 0) continue;
-
-            int nx = cur_x + dx;
-            int ny = cur_y + dy;
-
-            if (nx < 0 || ny < 0 || nx >= static_cast<int>(map_width) || ny >= static_cast<int>(map_height))
-                continue;
-
-            float sym_score = compute_symmetry_score(nx, ny);
-            if (sym_score > best_symmetry) {
-                best_symmetry = sym_score;
-                best_sym_x = nx;
-                best_sym_y = ny;
-            }
-        }
-    }
-
-    // 최종 위치로 설정 (보정된 symmetry 최적 위치)
-    cur_x = best_sym_x;
-    cur_y = best_sym_y;
-
+    // 최종 위치를 좌표로 변환
     geometry_msgs::Point medial_center;
     medial_center.x = origin_x + (cur_x + 0.5) * resolution;
     medial_center.y = origin_y + (cur_y + 0.5) * resolution;
     medial_center.z = 0.0;
 
-    visualization_->publishGridSearchPath(grid_search_path);
     return medial_center;
 }
-
-// //1 step grid 
-// geometry_msgs::Point TebLocalPlannerROS::performMedialAxisClimb(
-//   const geometry_msgs::Point& start_point,
-//   const costmap_2d::Costmap2D& costmap,
-//   const std::vector<float>& distance_field,
-//   double resolution, double origin_x, double origin_y)
-// {
-//     unsigned int map_width = costmap.getSizeInCellsX();
-//     unsigned int map_height = costmap.getSizeInCellsY();
-
-//     // 초기 위치
-//     int cur_x = static_cast<int>((start_point.x - origin_x) / resolution);
-//     int cur_y = static_cast<int>((start_point.y - origin_y) / resolution);
-//     int cur_idx = cur_x + cur_y * map_width;
-//     float cur_dist = distance_field[cur_idx];
-
-//     bool moved = true;
-//     int max_iterations = 100;
-//     int iteration = 0;
-
-//     std::vector<geometry_msgs::Point> grid_search_path;
-//     // sample point를 medial axis 방향으로 옮기기 위한 hill-climbing 알고리즘
-//     while (moved && iteration < max_iterations)
-//     {
-//         moved = false;
-//         float best_dist = cur_dist;
-//         int best_x = cur_x;
-//         int best_y = cur_y;
-
-//         // 8방향 중 가장 distance 값이 큰 방향으로 이동
-//         for (int dy = -1; dy <= 1; dy++) {
-//             for (int dx = -1; dx <= 1; dx++) {
-//                 if (dx == 0 && dy == 0) continue;
-
-//                 int nx = cur_x + dx;
-//                 int ny = cur_y + dy;
-//                 // 탐색 위치가 costmap 범위 내에 있는지 확인
-//                 if (nx < 0 || ny < 0 || nx >= static_cast<int>(map_width) || ny >= static_cast<int>(map_height))
-//                     continue;
-
-//                 int n_idx = nx + ny * map_width;
-//                 float n_dist = distance_field[n_idx];
-//                 // Move to the cell with a greater distance.
-//                 if (n_dist > best_dist) {
-//                     best_dist = n_dist;
-//                     best_x = nx;
-//                     best_y = ny;
-//                     moved = true;
-//                 }
-//             }
-//         }
-
-//         // 더 먼 셀이 없다면 종료 (local maximum)
-//         if (!moved)
-//             break;
-
-//         // // for visualization
-//         // geometry_msgs::Point p;
-//         // p.x = origin_x + (cur_x + 0.5) * resolution;
-//         // p.y = origin_y + (cur_y + 0.5) * resolution;
-//         // p.z = 0.0;
-//         // grid_search_path.push_back(p);
-
-
-//         // 이동
-//         cur_x = best_x;
-//         cur_y = best_y;
-//         cur_idx = cur_x + cur_y * map_width;
-//         cur_dist = distance_field[cur_idx];
-
-//         iteration++;
-//     }
-
-//     // 최종 위치를 좌표로 변환
-//     geometry_msgs::Point medial_center;
-//     medial_center.x = origin_x + (cur_x + 0.5) * resolution;
-//     medial_center.y = origin_y + (cur_y + 0.5) * resolution;
-//     medial_center.z = 0.0;
-
-//     //visualization_->publishGridSearchPath(grid_search_path);
-    
-//     return medial_center;
-// }
 
 
 void TebLocalPlannerROS::updateCustomViaPointsContainer(const std::vector<geometry_msgs::PoseStamped>& transformed_plan, const costmap_2d::Costmap2D& costmap)
