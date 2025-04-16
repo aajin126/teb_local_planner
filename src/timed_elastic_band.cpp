@@ -226,7 +226,6 @@ void TimedElasticBand::setTimeDiffVertexFixed(int index, bool status)
 
 void TimedElasticBand::autoResize(double dt_ref, double dt_hysteresis, int min_samples, int max_samples, bool fast_mode)
 {  
-  ROS_INFO("AUTO RESIZE");
   ROS_ASSERT(sizeTimeDiffs() == 0 || sizeTimeDiffs() + 1 == sizePoses());
   /// iterate through all TEB states and add/remove states!
   bool modified = true;
@@ -234,6 +233,7 @@ void TimedElasticBand::autoResize(double dt_ref, double dt_hysteresis, int min_s
   for (int rep = 0; rep < 100 && modified; ++rep) // actually it should be while(), but we want to make sure to not get stuck in some oscillation, hence max 100 repitions.
   {
     modified = false;
+
     for(int i=0; i < sizeTimeDiffs(); ++i) // TimeDiff connects Point(i) with Point(i+1)
     {
       if(TimeDiff(i) > dt_ref + dt_hysteresis && sizeTimeDiffs()<max_samples)
@@ -245,7 +245,7 @@ void TimedElasticBand::autoResize(double dt_ref, double dt_hysteresis, int min_s
               double newtime = 0.5*TimeDiff(i);
 
               TimeDiff(i) = newtime;
-              insertPose(i+1, PoseSE2::average(Pose(i),Pose(i+1)));
+              insertPose(i+1, PoseSE2::average(Pose(i),Pose(i+1)) );
               insertTimeDiff(i+1,newtime);
 
               i--; // check the updated pose diff again
@@ -399,11 +399,7 @@ bool TimedElasticBand::initTrajectoryToGoal(const std::vector<geometry_msgs::Pos
 
     bool backwards = false;
     if (guess_backwards_motion && (goal.position()-start.position()).dot(start.orientationUnitVec()) < 0) // check if the goal is behind the start pose (w.r.t. start orientation)
-    {
-      backwards = true;
-      ROS_DEBUG("goal pose is behind start pose");
-    }
-    
+        backwards = true;
     // TODO: dt ~ max_vel_x_backwards for backwards motions
     
     for (int i=1; i<(int)plan.size()-1; ++i)
@@ -435,8 +431,6 @@ bool TimedElasticBand::initTrajectoryToGoal(const std::vector<geometry_msgs::Pos
       {
         // simple strategy: interpolate between the current pose and the goal
         PoseSE2 intermediate_pose = PoseSE2::average(BackPose(), goal);
-        ROS_DEBUG("intermediate_pose : (%d,%d)", intermediate_pose.position().x(), intermediate_pose.position().y());
-
         double dt = estimateDeltaT(BackPose(), intermediate_pose, max_vel_x, max_vel_theta);
         addPoseAndTimeDiff( intermediate_pose, dt ); // let the optimier correct the timestep (TODO: better initialization
       }

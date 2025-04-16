@@ -136,20 +136,8 @@ public:
    * @param ns Namespace for the marker objects
    * @param color Color of the footprint
    */
-
-  void publishGridSearchPath(const std::vector<geometry_msgs::Point>& grid_search_path);
-  void visualizeSamples(const std::vector<geometry_msgs::Point>& samples);
-  void visualizeMedialBall(const geometry_msgs::Point& center, double radius);
-  void visualizeNarrowSpace(const geometry_msgs::Point& center, double radius);
-
-  void publishInfeasibleRobotFootprintModel(const PoseSE2& current_pose, const BaseRobotFootprintModel& robot_model, const std::string& ns = "RobotInfeasibleFootprintModel",
-                                  const std_msgs::ColorRGBA& color = toColorMsg(0.5, 0.0, 0.8, 0.0));
-
-  void publishInfeasibleRobotFootprint(const PoseSE2& current_pose, const std::vector<geometry_msgs::Point>& footprint,
-                             const std::string& ns, const std_msgs::ColorRGBA &color);
-
   void publishRobotFootprintModel(const PoseSE2& current_pose, const BaseRobotFootprintModel& robot_model, const std::string& ns = "RobotFootprintModel",
-                                  const std_msgs::ColorRGBA& color = toColorMsg(1.0, 0.0, 0.0, 0.0));
+                                  const std_msgs::ColorRGBA& color = toColorMsg(0.5, 0.0, 0.8, 0.0));
 
   void publishRobotFootprint(const PoseSE2& current_pose, const std::vector<geometry_msgs::Point>& footprint,
                              const std::string& ns, const std_msgs::ColorRGBA &color);
@@ -164,12 +152,6 @@ public:
   void publishInfeasibleRobotPose(const PoseSE2& infeasible_pose, const BaseRobotFootprintModel& robot_model,
                                   const std::vector<geometry_msgs::Point>& footprint);
 
-  void publishRobotPose(const PoseSE2& pose, const BaseRobotFootprintModel& robot_model,
-                                  const std::vector<geometry_msgs::Point>& footprint);
-
-  void visualizeIntermediatePoint(const PoseSE2& pose, const std::string& ns = "IntermediatePoints");
-
-  void visualizeNarrGap(const std::vector<std::pair<Eigen::Vector2d, Eigen::Vector2d>>& narrow_gaps);
   /**
    * @brief Publish obstacle positions to the ros topic \e ../../teb_markers
    * @todo Move filling of the marker message to polygon class in order to avoid checking types.
@@ -192,9 +174,6 @@ public:
    * @param ns_prefix Namespace prefix for the marker objects (the strings "Edges" and "Vertices" will be appended)
    * @tparam GraphType boost::graph object in which vertices has the field/member \c pos.
    */
-
-  void publishCustomViaPoints(const std::vector< Eigen::Vector2d, Eigen::aligned_allocator<Eigen::Vector2d> >& via_points, const std::string& ns = "ViaPoints") const;
-
   template <typename GraphType>
   void publishGraph(const GraphType& graph, const std::string& ns_prefix = "Graph");
   
@@ -282,15 +261,6 @@ protected:
   ros::Publisher teb_poses_pub_; //!< Publisher for the trajectory pose sequence
   ros::Publisher teb_marker_pub_; //!< Publisher for visualization markers
   ros::Publisher feedback_pub_; //!< Publisher for the feedback message for analysis and debug purposes
-  ros::Publisher footprint_pub_; //!< Publisher for the local plan
-  ros::Publisher footprintmodel_pub_; //!< Publisher for the trajectory pose sequence
-  ros::Publisher infeasiblefootprint_pub_; //!< Publisher for visualization markers
-  ros::Publisher infeasiblefootprintmodel_pub_; //!< Publisher for the feedback message for analysis and debug purposes
-  ros::Publisher obstacle_pub_;
-  ros::Publisher gap_pub_;
-  ros::Publisher via_point_pub_;
-  ros::Publisher marker_pub_; 
-  ros::Publisher grid_path_pub_;
   
   const TebConfig* cfg_; //!< Config class that stores and manages all related parameters
   

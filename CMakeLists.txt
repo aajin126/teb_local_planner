@@ -3,9 +3,6 @@ project(teb_local_planner)
 
 # Set to Release in order to speed up the program significantly
 set(CMAKE_BUILD_TYPE Release) #None, Debug, Release, RelWithDebInfo, MinSizeRel
-set(CMAKE_CXX_FLAGS_RELEASE "-Ofast -march=native -funroll-loops -flto -DNDEBUG")
-set(CMAKE_CXX_STANDARD 14)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 ## Find catkin macros and libraries
 find_package(catkin REQUIRED COMPONENTS
@@ -176,14 +173,11 @@ catkin_package(
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
-include_directories( include /usr/include/pcl-1.10 )
+include_directories(include)
 include_directories(
   ${EXTERNAL_INCLUDE_DIRS}
   ${catkin_INCLUDE_DIRS}
 )
-
-link_directories(${PCL_LIBRARY_DIRS})
-add_definitions(${PCL_DEFINITIONS})
 
 ## Build the teb_local_planner library
 
@@ -197,7 +191,6 @@ add_library(teb_local_planner
    src/homotopy_class_planner.cpp
    src/teb_local_planner_ros.cpp
    src/graph_search.cpp
-##   src/NPdetector.cpp
 )
 
 # Dynamic reconfigure: make sure configure headers are built before any node using them
@@ -207,15 +200,14 @@ add_dependencies(teb_local_planner ${PROJECT_NAME}_generate_messages_cpp)
 
 target_link_libraries(teb_local_planner
    ${EXTERNAL_LIBS}
-   ${PCL_LIBRARIES}
    ${catkin_LIBRARIES}
 )
+
+
 
 ## Build additional executables
 
 add_executable(test_optim_node src/test_optim_node.cpp)
-add_executable(distance_map src/distance_map_deadreck.cpp)
-# add_executable(NPdetector src/NPdetector.cpp)
 
 target_link_libraries(test_optim_node
    teb_local_planner
@@ -223,8 +215,6 @@ target_link_libraries(test_optim_node
    ${catkin_LIBRARIES}
 )
 
-target_link_libraries(distance_map ${catkin_LIBRARIES})
-# target_link_libraries(NPdetector ${catkin_LIBRARIES})
 
 #############
 ## Install ##
