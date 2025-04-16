@@ -40,7 +40,6 @@
 #define OPTIMAL_PLANNER_H_
 
 #include <math.h>
-#include <thread>
 
 
 // teb stuff
@@ -50,7 +49,6 @@
 #include <teb_local_planner/planner_interface.h>
 #include <teb_local_planner/visualization.h>
 #include <teb_local_planner/robot_footprint_model.h>
-#include <teb_local_planner/pose_se2.h>
 
 // g2o lib stuff
 #include <g2o/core/sparse_optimizer.h>
@@ -60,15 +58,12 @@
 #include <g2o/core/optimization_algorithm_levenberg.h>
 #include <g2o/solvers/csparse/linear_solver_csparse.h>
 #include <g2o/solvers/cholmod/linear_solver_cholmod.h>
-// #include "teb_local_planner/sdt_dead_reckoning.h"
 
 // messages
 #include <nav_msgs/Path.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <tf/transform_datatypes.h>
 #include <teb_local_planner/TrajectoryMsg.h>
-
-#include <costmap_2d/costmap_2d_ros.h>
 
 #include <nav_msgs/Odometry.h>
 #include <limits.h>
@@ -133,24 +128,12 @@ public:
     * @param visual Shared pointer to the TebVisualization class (optional)
     * @param via_points Container storing via-points (optional)
     */
-
   void initialize(const TebConfig& cfg, ObstContainer* obstacles = NULL,
                   TebVisualizationPtr visual = TebVisualizationPtr(), const ViaPointContainer* via_points = NULL);
 
   /** @name Plan a trajectory  */
   //@{
-  /**
-   * @param costmap_model Pointer to the costmap model
-   * @param footprint_spec The specification of the footprint of the robot in world coordinates
-   * @param inscribed_radius The radius of the inscribed circle of the robot
-   * @param circumscribed_radius The radius of the circumscribed circle of the robot
-   * @param initial_plan vector of geometry_msgs::PoseStamped (must be valid until clearPlanner() is called!)
-   * @param start_vel Current start velocity (e.g. the velocity of the robot, only linear.x, linear.y (holonomic) and angular.z are used)
-   * @param free_goal_vel if \c true, a nonzero final velocity at the goal pose is allowed,
-   *		      otherwise the final velocity will be zero (default: false)
-   */  
-  virtual bool plan(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec, const std::vector<geometry_msgs::PoseStamped>& initial_plan, double inscribed_radius = 0.0, double circumscribed_radius = 0.0, const geometry_msgs::Twist* start_vel = NULL, bool free_goal_vel=false);
-
+  
   /**
    * @brief Plan a trajectory based on an initial reference plan.
    * 
@@ -245,7 +228,7 @@ public:
    *          (only used if \c compute_cost_afterwards is true).
    * @return \c true if the optimization terminates successfully, \c false otherwise
    */	  
-  bool optimizeTEB(int iterations_innerloop, int iterations_outerloop, bool compute_cost_afterwards = true,
+  bool optimizeTEB(int iterations_innerloop, int iterations_outerloop, bool compute_cost_afterwards = false,
                    double obst_cost_scale=1.0, double viapoint_cost_scale=1.0, bool alternative_time_cost=false);
   
   //@}
@@ -452,11 +435,8 @@ public:
    * @return const reference to the TebCostVec.
    */
   double getCurrentCost() const {return cost_;}
-
-  //void computeEdgeCost(double obst_cost_scale, double viapoint_cost_scale, bool alternative_time_cost);
   
-  //double computeCostForPose(double obst_cost_scale, double viapoint_cost_scale, bool alternative_time_cost, const PoseSE2& pose);
-
+    
   /**
    * @brief Extract the velocity from consecutive poses and a time difference (including strafing velocity for holonomic robots)
    * 
@@ -470,8 +450,6 @@ public:
    * @param[out] omega rotational velocity
    */
   inline void extractVelocity(const PoseSE2& pose1, const PoseSE2& pose2, double dt, double& vx, double& vy, double& omega) const;
-
-  void detectNarrGap(const ObstContainer& obstacles, const Eigen::Vector2d& robot_position);
   
   /**
    * @brief Compute the velocity profile of the trajectory
@@ -505,11 +483,7 @@ public:
    * @param[out] trajectory the resulting trajectory
    */
   void getFullTrajectory(std::vector<TrajectoryPointMsg>& trajectory) const;
-
-  Eigen::Vector2d processPose(PoseSE2& target_pose);
-
-  Eigen::Vector2d pushPoseAwayFromObstacle(PoseSE2& pose, unsigned int width, unsigned int height);
-
+  
   /**
    * @brief Check whether the planned trajectory is feasible or not.
    * 
@@ -523,11 +497,6 @@ public:
    * @return \c true, if the robot footprint along the first part of the trajectory intersects with 
    *         any obstacle in the costmap, \c false otherwise.
    */
-
-  void reOptimizeDuplicatedAndCircularPoses(double proximity_threshold, double circular_threshold);
-
-  void optimizePoseSegment(int start_idx, int end_idx);
-
   virtual bool isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec, double inscribed_radius = 0.0,
           double circumscribed_radius=0.0, int look_ahead_idx=-1, double feasibility_check_lookahead_distance=-1.0);
   
@@ -586,8 +555,6 @@ protected:
    * @see optimizeGraph
    */
   void AddTEBVertices();
-
-  void AddTEBVertices(int start_idx, int end_idx);
   
   /**
    * @brief Add all edges (local cost functions) for limiting the translational and angular velocity.
@@ -702,22 +669,14 @@ protected:
    * @return shared pointer to the g2o::SparseOptimizer instance
    */
   boost::shared_ptr<g2o::SparseOptimizer> initOptimizer();
-
-  //new  
-  // external objects (store weak pointers)
-  costmap_2d::Costmap2DROS* costmap_ros_; //!< Pointer to the costmap ros wrapper, received from the navigation stack
-  costmap_2d::Costmap2D* costmap_; //!< Pointer to the 2d costmap (obtained from the costmap ros wrapper)
-  
-  std::vector<geometry_msgs::Point> footprint_spec_; //!< Store the footprint of the robot 
-  double robot_inscribed_radius_; //!< The radius of the inscribed circle of the robot (collision possible)
-  double robot_circumscribed_radius; //!< The radius of the circumscribed circle of the robot
+    
 
   // external objects (store weak pointers)
   const TebConfig* cfg_; //!< Config class that stores and manages all related parameters
   ObstContainer* obstacles_; //!< Store obstacles that are relevant for planning
   const ViaPointContainer* via_points_; //!< Store via points for planning
   std::vector<ObstContainer> obstacles_per_vertex_; //!< Store the obstacles associated with the n-1 initial vertices
-
+  
   double cost_; //!< Store cost value of the current hyper-graph
   RotType prefer_rotdir_; //!< Store whether to prefer a specific initial rotation in optimization (might be activated in case the robot oscillates)
   
@@ -727,21 +686,9 @@ protected:
   boost::shared_ptr<g2o::SparseOptimizer> optimizer_; //!< g2o optimizer for trajectory optimization
   std::pair<bool, geometry_msgs::Twist> vel_start_; //!< Store the initial velocity at the start pose
   std::pair<bool, geometry_msgs::Twist> vel_goal_; //!< Store the final velocity at the goal pose
-  //std::shared_ptr<DistanceFieldUpdater> map_subscriber_;
-
-  std::vector<int> redundant_indices;
 
   bool initialized_; //!< Keeps track about the correct initialization of this class
   bool optimized_; //!< This variable is \c true as long as the last optimization has been completed successful
-  bool is_reoptimization_active = false;
-
-  double proximity_threshold = 0.15; // 예: 20cm 
-  double circular_threshold = M_PI; // 예: 180도
-
-  const float* distance_map_;
-  unsigned int map_width_;
-  unsigned int map_height_;
-
   
 public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW    
