@@ -168,18 +168,6 @@ public:
     */
   bool isGoalReached();
 
-  // std::vector<std::pair<geometry_msgs::Point, double>> detectNarrowPassages(const std::vector<geometry_msgs::PoseStamped>& transformed_plan, const costmap_2d::Costmap2D& costmap);
-  // double euclideanDistance(const geometry_msgs::Point& p1, const geometry_msgs::Point& p2);
-  // std::vector<geometry_msgs::Point> generateSamples(const std::vector<geometry_msgs::PoseStamped>& transformed_plan, const costmap_2d::Costmap2D& costmap, bool exist_viapoint, double coverage_radius, KDTree2D& global_kd_tree);
-  // void updateObstacleKDTree();
-  // double calculateAngle(const geometry_msgs::Point& p1, const geometry_msgs::Point& p2, const geometry_msgs::Point& center);
-  // int checkAndCount(int mx, int my);
-  // bool getObstaclePointsInCircle(const geometry_msgs::Point& center, double radius);
-  // std::pair<geometry_msgs::Point, double> findMedialBallRadius(const geometry_msgs::Point& point, const costmap_2d::Costmap2D& costmap);
-  // bool isObstacleOrUnknown(double x, double y, const costmap_2d::Costmap2D& costmap);
-  // bool isObstacleAtPoint(double x, double y, double search_radius);
-  // std::vector<std::pair<geometry_msgs::Point, double>> PruneViaPoints(const std::vector<std::tuple<geometry_msgs::Point, size_t>>& via_points, const geometry_msgs::Point& current_robot_pos);
-  
   std::vector<std::pair<geometry_msgs::Point, double>> detectNarrowPassages(const std::vector<geometry_msgs::PoseStamped>& transformed_plan, const costmap_2d::Costmap2D& costmap);
   double calculateAngle(const geometry_msgs::Point& p1, const geometry_msgs::Point& p2, const geometry_msgs::Point& center);
   int checkAndCount(int mx, int my);
@@ -190,20 +178,7 @@ public:
   bool isObstacleAtPoint(double x, double y, double search_radius);
   std::pair<geometry_msgs::Point, double> findMedialBallRadius(const geometry_msgs::Point& point, const costmap_2d::Costmap2D& costmap, const std::vector<float>& distance_field);
   geometry_msgs::Point performMedialAxisClimb(const geometry_msgs::Point& start_point, const costmap_2d::Costmap2D& costmap, const std::vector<float>& distance_field, double resolution, double origin_x, double origin_y);
-  
-  // std::vector<std::tuple<geometry_msgs::Point, double>> detectNarrowPassages(const std::vector<geometry_msgs::PoseStamped>& transformed_plan, const costmap_2d::Costmap2D& costmap);
-  // void updateGlobalKDTree(const std::vector<geometry_msgs::PoseStamped>& transformed_plan);
-  // double calculateAngle(const geometry_msgs::Point& p1, const geometry_msgs::Point& p2, const geometry_msgs::Point& center);
-  // int checkAndCount(int mx, int my);
-  // //bool isObstacleAtPoint(double x, double y, double search_radius);
-  // double euclideanDistance(const geometry_msgs::Point& p1, const geometry_msgs::Point& p2);
-  // bool sampleRejection(const geometry_msgs::Point& center, double radius);
-  // std::vector<geometry_msgs::Point> generateSamples(const std::vector<geometry_msgs::PoseStamped>& transformed_plan, std::vector<std::tuple<geometry_msgs::Point, double>> medial_points, const costmap_2d::Costmap2D& costmap, bool exist_viapoint);
-  // //void updateObstacleKDTree();
-  // std::vector<std::tuple<geometry_msgs::Point, double>> PruneViaPoints(const std::vector<geometry_msgs::PoseStamped>& transformed_plan, std::vector<std::tuple<geometry_msgs::Point, double>>& via_points, const PoseSE2& current_robot_pos);
-  // bool isObstacleOrUnknown(double x, double y, const costmap_2d::Costmap2D& costmap);
-  // std::tuple<geometry_msgs::Point, double> findMedialBallRadius(const geometry_msgs::Point& point, const costmap_2d::Costmap2D& costmap);
-  
+
   /**
     * @brief Dummy version to satisfy MBF API
     */

@@ -220,34 +220,6 @@ bool TebLocalPlannerROS::setPlan(const std::vector<geometry_msgs::PoseStamped>& 
   global_plan_.clear();
   global_plan_ = orig_global_plan;
 
-  // // 매번 호출될 때마다 고유한 파일 이름 생성 (예: /tmp/global_plan_초_나노초.txt)
-  // ros::Time now = ros::Time::now();
-  // std::stringstream ss;
-  // ss << "home/glab/tmp/global_plan_" << now.sec << "_" << now.nsec << ".txt";
-  // std::string filename = ss.str();
-
-  // std::ofstream outfile(filename.c_str());
-  // if (outfile.is_open())
-  // {
-  //   for (const auto& pose_stamped : orig_global_plan)
-  //   {
-  //     const geometry_msgs::Pose& pose = pose_stamped.pose;
-  //     // position과 orientation 정보를 공백으로 구분하여 저장 (각 행은 하나의 Pose)
-  //     outfile << pose.position.x << " " << pose.position.y << " " << pose.position.z << " ";
-  //     outfile << pose.orientation.x << " " << pose.orientation.y << " " << pose.orientation.z << " " << pose.orientation.w << "\n";
-  //   }
-  //   outfile.close();
-  //   ROS_INFO("Global plan saved to %s", filename.c_str());
-  // }
-  // else
-  // {
-  //   ROS_ERROR("Unable to open file %s for writing global plan", filename.c_str());
-  // }
-  
-  // we do not clear the local planner here, since setPlan is called frequently whenever the global planner updates the plan.
-  // the local planner checks whether it is required to reinitialize the trajectory or not within each velocity computation step.  
-            
-  // reset goal_reached_ flag
   goal_reached_ = false;
   
   return true;
@@ -340,8 +312,6 @@ bool TebLocalPlannerROS::setPlan(const std::vector<geometry_msgs::PoseStamped>& 
 
 bool TebLocalPlannerROS::computeVelocityCommands(geometry_msgs::Twist& cmd_vel)
 {
-  auto start = std::chrono::high_resolution_clock::now();
-
   ROS_DEBUG("computeVelocityCommands");
   std::string dummy_message;
   geometry_msgs::PoseStamped dummy_pose;
@@ -349,23 +319,6 @@ bool TebLocalPlannerROS::computeVelocityCommands(geometry_msgs::Twist& cmd_vel)
   uint32_t outcome = computeVelocityCommands(dummy_pose, dummy_velocity, cmd_vel_stamped, dummy_message);
   cmd_vel = cmd_vel_stamped.twist;
 
-  // 시간 측정 종료
-  auto end = std::chrono::high_resolution_clock::now();
-
-  // 경과 시간 계산 (마이크로초 단위)
-  auto duration = std::chrono::duration<double, std::milli>(end - start).count();
-  
-  // 파일에 저장
-  std::ofstream outFile("/home/glab/execution_time.txt", std::ios::app); // 파일을 append 모드로 열기
-  if (outFile.is_open()) {
-      outFile << "Execution time: " << duration << " ms" << std::endl;
-  } else {
-      std::cerr << "Failed to open file for writing." << std::endl;
-  }
-  
-  // 콘솔 출력
-  std::cout << "Execution time: " << duration << " ms" << std::endl;
-  
   return outcome == mbf_msgs::ExePathResult::SUCCESS;
 }
 
@@ -375,7 +328,6 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
                                                      std::string &message)
 {
 
-  ROS_DEBUG("computeVelocityCommands for real plan");
   // check if plugin initialized
   if(!initialized_)
   {
@@ -500,34 +452,9 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
   // Do not allow config changes during the following optimization step
   boost::mutex::scoped_lock cfg_lock(cfg_.configMutex());
 
-  int look_ahead_idx = cfg_.trajectory.feasibility_check_no_poses;
-  double inscribed_radius = robot_inscribed_radius_;
-
-  ROS_DEBUG("transformed plan size : %d", transformed_plan.size());
-  
   // Now perform the actual planning
   // bool success = planner_->plan(robot_pose_, robot_goal_, robot_vel_, cfg_.goal_tolerance.free_goal_vel); // straight line init
-  ROS_DEBUG("planning based transformed plan");
-
-  // bool success = planner_->plan(costmap_model_.get(), footprint_spec_, transformed_plan, robot_inscribed_radius_, robot_circumscribed_radius, &robot_vel_, cfg_.goal_tolerance.free_goal_vel);
-  // local planning (using TEB)
-  auto start0 = std::chrono::high_resolution_clock::now();
   bool success = planner_->plan(transformed_plan, &robot_vel_, cfg_.goal_tolerance.free_goal_vel);
-  // 시간 측정 종료
-  auto end0 = std::chrono::high_resolution_clock::now();
-
-  // 경과 시간 계산 (마이크로초 단위)
-  auto duration0 = std::chrono::duration<double, std::milli>(end0 - start0).count();
-
-  std::ofstream outFile("/home/glab/execution_time.txt", std::ios::app);   
-  if (outFile.is_open()) {
-      outFile << "Optimization time: " << duration0 << " ms" << std::endl;
-  } else {
-      std::cerr << "Failed to open file for writing." << std::endl;
-  }
-    
-  // 콘솔 출력
-  std::cout << "Optimization time: " << duration0 << " ms" << std::endl;
 
   ROS_DEBUG("Plan result: %s", success ? "successful" : "failed");
 
@@ -543,11 +470,6 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
     return mbf_msgs::ExePathResult::NO_VALID_CMD;
   }
 
-  ROS_DEBUG("teb_local_planner was able to obtain a local plan for the current setting.");  
-
-  // Check for divergence
-  ROS_DEBUG("Check for divergence");
-
   if (planner_->hasDiverged())
   {
     cmd_vel.twist.linear.x = cmd_vel.twist.linear.y = cmd_vel.twist.angular.z = 0;
@@ -561,18 +483,14 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
     last_cmd_ = cmd_vel.twist;
     return mbf_msgs::ExePathResult::NO_VALID_CMD;
   }
-
-  ROS_DEBUG("the trajectory has not diverged.");
-         
+      
   // Check feasibility (but within the first few states only)
-
   if(cfg_.robot.is_footprint_dynamic)
   {
     // Update footprint of the robot and minimum and maximum distance from the center of the robot to its footprint vertices.
     footprint_spec_ = costmap_ros_->getRobotFootprint();
     costmap_2d::calculateMinAndMaxDistances(footprint_spec_, robot_inscribed_radius_, robot_circumscribed_radius);
   }
-  ROS_DEBUG("Check for feasibility");
 
   bool feasible = planner_->isTrajectoryFeasible(costmap_model_.get(), footprint_spec_, robot_inscribed_radius_, robot_circumscribed_radius, cfg_.trajectory.feasibility_check_no_poses, cfg_.trajectory.feasibility_check_lookahead_distance);
   if (!feasible)
@@ -591,7 +509,6 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
   }
 
   // Get the velocity command for this sampling interval
-  ROS_DEBUG("Get the velocity command");
   if (!planner_->getVelocityCommand(cmd_vel.twist.linear.x, cmd_vel.twist.linear.y, cmd_vel.twist.angular.z, cfg_.trajectory.control_look_ahead_poses))
 
   {
@@ -657,8 +574,6 @@ bool TebLocalPlannerROS::isGoalReached()
   return false;
 }
 
-//last version 
-
 // 2D 포인트 구조체 (파일 범위에 정의)
 struct Point2D {
   double x, y;
@@ -687,36 +602,17 @@ typedef nanoflann::KDTreeSingleIndexAdaptor<
 std::unique_ptr<KDTree2D> obstacle_kd_tree_;
 PointCloud2D obstacle_cloud_;
 
-// Medial Ball Heuristic Algorithm
 std::vector<std::pair<geometry_msgs::Point, double>> TebLocalPlannerROS::detectNarrowPassages(const std::vector<geometry_msgs::PoseStamped>& transformed_plan, const costmap_2d::Costmap2D& costmap)
 {
   std::vector<std::pair<geometry_msgs::Point, double>> medial_axis_point;
 
-  //auto start1 = std::chrono::high_resolution_clock::now();
-
   std::vector<geometry_msgs::Point> samples = generateSamples(transformed_plan, *costmap_);
-  // 시간 측정 종료
-  //auto end1 = std::chrono::high_resolution_clock::now();
 
-  // 경과 시간 계산 (마이크로초 단위)
-  //auto duration1 = std::chrono::duration<double, std::milli>(end1 - start1).count();
-    
-  //std::ofstream outFile("/home/glab/execution_time.txt", std::ios::app); 
-  //if (outFile.is_open()) {
-      //outFile << "Generate Samples Execution time: " << duration1 << " ms" << std::endl;
-  //} else {
-      //std::cerr << "Failed to open file for writing." << std::endl;
-  //}
-    
-  // 콘솔 출력
-  //std::cout << "Generate Samples Execution time: " << duration1 << " ms" << std::endl;
   visualization_->visualizeSamples(samples);
 
   double obst_radius = 0.6;
 
   std::vector<geometry_msgs::Point> narrow_points; // Store samples with obstacles
-
-  //auto start7 = std::chrono::high_resolution_clock::now();
 
   for (const auto& sample : samples)
   {
@@ -728,25 +624,14 @@ std::vector<std::pair<geometry_msgs::Point, double>> TebLocalPlannerROS::detectN
       narrow_points.push_back(sample);
     }
   }
-  // 시간 측정 종료
-  //auto end7 = std::chrono::high_resolution_clock::now();
-
-  // 경과 시간 계산 (마이크로초 단위)
-  //auto duration7 = std::chrono::duration<double, std::milli>(end7 - start7).count();
-    
-  // if (outFile.is_open()) {
-  //     outFile << "Obstacle Point check time: " << duration7 << " ms" << std::endl;
-  // } else {
-  //     std::cerr << "Failed to open file for writing." << std::endl;
-  // }
 
   double goal_threshold = 0.3;
 
   geometry_msgs::Point robot_position;
   robot_position.x = robot_pose_.x();
   robot_position.y = robot_pose_.y();
-  double yaw = robot_pose_.theta();  // 직접 theta 값을 사용
-  // 로봇의 진행 방향 벡터: (cos(yaw), sin(yaw))
+  double yaw = robot_pose_.theta();  // using theta 
+  // robot direction: (cos(yaw), sin(yaw))
   double heading_x = cos(yaw);
   double heading_y = sin(yaw);
 
@@ -755,41 +640,22 @@ std::vector<std::pair<geometry_msgs::Point, double>> TebLocalPlannerROS::detectN
   unsigned int map_height = costmap.getSizeInCellsY();
   const unsigned char* costmap_data = costmap.getCharMap();
 
- // auto start = std::chrono::high_resolution_clock::now();
-  // 2. distance field 생성
+  // 2. create distance field
   std::vector<float> distance_field(map_width * map_height, std::numeric_limits<float>::infinity());
   sdt_dead_reckoning(map_width, map_height, 253, costmap_data, distance_field.data());
    
-  // 시간 측정 종료
-  //auto end = std::chrono::high_resolution_clock::now();
-
-  // 경과 시간 계산 (마이크로초 단위)
-  //auto duration = std::chrono::duration<double, std::milli>(end - start).count();
-     
-  // 파일에 저장
-  // if (outFile.is_open()) {
-  //     outFile << "Generate Distance Field: " << duration << " ms" << std::endl;
-       
-  // } else {
-  //     std::cerr << "Failed to open file for writing." << std::endl;
-  // }
-
-  //auto start2 = std::chrono::high_resolution_clock::now();
-  // 장애물이 포함된 샘플로 Medial Ball 생성
+  // 3. Find Medial points 
   for (const auto& point : narrow_points)
   {
-    
-    
     auto medial_result = findMedialBallRadius(point, *costmap_, distance_field);
     double medial_radius = medial_result.second;
     geometry_msgs::Point final_center = medial_result.first;
 
-    // 로봇과 medial point 사이의 벡터 계산
+    // Calculate vector betwen robot and medial point
     double dx = final_center.x - robot_position.x;
     double dy = final_center.y - robot_position.y;
-    // 진행 방향 벡터와의 내적 계산 (로봇 앞쪽인지 확인)
+
     double dot = dx * heading_x + dy * heading_y;
-    // 내적이 음수이면 medial point는 로봇의 뒷쪽에 위치하므로 건너뜁니다.
 
     if (dot < 0)
       continue;
@@ -798,7 +664,7 @@ std::vector<std::pair<geometry_msgs::Point, double>> TebLocalPlannerROS::detectN
 
     ROS_INFO("distance to goal : %lf", distance_to_goal);
 
-    // threshold 이상인 경우 추가하지 않음
+    // threshold 
     if (medial_radius < thre && medial_radius >= 0.05 && distance_to_goal > goal_threshold)
     {
       medial_axis_point.emplace_back(final_center, medial_radius);
@@ -806,24 +672,6 @@ std::vector<std::pair<geometry_msgs::Point, double>> TebLocalPlannerROS::detectN
     }
 
   }
-  // // 시간 측정 종료
-  // auto end2 = std::chrono::high_resolution_clock::now();
-
-  // // 경과 시간 계산 (마이크로초 단위)
-  // auto duration2 = std::chrono::duration<double, std::milli>(end2 - start2).count();
-     
-  // // 파일에 저장
-  // if (outFile.is_open()) {
-  //     outFile << "Create Medial Ball Execution time: " << duration2 << " ms" << std::endl;
-  // } else {
-  //     std::cerr << "Failed to open file for writing." << std::endl;
-  // }
-     
-  // // 콘솔 출력
-  // std::cout << "Create Medial Ball Execution time: " << duration2 << " ms" << std::endl;
-  // //ROS_INFO("Medial Ball Center: (%.3f, %.3f), Radius: %.3f",final_center.x, final_center.y, medial_radius);
-
-
   return medial_axis_point;
 }
 
@@ -842,7 +690,6 @@ double TebLocalPlannerROS::calculateAngle(const geometry_msgs::Point& p1, const 
   {
     double cosine_angle = dot_product / (magnitude1 * magnitude2);
 
-    //범위 제한
     if (cosine_angle < -1.0)
       cosine_angle = -1.0;
     else if (cosine_angle > 1.0)
@@ -947,8 +794,8 @@ std::mt19937 gen(rd());
 std::uniform_int_distribution<> dis_x(0, width - 1);
 std::uniform_int_distribution<> dis_y(0, height - 1);
 
-// 샘플링 파라미터
-double lambda = 1.0;               // 지수 편향 감쇠 계수
+// sampling parameter 
+double lambda = 1.0;   
 double threshold_distance = 0.2;
 double threshold_distance_sq = threshold_distance * threshold_distance;
 
