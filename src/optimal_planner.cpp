@@ -146,9 +146,9 @@ void TebOptimalPlanner::registerG2OTypes()
   factory->registerType("EDGE_ACCELERATION_HOLONOMIC_GOAL", new g2o::HyperGraphElementCreator<EdgeAccelerationHolonomicGoal>);
   factory->registerType("EDGE_KINEMATICS_DIFF_DRIVE", new g2o::HyperGraphElementCreator<EdgeKinematicsDiffDrive>);
   factory->registerType("EDGE_KINEMATICS_CARLIKE", new g2o::HyperGraphElementCreator<EdgeKinematicsCarlike>);
-  factory->registerType("EDGE_OBSTACLE", new g2o::HyperGraphElementCreator<EdgeObstacle>);
-  factory->registerType("EDGE_INFLATED_OBSTACLE", new g2o::HyperGraphElementCreator<EdgeInflatedObstacle>);
-  factory->registerType("EDGE_DYNAMIC_OBSTACLE", new g2o::HyperGraphElementCreator<EdgeDynamicObstacle>);
+  // factory->registerType("EDGE_OBSTACLE", new g2o::HyperGraphElementCreator<EdgeObstacle>);
+  // factory->registerType("EDGE_INFLATED_OBSTACLE", new g2o::HyperGraphElementCreator<EdgeInflatedObstacle>);
+  // factory->registerType("EDGE_DYNAMIC_OBSTACLE", new g2o::HyperGraphElementCreator<EdgeDynamicObstacle>);
   factory->registerType("EDGE_VIA_POINT", new g2o::HyperGraphElementCreator<EdgeViaPoint>);
   factory->registerType("EDGE_PREFER_ROTDIR", new g2o::HyperGraphElementCreator<EdgePreferRotDir>);
   return;
@@ -333,14 +333,14 @@ bool TebOptimalPlanner::buildGraph(double weight_multiplier)
   // add TEB vertices
   AddTEBVertices();
   
-  // add Edges (local cost functions)
-  if (cfg_->obstacles.legacy_obstacle_association)
-    AddEdgesObstaclesLegacy(weight_multiplier);
-  else
-    AddEdgesObstacles(weight_multiplier);
+  // // add Edges (local cost functions)
+  // if (cfg_->obstacles.legacy_obstacle_association)
+  //   AddEdgesObstaclesLegacy(weight_multiplier);
+  // else
+  //   AddEdgesObstacles(weight_multiplier);
 
-  if (cfg_->obstacles.include_dynamic_obstacles)
-    AddEdgesDynamicObstacles();
+  // if (cfg_->obstacles.include_dynamic_obstacles)
+  //   AddEdgesDynamicObstacles();
   
   AddEdgesViaPoints();
   
@@ -441,236 +441,236 @@ void TebOptimalPlanner::AddTEBVertices()
 }
 
 
-void TebOptimalPlanner::AddEdgesObstacles(double weight_multiplier)
-{
-  if (cfg_->optim.weight_obstacle==0 || weight_multiplier==0 || obstacles_==nullptr )
-    return; // if weight equals zero skip adding edges!
+// void TebOptimalPlanner::AddEdgesObstacles(double weight_multiplier)
+// {
+//   if (cfg_->optim.weight_obstacle==0 || weight_multiplier==0 || obstacles_==nullptr )
+//     return; // if weight equals zero skip adding edges!
     
   
-  bool inflated = cfg_->obstacles.inflation_dist > cfg_->obstacles.min_obstacle_dist;
+//   bool inflated = cfg_->obstacles.inflation_dist > cfg_->obstacles.min_obstacle_dist;
 
-  Eigen::Matrix<double,1,1> information;
-  information.fill(cfg_->optim.weight_obstacle * weight_multiplier);
+//   Eigen::Matrix<double,1,1> information;
+//   information.fill(cfg_->optim.weight_obstacle * weight_multiplier);
   
-  Eigen::Matrix<double,2,2> information_inflated;
-  information_inflated(0,0) = cfg_->optim.weight_obstacle * weight_multiplier;
-  information_inflated(1,1) = cfg_->optim.weight_inflation;
-  information_inflated(0,1) = information_inflated(1,0) = 0;
+//   Eigen::Matrix<double,2,2> information_inflated;
+//   information_inflated(0,0) = cfg_->optim.weight_obstacle * weight_multiplier;
+//   information_inflated(1,1) = cfg_->optim.weight_inflation;
+//   information_inflated(0,1) = information_inflated(1,0) = 0;
 
-  auto iter_obstacle = obstacles_per_vertex_.begin();
+//   auto iter_obstacle = obstacles_per_vertex_.begin();
 
-  auto create_edge = [inflated, &information, &information_inflated, this] (int index, const Obstacle* obstacle) {
-    if (inflated)
-    {
-      EdgeInflatedObstacle* dist_bandpt_obst = new EdgeInflatedObstacle;
-      dist_bandpt_obst->setVertex(0,teb_.PoseVertex(index));
-      dist_bandpt_obst->setInformation(information_inflated);
-      dist_bandpt_obst->setParameters(*cfg_, obstacle);
-      optimizer_->addEdge(dist_bandpt_obst);
-    }
-    else
-    {
-      EdgeObstacle* dist_bandpt_obst = new EdgeObstacle;
-      dist_bandpt_obst->setVertex(0,teb_.PoseVertex(index));
-      dist_bandpt_obst->setInformation(information);
-      dist_bandpt_obst->setParameters(*cfg_, obstacle);
-      optimizer_->addEdge(dist_bandpt_obst);
-    };
-  };
+//   auto create_edge = [inflated, &information, &information_inflated, this] (int index, const Obstacle* obstacle) {
+//     if (inflated)
+//     {
+//       EdgeInflatedObstacle* dist_bandpt_obst = new EdgeInflatedObstacle;
+//       dist_bandpt_obst->setVertex(0,teb_.PoseVertex(index));
+//       dist_bandpt_obst->setInformation(information_inflated);
+//       dist_bandpt_obst->setParameters(*cfg_, obstacle);
+//       optimizer_->addEdge(dist_bandpt_obst);
+//     }
+//     else
+//     {
+//       EdgeObstacle* dist_bandpt_obst = new EdgeObstacle;
+//       dist_bandpt_obst->setVertex(0,teb_.PoseVertex(index));
+//       dist_bandpt_obst->setInformation(information);
+//       dist_bandpt_obst->setParameters(*cfg_, obstacle);
+//       optimizer_->addEdge(dist_bandpt_obst);
+//     };
+//   };
     
-  // iterate all teb points, skipping the last and, if the EdgeVelocityObstacleRatio edges should not be created, the first one too
-  const int first_vertex = cfg_->optim.weight_velocity_obstacle_ratio == 0 ? 1 : 0;
-  for (int i = first_vertex; i < teb_.sizePoses() - 1; ++i)
-  {    
-      double left_min_dist = std::numeric_limits<double>::max();
-      double right_min_dist = std::numeric_limits<double>::max();
-      ObstaclePtr left_obstacle;
-      ObstaclePtr right_obstacle;
+//   // iterate all teb points, skipping the last and, if the EdgeVelocityObstacleRatio edges should not be created, the first one too
+//   const int first_vertex = cfg_->optim.weight_velocity_obstacle_ratio == 0 ? 1 : 0;
+//   for (int i = first_vertex; i < teb_.sizePoses() - 1; ++i)
+//   {    
+//       double left_min_dist = std::numeric_limits<double>::max();
+//       double right_min_dist = std::numeric_limits<double>::max();
+//       ObstaclePtr left_obstacle;
+//       ObstaclePtr right_obstacle;
       
-      const Eigen::Vector2d pose_orient = teb_.Pose(i).orientationUnitVec();
+//       const Eigen::Vector2d pose_orient = teb_.Pose(i).orientationUnitVec();
       
-      // iterate obstacles
-      for (const ObstaclePtr& obst : *obstacles_)
-      {
-        // we handle dynamic obstacles differently below
-        if(cfg_->obstacles.include_dynamic_obstacles && obst->isDynamic())
-          continue;
+//       // iterate obstacles
+//       for (const ObstaclePtr& obst : *obstacles_)
+//       {
+//         // we handle dynamic obstacles differently below
+//         if(cfg_->obstacles.include_dynamic_obstacles && obst->isDynamic())
+//           continue;
 
-          // calculate distance to robot model
-          double dist = cfg_->robot_model->calculateDistance(teb_.Pose(i), obst.get());
+//           // calculate distance to robot model
+//           double dist = cfg_->robot_model->calculateDistance(teb_.Pose(i), obst.get());
           
-          // force considering obstacle if really close to the current pose
-        if (dist < cfg_->obstacles.min_obstacle_dist*cfg_->obstacles.obstacle_association_force_inclusion_factor)
-          {
-              iter_obstacle->push_back(obst);
-              continue;
-          }
-          // cut-off distance
-          if (dist > cfg_->obstacles.min_obstacle_dist*cfg_->obstacles.obstacle_association_cutoff_factor)
-            continue;
+//           // force considering obstacle if really close to the current pose
+//         if (dist < cfg_->obstacles.min_obstacle_dist*cfg_->obstacles.obstacle_association_force_inclusion_factor)
+//           {
+//               iter_obstacle->push_back(obst);
+//               continue;
+//           }
+//           // cut-off distance
+//           if (dist > cfg_->obstacles.min_obstacle_dist*cfg_->obstacles.obstacle_association_cutoff_factor)
+//             continue;
           
-          // determine side (left or right) and assign obstacle if closer than the previous one
-          if (cross2d(pose_orient, obst->getCentroid() - teb_.Pose(i).position()) > 0) // left
-          {
-              if (dist < left_min_dist)
-              {
-                  left_min_dist = dist;
-                  left_obstacle = obst;
-              }
-          }
-          else
-          {
-              if (dist < right_min_dist)
-              {
-                  right_min_dist = dist;
-                  right_obstacle = obst;
-              }
-          }
-      }   
+//           // determine side (left or right) and assign obstacle if closer than the previous one
+//           if (cross2d(pose_orient, obst->getCentroid() - teb_.Pose(i).position()) > 0) // left
+//           {
+//               if (dist < left_min_dist)
+//               {
+//                   left_min_dist = dist;
+//                   left_obstacle = obst;
+//               }
+//           }
+//           else
+//           {
+//               if (dist < right_min_dist)
+//               {
+//                   right_min_dist = dist;
+//                   right_obstacle = obst;
+//               }
+//           }
+//       }   
       
-      if (left_obstacle)
-        iter_obstacle->push_back(left_obstacle);
-      if (right_obstacle)
-        iter_obstacle->push_back(right_obstacle);
+//       if (left_obstacle)
+//         iter_obstacle->push_back(left_obstacle);
+//       if (right_obstacle)
+//         iter_obstacle->push_back(right_obstacle);
 
-      // continue here to ignore obstacles for the first pose, but use them later to create the EdgeVelocityObstacleRatio edges
-      if (i == 0)
-      {
-        ++iter_obstacle;
-        continue;
-      }
+//       // continue here to ignore obstacles for the first pose, but use them later to create the EdgeVelocityObstacleRatio edges
+//       if (i == 0)
+//       {
+//         ++iter_obstacle;
+//         continue;
+//       }
 
-      // create obstacle edges
-      for (const ObstaclePtr obst : *iter_obstacle)
-        create_edge(i, obst.get());
-      ++iter_obstacle;
-  }
-}
+//       // create obstacle edges
+//       for (const ObstaclePtr obst : *iter_obstacle)
+//         create_edge(i, obst.get());
+//       ++iter_obstacle;
+//   }
+// }
 
 
-void TebOptimalPlanner::AddEdgesObstaclesLegacy(double weight_multiplier)
-{
-  if (cfg_->optim.weight_obstacle==0 || weight_multiplier==0 || obstacles_==nullptr)
-    return; // if weight equals zero skip adding edges!
+// void TebOptimalPlanner::AddEdgesObstaclesLegacy(double weight_multiplier)
+// {
+//   if (cfg_->optim.weight_obstacle==0 || weight_multiplier==0 || obstacles_==nullptr)
+//     return; // if weight equals zero skip adding edges!
 
-  Eigen::Matrix<double,1,1> information; 
-  information.fill(cfg_->optim.weight_obstacle * weight_multiplier);
+//   Eigen::Matrix<double,1,1> information; 
+//   information.fill(cfg_->optim.weight_obstacle * weight_multiplier);
     
-  Eigen::Matrix<double,2,2> information_inflated;
-  information_inflated(0,0) = cfg_->optim.weight_obstacle * weight_multiplier;
-  information_inflated(1,1) = cfg_->optim.weight_inflation;
-  information_inflated(0,1) = information_inflated(1,0) = 0;
+//   Eigen::Matrix<double,2,2> information_inflated;
+//   information_inflated(0,0) = cfg_->optim.weight_obstacle * weight_multiplier;
+//   information_inflated(1,1) = cfg_->optim.weight_inflation;
+//   information_inflated(0,1) = information_inflated(1,0) = 0;
   
-  bool inflated = cfg_->obstacles.inflation_dist > cfg_->obstacles.min_obstacle_dist;
+//   bool inflated = cfg_->obstacles.inflation_dist > cfg_->obstacles.min_obstacle_dist;
     
-  for (ObstContainer::const_iterator obst = obstacles_->begin(); obst != obstacles_->end(); ++obst)
-  {
-    if (cfg_->obstacles.include_dynamic_obstacles && (*obst)->isDynamic()) // we handle dynamic obstacles differently below
-      continue; 
+//   for (ObstContainer::const_iterator obst = obstacles_->begin(); obst != obstacles_->end(); ++obst)
+//   {
+//     if (cfg_->obstacles.include_dynamic_obstacles && (*obst)->isDynamic()) // we handle dynamic obstacles differently below
+//       continue; 
     
-    int index;
+//     int index;
     
-    if (cfg_->obstacles.obstacle_poses_affected >= teb_.sizePoses())
-      index =  teb_.sizePoses() / 2;
-    else
-      index = teb_.findClosestTrajectoryPose(*(obst->get()));
+//     if (cfg_->obstacles.obstacle_poses_affected >= teb_.sizePoses())
+//       index =  teb_.sizePoses() / 2;
+//     else
+//       index = teb_.findClosestTrajectoryPose(*(obst->get()));
      
     
-    // check if obstacle is outside index-range between start and goal
-    if ( (index <= 1) || (index > teb_.sizePoses()-2) ) // start and goal are fixed and findNearestBandpoint finds first or last conf if intersection point is outside the range
-	    continue; 
+//     // check if obstacle is outside index-range between start and goal
+//     if ( (index <= 1) || (index > teb_.sizePoses()-2) ) // start and goal are fixed and findNearestBandpoint finds first or last conf if intersection point is outside the range
+// 	    continue; 
         
-    if (inflated)
-    {
-        EdgeInflatedObstacle* dist_bandpt_obst = new EdgeInflatedObstacle;
-        dist_bandpt_obst->setVertex(0,teb_.PoseVertex(index));
-        dist_bandpt_obst->setInformation(information_inflated);
-        dist_bandpt_obst->setParameters(*cfg_, obst->get());
-        optimizer_->addEdge(dist_bandpt_obst);
-    }
-    else
-    {
-        EdgeObstacle* dist_bandpt_obst = new EdgeObstacle;
-        dist_bandpt_obst->setVertex(0,teb_.PoseVertex(index));
-        dist_bandpt_obst->setInformation(information);
-        dist_bandpt_obst->setParameters(*cfg_, obst->get());
-        optimizer_->addEdge(dist_bandpt_obst);
-    }
+//     if (inflated)
+//     {
+//         EdgeInflatedObstacle* dist_bandpt_obst = new EdgeInflatedObstacle;
+//         dist_bandpt_obst->setVertex(0,teb_.PoseVertex(index));
+//         dist_bandpt_obst->setInformation(information_inflated);
+//         dist_bandpt_obst->setParameters(*cfg_, obst->get());
+//         optimizer_->addEdge(dist_bandpt_obst);
+//     }
+//     else
+//     {
+//         EdgeObstacle* dist_bandpt_obst = new EdgeObstacle;
+//         dist_bandpt_obst->setVertex(0,teb_.PoseVertex(index));
+//         dist_bandpt_obst->setInformation(information);
+//         dist_bandpt_obst->setParameters(*cfg_, obst->get());
+//         optimizer_->addEdge(dist_bandpt_obst);
+//     }
 
-    for (int neighbourIdx=0; neighbourIdx < floor(cfg_->obstacles.obstacle_poses_affected/2); neighbourIdx++)
-    {
-      if (index+neighbourIdx < teb_.sizePoses())
-      {
-            if (inflated)
-            {
-                EdgeInflatedObstacle* dist_bandpt_obst_n_r = new EdgeInflatedObstacle;
-                dist_bandpt_obst_n_r->setVertex(0,teb_.PoseVertex(index+neighbourIdx));
-                dist_bandpt_obst_n_r->setInformation(information_inflated);
-                dist_bandpt_obst_n_r->setParameters(*cfg_, obst->get());
-                optimizer_->addEdge(dist_bandpt_obst_n_r);
-            }
-            else
-            {
-                EdgeObstacle* dist_bandpt_obst_n_r = new EdgeObstacle;
-                dist_bandpt_obst_n_r->setVertex(0,teb_.PoseVertex(index+neighbourIdx));
-                dist_bandpt_obst_n_r->setInformation(information);
-                dist_bandpt_obst_n_r->setParameters(*cfg_, obst->get());
-                optimizer_->addEdge(dist_bandpt_obst_n_r);
-            }
-      }
-      if ( index - neighbourIdx >= 0) // needs to be casted to int to allow negative values
-      {
-            if (inflated)
-            {
-                EdgeInflatedObstacle* dist_bandpt_obst_n_l = new EdgeInflatedObstacle;
-                dist_bandpt_obst_n_l->setVertex(0,teb_.PoseVertex(index-neighbourIdx));
-                dist_bandpt_obst_n_l->setInformation(information_inflated);
-                dist_bandpt_obst_n_l->setParameters(*cfg_, obst->get());
-                optimizer_->addEdge(dist_bandpt_obst_n_l);
-            }
-            else
-            {
-                EdgeObstacle* dist_bandpt_obst_n_l = new EdgeObstacle;
-                dist_bandpt_obst_n_l->setVertex(0,teb_.PoseVertex(index-neighbourIdx));
-                dist_bandpt_obst_n_l->setInformation(information);
-                dist_bandpt_obst_n_l->setParameters(*cfg_, obst->get());
-                optimizer_->addEdge(dist_bandpt_obst_n_l);
-            }
-      }
-    } 
+//     for (int neighbourIdx=0; neighbourIdx < floor(cfg_->obstacles.obstacle_poses_affected/2); neighbourIdx++)
+//     {
+//       if (index+neighbourIdx < teb_.sizePoses())
+//       {
+//             if (inflated)
+//             {
+//                 EdgeInflatedObstacle* dist_bandpt_obst_n_r = new EdgeInflatedObstacle;
+//                 dist_bandpt_obst_n_r->setVertex(0,teb_.PoseVertex(index+neighbourIdx));
+//                 dist_bandpt_obst_n_r->setInformation(information_inflated);
+//                 dist_bandpt_obst_n_r->setParameters(*cfg_, obst->get());
+//                 optimizer_->addEdge(dist_bandpt_obst_n_r);
+//             }
+//             else
+//             {
+//                 EdgeObstacle* dist_bandpt_obst_n_r = new EdgeObstacle;
+//                 dist_bandpt_obst_n_r->setVertex(0,teb_.PoseVertex(index+neighbourIdx));
+//                 dist_bandpt_obst_n_r->setInformation(information);
+//                 dist_bandpt_obst_n_r->setParameters(*cfg_, obst->get());
+//                 optimizer_->addEdge(dist_bandpt_obst_n_r);
+//             }
+//       }
+//       if ( index - neighbourIdx >= 0) // needs to be casted to int to allow negative values
+//       {
+//             if (inflated)
+//             {
+//                 EdgeInflatedObstacle* dist_bandpt_obst_n_l = new EdgeInflatedObstacle;
+//                 dist_bandpt_obst_n_l->setVertex(0,teb_.PoseVertex(index-neighbourIdx));
+//                 dist_bandpt_obst_n_l->setInformation(information_inflated);
+//                 dist_bandpt_obst_n_l->setParameters(*cfg_, obst->get());
+//                 optimizer_->addEdge(dist_bandpt_obst_n_l);
+//             }
+//             else
+//             {
+//                 EdgeObstacle* dist_bandpt_obst_n_l = new EdgeObstacle;
+//                 dist_bandpt_obst_n_l->setVertex(0,teb_.PoseVertex(index-neighbourIdx));
+//                 dist_bandpt_obst_n_l->setInformation(information);
+//                 dist_bandpt_obst_n_l->setParameters(*cfg_, obst->get());
+//                 optimizer_->addEdge(dist_bandpt_obst_n_l);
+//             }
+//       }
+//     } 
     
-  }
-}
+//   }
+// }
 
 
-void TebOptimalPlanner::AddEdgesDynamicObstacles(double weight_multiplier)
-{
-  if (cfg_->optim.weight_obstacle==0 || weight_multiplier==0 || obstacles_==NULL )
-    return; // if weight equals zero skip adding edges!
+// void TebOptimalPlanner::AddEdgesDynamicObstacles(double weight_multiplier)
+// {
+//   if (cfg_->optim.weight_obstacle==0 || weight_multiplier==0 || obstacles_==NULL )
+//     return; // if weight equals zero skip adding edges!
 
-  Eigen::Matrix<double,2,2> information;
-  information(0,0) = cfg_->optim.weight_dynamic_obstacle * weight_multiplier;
-  information(1,1) = cfg_->optim.weight_dynamic_obstacle_inflation;
-  information(0,1) = information(1,0) = 0;
+//   Eigen::Matrix<double,2,2> information;
+//   information(0,0) = cfg_->optim.weight_dynamic_obstacle * weight_multiplier;
+//   information(1,1) = cfg_->optim.weight_dynamic_obstacle_inflation;
+//   information(0,1) = information(1,0) = 0;
   
-  for (ObstContainer::const_iterator obst = obstacles_->begin(); obst != obstacles_->end(); ++obst)
-  {
-    if (!(*obst)->isDynamic())
-      continue;
+//   for (ObstContainer::const_iterator obst = obstacles_->begin(); obst != obstacles_->end(); ++obst)
+//   {
+//     if (!(*obst)->isDynamic())
+//       continue;
 
-    // Skip first and last pose, as they are fixed
-    double time = teb_.TimeDiff(0);
-    for (int i=1; i < teb_.sizePoses() - 1; ++i)
-    {
-      EdgeDynamicObstacle* dynobst_edge = new EdgeDynamicObstacle(time);
-      dynobst_edge->setVertex(0,teb_.PoseVertex(i));
-      dynobst_edge->setInformation(information);
-      dynobst_edge->setParameters(*cfg_, obst->get());
-      optimizer_->addEdge(dynobst_edge);
-      time += teb_.TimeDiff(i); // we do not need to check the time diff bounds, since we iterate to "< sizePoses()-1".
-    }
-  }
-}
+//     // Skip first and last pose, as they are fixed
+//     double time = teb_.TimeDiff(0);
+//     for (int i=1; i < teb_.sizePoses() - 1; ++i)
+//     {
+//       EdgeDynamicObstacle* dynobst_edge = new EdgeDynamicObstacle(time);
+//       dynobst_edge->setVertex(0,teb_.PoseVertex(i));
+//       dynobst_edge->setInformation(information);
+//       dynobst_edge->setParameters(*cfg_, obst->get());
+//       optimizer_->addEdge(dynobst_edge);
+//       time += teb_.TimeDiff(i); // we do not need to check the time diff bounds, since we iterate to "< sizePoses()-1".
+//     }
+//   }
+// }
 
 void TebOptimalPlanner::AddEdgesViaPoints()
 {
