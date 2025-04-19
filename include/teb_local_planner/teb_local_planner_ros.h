@@ -414,8 +414,8 @@ private:
   costmap_2d::Costmap2D* costmap_; //!< Pointer to the 2d costmap (obtained from the costmap ros wrapper)
 
   // Create an instance of NarrowPassageDetector
-  double thre = 0.7;  // 임계값 설정
-  unsigned int num_samples =6;  // 샘플 개수 설정
+  double thre = 0.6;  // 임계값 설정
+  unsigned int num_samples =10;  // 샘플 개수 설정
 
   // Create an instance of sampleRejection
   const int rejection_num_samples = 10;
