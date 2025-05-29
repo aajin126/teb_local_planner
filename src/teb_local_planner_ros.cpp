@@ -871,29 +871,6 @@ while (samples.size() < num_samples)
 return samples;
 }
 
-void TebLocalPlannerROS::updateObstacleKDTree()
-{
-  unsigned int size_x = costmap_->getSizeInCellsX();
-  unsigned int size_y = costmap_->getSizeInCellsY();
-  double origin_x = costmap_->getOriginX();
-  double origin_y = costmap_->getOriginY();
-  double resolution = costmap_->getResolution();
-  obstacle_cloud_.pts.clear();
-  for (unsigned int i = 0; i < size_x; ++i) {
-    for (unsigned int j = 0; j < size_y; ++j) {
-      unsigned char cost = costmap_->getCost(i, j);
-      if (cost == costmap_2d::LETHAL_OBSTACLE || cost == costmap_2d::NO_INFORMATION) {
-        double wx = origin_x + (i + 0.5) * resolution;
-        double wy = origin_y + (j + 0.5) * resolution;
-        obstacle_cloud_.pts.push_back({ wx, wy });
-      }
-    }
-  }
-  obstacle_kd_tree_.reset(new KDTree2D(2, obstacle_cloud_, nanoflann::KDTreeSingleIndexAdaptorParams(10)));
-  obstacle_kd_tree_->buildIndex();
-  ROS_INFO("Obstacle kd-tree updated with %lu points", obstacle_cloud_.pts.size());
-}
-
 bool TebLocalPlannerROS::isObstacleAtPoint(double x, double y, double search_radius)
 {
   double query_pt[2] = { x, y };

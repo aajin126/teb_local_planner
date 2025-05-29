@@ -174,7 +174,6 @@ public:
   bool getObstaclePointsInCircle(const geometry_msgs::Point& center, double radius);
   double euclideanDistance(const geometry_msgs::Point& p1, const geometry_msgs::Point& p2);
   std::vector<geometry_msgs::Point> generateSamples(const std::vector<geometry_msgs::PoseStamped>& transformed_plan,const costmap_2d::Costmap2D& costmap);
-  void updateObstacleKDTree();
   bool isObstacleAtPoint(double x, double y, double search_radius);
   std::pair<geometry_msgs::Point, double> findMedialBallRadius(const geometry_msgs::Point& point, const costmap_2d::Costmap2D& costmap, const std::vector<float>& distance_field);
   geometry_msgs::Point performMedialAxisClimb(const geometry_msgs::Point& start_point, const costmap_2d::Costmap2D& costmap, const std::vector<float>& distance_field, double resolution, double origin_x, double origin_y);
