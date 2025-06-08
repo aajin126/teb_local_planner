@@ -168,16 +168,14 @@ public:
     */
   bool isGoalReached();
 
-  bool isSegmentCollisionFree(const geometry_msgs::Point& q_a,
+  bool isSegmentCollision(const geometry_msgs::Point& q_a,
                                                 const geometry_msgs::Point& q_b,
                                                 const std::vector<float>& distance_field,
                                                 double resolution,
                                                 unsigned int map_width,
                                                 unsigned int map_height,
                                                 double origin_x,
-                                                double origin_y,
-                                                int depth = 0,
-                                                int max_depth= 10);
+                                                double origin_y);
 double angleDiff(double a1, double a2);
 double euclideanDistance(const geometry_msgs::Point& a, const geometry_msgs::Point& b);
 int mapIndex(int x, int y, unsigned int map_width);
@@ -500,6 +498,8 @@ private:
   bool exist_viapoint = false;
   double obst_radius = 0.6;
   double ROBOT_RADIUS = 0.3;
+  int depth = 0;
+  int max_depth = 10;
   
 
   // flags
