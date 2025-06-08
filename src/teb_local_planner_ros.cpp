@@ -76,7 +76,7 @@ namespace teb_local_planner
 
 TebLocalPlannerROS::TebLocalPlannerROS() : costmap_ros_(NULL), tf_(NULL), costmap_model_(NULL),
                                            costmap_converter_loader_("costmap_converter", "costmap_converter::BaseCostmapToPolygons"),
-                                           dynamic_recfg_(NULL), custom_via_points_active_(false), goal_reached_(false), no_infeasible_plans_(0),
+                                           dynamic_recfg_(NULL), custom_via_points_active_(true), goal_reached_(false), no_infeasible_plans_(0),
                                            last_preferred_rotdir_(RotType::none), initialized_(false)
 {
 }
@@ -654,14 +654,26 @@ std::vector<std::pair<geometry_msgs::Point, double>> TebLocalPlannerROS::detectN
 
   std::vector<geometry_msgs::Point> narrow_points; // Store samples with obstacles
 
-  for (const auto& sample : samples)
+  // 1. costmap info
+  unsigned int map_width = costmap.getSizeInCellsX();
+  unsigned int map_height = costmap.getSizeInCellsY();
+  const unsigned char* costmap_data = costmap.getCharMap();
+  double resolution = costmap.getResolution();
+  double origin_x = costmap.getOriginX();
+  double origin_y = costmap.getOriginY();
+
+  // 2. create distance field
+  std::vector<float> distance_field(map_width * map_height, std::numeric_limits<float>::infinity());
+  sdt_dead_reckoning(map_width, map_height, 253, costmap_data, distance_field.data());
+
+  for (size_t i = 0; i < samples.size() - 1; ++i)
   {
-    auto obstacles_in_circle = getObstaclePointsInCircle(sample, obst_radius);
+    auto obstacles_in_circle = isSegmentCollisionFree(samples[i], samples[i + 1], distance_field, resolution, map_width, map_height, origin_x, origin_y);
 
     if (obstacles_in_circle)
     {
       //visualization_->visualizeNarrowSpace(sample, obst_radius);
-      narrow_points.push_back(sample);
+      narrow_points.push_back(samples[i]);
     }
   }
 
@@ -674,15 +686,6 @@ std::vector<std::pair<geometry_msgs::Point, double>> TebLocalPlannerROS::detectN
   // robot direction: (cos(yaw), sin(yaw))
   double heading_x = cos(yaw);
   double heading_y = sin(yaw);
-
-  // 1. costmap info
-  unsigned int map_width = costmap.getSizeInCellsX();
-  unsigned int map_height = costmap.getSizeInCellsY();
-  const unsigned char* costmap_data = costmap.getCharMap();
-
-  // 2. create distance field
-  std::vector<float> distance_field(map_width * map_height, std::numeric_limits<float>::infinity());
-  sdt_dead_reckoning(map_width, map_height, 253, costmap_data, distance_field.data());
    
   // 3. Find Medial points 
   for (const auto& point : narrow_points)
@@ -713,6 +716,96 @@ std::vector<std::pair<geometry_msgs::Point, double>> TebLocalPlannerROS::detectN
 
   }
   return medial_axis_point;
+}
+
+bool TebLocalPlannerROS::isSegmentCollisionFree(const geometry_msgs::Point& q_a,
+                                                const geometry_msgs::Point& q_b,
+                                                const std::vector<float>& distance_field,
+                                                double resolution,
+                                                unsigned int map_width,
+                                                unsigned int map_height,
+                                                double origin_x,
+                                                double origin_y,
+                                                int depth,
+                                                int max_depth)
+{
+    double dist = euclideanDistance(q_a, q_b);
+    double theta_a = std::atan2(q_b.y - q_a.y, q_b.x - q_a.x);
+    double delta_theta = angleDiff(0.0, theta_a);
+    double xi = 1.0 + ROBOT_RADIUS * delta_theta;
+
+    float delta_a = getClearance(q_a, distance_field, resolution,
+                                 map_width, map_height, origin_x, origin_y);
+    float delta_b = getClearance(q_b, distance_field, resolution,
+                                 map_width, map_height, origin_x, origin_y);
+
+    if (delta_a <= 0.0 || delta_b <= 0.0) {
+        std::cout << "[!] Collision: endpoint in contact or inside obstacle\n";
+        return true;
+    }
+
+    if (xi * dist < delta_a + delta_b)
+        return false;
+
+    if (depth >= max_depth) {
+        std::cout << "[!] Max depth reached, uncertain segment\n";
+        return true;
+    }
+
+    geometry_msgs::Point mid;
+    mid.x = (q_a.x + q_b.x) / 2.0;
+    mid.y = (q_a.y + q_b.y) / 2.0;
+
+    return isSegmentCollisionFree(q_a, mid, distance_field, resolution,
+                                   map_width, map_height, origin_x, origin_y, depth + 1, max_depth) ||
+           isSegmentCollisionFree(mid, q_b, distance_field, resolution,
+                                   map_width, map_height, origin_x, origin_y, depth + 1, max_depth);
+}
+
+double TebLocalPlannerROS::angleDiff(double a1, double a2) {
+    double diff = std::fmod(a2 - a1 + M_PI, 2 * M_PI) - M_PI;
+    return std::abs(diff);
+}
+
+double TebLocalPlannerROS::euclideanDistance(const geometry_msgs::Point& a, const geometry_msgs::Point& b) {
+    return std::hypot(a.x - b.x, a.y - b.y);
+}
+
+// 맵 좌표 → 1D index
+int TebLocalPlannerROS::mapIndex(int x, int y, unsigned int map_width) {
+    return y * map_width + x;
+}
+
+float TebLocalPlannerROS::getDistanceFromSDT(const geometry_msgs::Point& q,
+                                             const std::vector<float>& distance_field,
+                                             double resolution,
+                                             unsigned int map_width,
+                                             unsigned int map_height,
+                                             double origin_x,
+                                             double origin_y)
+{
+    int x_idx = static_cast<int>((q.x - origin_x) / resolution);
+    int y_idx = static_cast<int>((q.y - origin_y) / resolution);
+
+    if (x_idx < 0 || x_idx >= static_cast<int>(map_width) ||
+        y_idx < 0 || y_idx >= static_cast<int>(map_height))
+        return -1.0f;
+
+    float raw_distance = distance_field[mapIndex(x_idx, y_idx, map_width)];
+    return raw_distance;
+}
+
+// 구성 q의 로봇과 장애물 사이 최소 여유 거리 (반지름 감안)
+float TebLocalPlannerROS::getClearance(const geometry_msgs::Point& q,
+                                       const std::vector<float>& distance_field,
+                                       double resolution,
+                                       unsigned int map_width,
+                                       unsigned int map_height,
+                                       double origin_x,
+                                       double origin_y)
+{
+    return getDistanceFromSDT(q, distance_field, resolution,
+                               map_width, map_height, origin_x, origin_y) - ROBOT_RADIUS;
 }
 
 double TebLocalPlannerROS::calculateAngle(const geometry_msgs::Point& p1, const geometry_msgs::Point& p2, const geometry_msgs::Point& center)
@@ -799,10 +892,10 @@ bool TebLocalPlannerROS::getObstaclePointsInCircle(const geometry_msgs::Point& c
   return (obstacleCount >= min_obstacles);
 }
 
-double TebLocalPlannerROS::euclideanDistance(const geometry_msgs::Point& p1, const geometry_msgs::Point& p2)
-{
-  return std::sqrt(std::pow(p1.x - p2.x, 2) + std::pow(p1.y - p2.y, 2));
-}
+//double TebLocalPlannerROS::euclideanDistance(const geometry_msgs::Point& p1, const geometry_msgs::Point& p2)
+//{
+//  return std::sqrt(std::pow(p1.x - p2.x, 2) + std::pow(p1.y - p2.y, 2));
+//}
 
 //std::vector<geometry_msgs::Point> TebLocalPlannerROS::generateSamples(
 //  const std::vector<geometry_msgs::PoseStamped>& transformed_plan,

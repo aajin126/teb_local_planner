@@ -168,11 +168,39 @@ public:
     */
   bool isGoalReached();
 
+  bool isSegmentCollisionFree(const geometry_msgs::Point& q_a,
+                                                const geometry_msgs::Point& q_b,
+                                                const std::vector<float>& distance_field,
+                                                double resolution,
+                                                unsigned int map_width,
+                                                unsigned int map_height,
+                                                double origin_x,
+                                                double origin_y,
+                                                int depth = 0,
+                                                int max_depth= 10);
+double angleDiff(double a1, double a2);
+double euclideanDistance(const geometry_msgs::Point& a, const geometry_msgs::Point& b);
+int mapIndex(int x, int y, unsigned int map_width);
+float getDistanceFromSDT(const geometry_msgs::Point& q,
+                                             const std::vector<float>& distance_field,
+                                             double resolution,
+                                             unsigned int map_width,
+                                             unsigned int map_height,
+                                             double origin_x,
+                                             double origin_y);
+float getClearance(const geometry_msgs::Point& q,
+                                       const std::vector<float>& distance_field,
+                                       double resolution,
+                                       unsigned int map_width,
+                                       unsigned int map_height,
+                                       double origin_x,
+                                       double origin_y);
+
   std::vector<std::pair<geometry_msgs::Point, double>> detectNarrowPassages(const std::vector<geometry_msgs::PoseStamped>& transformed_plan, const costmap_2d::Costmap2D& costmap);
   double calculateAngle(const geometry_msgs::Point& p1, const geometry_msgs::Point& p2, const geometry_msgs::Point& center);
   int checkAndCount(int mx, int my);
   bool getObstaclePointsInCircle(const geometry_msgs::Point& center, double radius);
-  double euclideanDistance(const geometry_msgs::Point& p1, const geometry_msgs::Point& p2);
+  //double euclideanDistance(const geometry_msgs::Point& p1, const geometry_msgs::Point& p2);
   std::vector<geometry_msgs::Point> generateSamples(const std::vector<geometry_msgs::PoseStamped>& transformed_plan);
   std::pair<geometry_msgs::Point, double> findMedialBallRadius(const geometry_msgs::Point& point, const costmap_2d::Costmap2D& costmap, const std::vector<float>& distance_field);
   geometry_msgs::Point performMedialAxisClimb(const geometry_msgs::Point& start_point, const costmap_2d::Costmap2D& costmap, const std::vector<float>& distance_field, double resolution, double origin_x, double origin_y);
@@ -471,6 +499,7 @@ private:
   double goal_tolerance_ = 0.1;
   bool exist_viapoint = false;
   double obst_radius = 0.6;
+  double ROBOT_RADIUS = 0.3;
   
 
   // flags
