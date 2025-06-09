@@ -649,7 +649,7 @@ std::vector<std::pair<geometry_msgs::Point, double>> TebLocalPlannerROS::detectN
       narrow_points.push_back(sample);
     }
   }
-  
+
   double goal_threshold = 0.3;
 
   geometry_msgs::Point robot_position;
