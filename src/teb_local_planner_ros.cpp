@@ -690,6 +690,17 @@ std::vector<std::pair<geometry_msgs::Point, double>> TebLocalPlannerROS::detectN
   }
   return medial_axis_point;
 }
+int TebLocalPlannerROS::checkAndCount(int mx, int my)
+{
+  if (mx < 0 || my < 0 ||
+      mx >= static_cast<int>(costmap_->getSizeInCellsX()) ||
+      my >= static_cast<int>(costmap_->getSizeInCellsY()))
+    return 0;
+
+  unsigned char cost = costmap_->getCost(mx, my);
+  return (cost == costmap_2d::LETHAL_OBSTACLE || cost == costmap_2d::NO_INFORMATION) ? 1 : 0;
+}
+
 
 bool TebLocalPlannerROS::getObstaclePointsInCircle(const geometry_msgs::Point& center, double radius)
 {
