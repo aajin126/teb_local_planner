@@ -614,34 +614,6 @@ bool TebLocalPlannerROS::isGoalReached()
   return false;
 }
 
-// 2D 포인트 구조체 (파일 범위에 정의)
-struct Point2D {
-  double x, y;
-};
-
-// nanoflann용 포인트 클라우드 래퍼 (파일 범위에 정의)
-// local class 내에서 template member 함수 선언이 불가능하므로, 여기서 정의합니다.
-struct PointCloud2D {
-  std::vector<Point2D> pts;
-
-  inline size_t kdtree_get_point_count() const { return pts.size(); }
-  inline double kdtree_get_pt(const size_t idx, const size_t dim) const {
-    return (dim == 0) ? pts[idx].x : pts[idx].y;
-  }
-  // nanoflann에서는 이 함수가 옵션이므로, 항상 false를 반환하면 됩니다.
-  template <class BBOX>
-  bool kdtree_get_bbox(BBOX& /*bb*/) const { return false; }
-};
-
-typedef nanoflann::KDTreeSingleIndexAdaptor<
-    nanoflann::L2_Simple_Adaptor<double, PointCloud2D>,
-    PointCloud2D,
-    2
-> KDTree2D;
-
-//std::unique_ptr<KDTree2D> obstacle_kd_tree_;
-//PointCloud2D obstacle_cloud_;
-
 std::vector<std::pair<geometry_msgs::Point, double>> TebLocalPlannerROS::detectNarrowPassages(const std::vector<geometry_msgs::PoseStamped>& transformed_plan, const costmap_2d::Costmap2D& costmap)
 {
   std::vector<std::pair<geometry_msgs::Point, double>> medial_axis_point;
