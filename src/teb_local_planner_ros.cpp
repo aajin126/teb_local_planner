@@ -317,25 +317,25 @@ bool TebLocalPlannerROS::computeVelocityCommands(geometry_msgs::Twist& cmd_vel)
   geometry_msgs::PoseStamped dummy_pose;
   geometry_msgs::TwistStamped dummy_velocity, cmd_vel_stamped;
 
-//  auto start = std::chrono::high_resolution_clock::now();
+  auto start = std::chrono::high_resolution_clock::now();
   uint32_t outcome = computeVelocityCommands(dummy_pose, dummy_velocity, cmd_vel_stamped, dummy_message);
-//  // 시간 측정 종료
-//  auto end = std::chrono::high_resolution_clock::now();
-//
-//  // 경과 시간 계산 (마이크로초 단위)
-//  auto duration = std::chrono::duration<double, std::milli>(end - start).count();
-//
-//  // 파일에 저장
-//  std::ofstream outFile("/home/glab/execution_time.txt", std::ios::app); // 파일을 append 모드로 열기
-//  if (outFile.is_open()) {
-//      outFile << "Execution time: " << duration << " ms" << std::endl;
-//      outFile.close();
-//  } else {
-//      std::cerr << "Failed to open file for writing." << std::endl;
-//  }
-//
-//  // 콘솔 출력
-//  std::cout << "Execution time: " << duration << " ms" << std::endl;
+  // 시간 측정 종료
+  auto end = std::chrono::high_resolution_clock::now();
+
+  // 경과 시간 계산 (마이크로초 단위)
+  auto duration = std::chrono::duration<double, std::milli>(end - start).count();
+
+  // 파일에 저장
+  std::ofstream outFile("/home/glab/execution_time.txt", std::ios::app); // 파일을 append 모드로 열기
+  if (outFile.is_open()) {
+      outFile << "Execution time: " << duration << " ms" << std::endl;
+      outFile.close();
+  } else {
+      std::cerr << "Failed to open file for writing." << std::endl;
+  }
+
+  // 콘솔 출력
+  std::cout << "Execution time: " << duration << " ms" << std::endl;
   cmd_vel = cmd_vel_stamped.twist;
 
   return outcome == mbf_msgs::ExePathResult::SUCCESS;
@@ -473,25 +473,25 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
 
   // Now perform the actual planning
   // bool success = planner_->plan(robot_pose_, robot_goal_, robot_vel_, cfg_.goal_tolerance.free_goal_vel); // straight line init
-//  auto start = std::chrono::high_resolution_clock::now();
+  auto start = std::chrono::high_resolution_clock::now();
   bool success = planner_->plan(transformed_plan, &robot_vel_, cfg_.goal_tolerance.free_goal_vel);
-//  // 시간 측정 종료
-//  auto end = std::chrono::high_resolution_clock::now();
-//
-//  // 경과 시간 계산 (마이크로초 단위)
-//  auto duration = std::chrono::duration<double, std::milli>(end - start).count();
-//
-//  // 파일에 저장
-//  std::ofstream outFile("/home/glab/execution_time.txt", std::ios::app); // 파일을 append 모드로 열기
-//  if (outFile.is_open()) {
-//      outFile << "Optimization time: " << duration << " ms" << std::endl;
-//      outFile.close();
-//  } else {
-//      std::cerr << "Failed to open file for writing." << std::endl;
-//  }
-//
-//  // 콘솔 출력
-//  std::cout << "Optimization time: " << duration << " ms" << std::endl;
+  // 시간 측정 종료
+  auto end = std::chrono::high_resolution_clock::now();
+
+  // 경과 시간 계산 (마이크로초 단위)
+  auto duration = std::chrono::duration<double, std::milli>(end - start).count();
+
+  // 파일에 저장
+  std::ofstream outFile("/home/glab/execution_time.txt", std::ios::app); // 파일을 append 모드로 열기
+  if (outFile.is_open()) {
+      outFile << "Optimization time: " << duration << " ms" << std::endl;
+      outFile.close();
+  } else {
+      std::cerr << "Failed to open file for writing." << std::endl;
+  }
+
+  // 콘솔 출력
+  std::cout << "Optimization time: " << duration << " ms" << std::endl;
 
   ROS_DEBUG("Plan result: %s", success ? "successful" : "failed");
 
@@ -916,6 +916,7 @@ geometry_msgs::Point TebLocalPlannerROS::performMedialAxisClimb(
     int cur_x = static_cast<int>((start_point.x - origin_x) / resolution);
     int cur_y = static_cast<int>((start_point.y - origin_y) / resolution);
     int cur_idx = cur_x + cur_y * map_width;
+    ROS_INFO("  cur_idx    = %d", cur_idx);
     float cur_dist = distance_field[cur_idx];
 
     bool moved = true;
@@ -962,6 +963,7 @@ geometry_msgs::Point TebLocalPlannerROS::performMedialAxisClimb(
         cur_x = best_x;
         cur_y = best_y;
         cur_idx = cur_x + cur_y * map_width;
+        ROS_INFO("  fin_idx    = %d", cur_idx);
         cur_dist = distance_field[cur_idx];
 
         iteration++;
