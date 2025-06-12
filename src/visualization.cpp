@@ -185,37 +185,69 @@ void TebVisualization::publishLocalPlanAndPoses(const TimedElasticBand& teb) con
     marker_pub_.publish(marker);
   }
 
-  void TebVisualization::visualizeMedialBall(const geometry_msgs::Point& center, double radius)
+void TebVisualization::visualizeMedialBall(const std::vector<Eigen::Vector2d>& centers)
+{
+  visualization_msgs::Marker marker;
+  marker.header.frame_id = "map";
+  marker.header.stamp = ros::Time::now();
+  marker.ns = "medial_points";
+  marker.id = 0;
+  marker.type = visualization_msgs::Marker::SPHERE_LIST;
+  marker.action = visualization_msgs::Marker::ADD;
+
+  marker.scale.x = 0.1;  // 점 크기
+  marker.scale.y = 0.1;
+  marker.scale.z = 0.1;
+
+  marker.color.a = 1.0;
+  marker.color.r = 1.0;
+  marker.color.g = 0.0;
+  marker.color.b = 0.0;
+
+  for (const auto& center : centers)
   {
-    visualization_msgs::Marker marker;
-    marker.header.frame_id = "map";
-    marker.header.stamp = ros::Time::now();
-    marker.ns = "medial_balls";
-    marker.id = static_cast<int>(center.x * 1000 + center.y * 1000);
-    marker.type = visualization_msgs::Marker::LINE_STRIP;
-    marker.action = visualization_msgs::Marker::ADD;
-
-    marker.scale.x = 0.02;
-    marker.color.a = 1.0;
-    marker.color.r = 1.0;
-    marker.color.g = 0.0;
-    marker.color.b = 0.0;
-
-    // Draw the medial ball centered at the new position
-    for (double angle = 0; angle <= 2 * M_PI; angle += M_PI / 36)
-    {
-      geometry_msgs::Point p;
-      p.x = center.x + radius * std::cos(angle);
-      p.y = center.y + radius * std::sin(angle);
-      p.z = 0.0;
-      marker.points.push_back(p);
-    }
-
-    ros::Duration lifetime(1.0);
-    marker.lifetime = lifetime;
-
-    marker_pub_.publish(marker);
+    geometry_msgs::Point p;
+    p.x = center.x();
+    p.y = center.y();
+    p.z = 0.0;
+    marker.points.push_back(p);
   }
+
+  marker.lifetime = ros::Duration(1.0);
+  marker_pub_.publish(marker);
+}
+
+//  void TebVisualization::visualizeMedialBall(const geometry_msgs::Point& center, double radius)
+//  {
+//    visualization_msgs::Marker marker;
+//    marker.header.frame_id = "map";
+//    marker.header.stamp = ros::Time::now();
+//    marker.ns = "medial_balls";
+//    marker.id = static_cast<int>(center.x * 1000 + center.y * 1000);
+//    marker.type = visualization_msgs::Marker::LINE_STRIP;
+//    marker.action = visualization_msgs::Marker::ADD;
+//
+//    marker.scale.x = 0.02;
+//    marker.color.a = 1.0;
+//    marker.color.r = 1.0;
+//    marker.color.g = 0.0;
+//    marker.color.b = 0.0;
+//
+//    // Draw the medial ball centered at the new position
+//    for (double angle = 0; angle <= 2 * M_PI; angle += M_PI / 36)
+//    {
+//      geometry_msgs::Point p;
+//      p.x = center.x + radius * std::cos(angle);
+//      p.y = center.y + radius * std::sin(angle);
+//      p.z = 0.0;
+//      marker.points.push_back(p);
+//    }
+//
+//    ros::Duration lifetime(1.0);
+//    marker.lifetime = lifetime;
+//
+//    marker_pub_.publish(marker);
+//  }
 
   void TebVisualization::visualizeNarrowSpace(const geometry_msgs::Point& center, double radius)
   {

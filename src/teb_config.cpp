@@ -136,6 +136,7 @@ void TebConfig::loadRosParamFromNodeHandle(const ros::NodeHandle& nh)
   nh.param("weight_velocity_obstacle_ratio", optim.weight_velocity_obstacle_ratio, optim.weight_velocity_obstacle_ratio);
   nh.param("weight_viapoint", optim.weight_viapoint, optim.weight_viapoint);
   nh.param("weight_prefer_rotdir", optim.weight_prefer_rotdir, optim.weight_prefer_rotdir);
+  nh.param("weight_medialpoint", optim.weight_medialpoint, optim.weight_medialpoint);
   nh.param("weight_adapt_factor", optim.weight_adapt_factor, optim.weight_adapt_factor);
   nh.param("obstacle_cost_exponent", optim.obstacle_cost_exponent, optim.obstacle_cost_exponent);
   
@@ -268,6 +269,7 @@ void TebConfig::reconfigure(TebLocalPlannerReconfigureConfig& cfg)
   optim.weight_dynamic_obstacle_inflation = cfg.weight_dynamic_obstacle_inflation;
   optim.weight_velocity_obstacle_ratio = cfg.weight_velocity_obstacle_ratio;
   optim.weight_viapoint = cfg.weight_viapoint;
+  optim.weight_medialpoint = cfg.weight_medialpoint;
   optim.weight_adapt_factor = cfg.weight_adapt_factor;
   optim.obstacle_cost_exponent = cfg.obstacle_cost_exponent;
   

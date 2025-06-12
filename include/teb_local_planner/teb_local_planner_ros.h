@@ -297,7 +297,9 @@ protected:
   void updateViaPointsContainer(const std::vector<geometry_msgs::PoseStamped>& transformed_plan, double min_separation);
 
   void updateCustomViaPointsContainer(const std::vector<geometry_msgs::PoseStamped>& transformed_plan, const costmap_2d::Costmap2D& costmap);
-  
+
+  void updateSignedDistanceField();
+
   /**
     * @brief Callback for the dynamic_reconfigure node.
     * 
@@ -455,7 +457,10 @@ private:
   boost::shared_ptr<base_local_planner::CostmapModel> costmap_model_;  
   TebConfig cfg_; //!< Config class that stores and manages all related parameters
   FailureDetector failure_detector_; //!< Detect if the robot got stucked
-  
+  std::vector<float>* distance_field_;
+  DistanceMapInfo* costmap_info_;
+
+
   std::vector<geometry_msgs::PoseStamped> global_plan_; //!< Store the current global plan
   
   base_local_planner::OdometryHelperRos odom_helper_; //!< Provides an interface to receive the current velocity from the robot
@@ -500,7 +505,7 @@ private:
   double ROBOT_RADIUS = 0.3;
   int depth = 0;
   int max_depth = 10;
-  
+
 
   // flags
   bool initialized_; //!< Keeps track about the correct initialization of this class

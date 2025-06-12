@@ -174,6 +174,7 @@ public:
     double weight_velocity_obstacle_ratio; //!< Optimization weight for satisfying a maximum allowed velocity with respect to the distance to a static obstacle
     double weight_viapoint; //!< Optimization weight for minimizing the distance to via-points
     double weight_prefer_rotdir; //!< Optimization weight for preferring a specific turning direction (-> currently only activated if an oscillation is detected, see 'oscillation_recovery'
+    double weight_medialpoint;
 
     double weight_adapt_factor; //!< Some special weights (currently 'weight_obstacle') are repeatedly scaled by this factor in each outer TEB iteration (weight_new = weight_old*factor); Increasing weights iteratively instead of setting a huge value a-priori leads to better numerical conditions of the underlying optimization problem.
     double obstacle_cost_exponent; //!< Exponent for nonlinear obstacle cost (cost = linear_cost * obstacle_cost_exponent). Set to 1 to disable nonlinear cost (default)
@@ -340,6 +341,7 @@ public:
     optim.weight_dynamic_obstacle_inflation = 0.1;
     optim.weight_velocity_obstacle_ratio = 0;
     optim.weight_viapoint = 1;
+    optim.weight_medialpoint = 50;
     optim.weight_prefer_rotdir = 50;
 
     optim.weight_adapt_factor = 2.0;

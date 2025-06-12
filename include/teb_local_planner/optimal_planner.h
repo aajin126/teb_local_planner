@@ -59,14 +59,19 @@
 #include <g2o/solvers/csparse/linear_solver_csparse.h>
 #include <g2o/solvers/cholmod/linear_solver_cholmod.h>
 
+//costmap
+#include <costmap_2d/costmap_2d_ros.h>
+
 // messages
 #include <nav_msgs/Path.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <tf/transform_datatypes.h>
 #include <teb_local_planner/TrajectoryMsg.h>
-
 #include <nav_msgs/Odometry.h>
+#include <geometry_msgs/Point.h>
+
 #include <limits.h>
+#include <vector>
 
 namespace teb_local_planner
 {
@@ -81,6 +86,20 @@ typedef g2o::LinearSolverCSparse<TEBBlockSolver::PoseMatrixType> TEBLinearSolver
 //! Typedef for a container storing via-points
 typedef std::vector< Eigen::Vector2d, Eigen::aligned_allocator<Eigen::Vector2d> > ViaPointContainer;
 
+struct DistanceMapInfo
+{
+  unsigned int map_width;
+  unsigned int map_height;
+  double resolution;
+  double origin_x;
+  double origin_y;
+  const unsigned char* costmap_data;
+
+  DistanceMapInfo()
+    : map_width(0), map_height(0), resolution(0), origin_x(0), origin_y(0), costmap_data(nullptr) {}
+};
+
+extern const std::vector<float>* distance_field_; ; //!< Store signed distance field for compute medial points
 
 /**
  * @class TebOptimalPlanner
@@ -114,8 +133,8 @@ public:
    * @param via_points Container storing via-points (optional)
    */
   TebOptimalPlanner(const TebConfig& cfg, ObstContainer* obstacles = NULL,
-                    TebVisualizationPtr visual = TebVisualizationPtr(), const ViaPointContainer* via_points = NULL);
-  
+                    TebVisualizationPtr visual = TebVisualizationPtr(), const ViaPointContainer* via_points = NULL, const std::vector<float>* distance_field = NULL, const DistanceMapInfo* costmap_info = NULL);
+
   /**
    * @brief Destruct the optimal planner.
    */
@@ -129,7 +148,7 @@ public:
     * @param via_points Container storing via-points (optional)
     */
   void initialize(const TebConfig& cfg, ObstContainer* obstacles = NULL,
-                  TebVisualizationPtr visual = TebVisualizationPtr(), const ViaPointContainer* via_points = NULL);
+                  TebVisualizationPtr visual = TebVisualizationPtr(), const ViaPointContainer* via_points = NULL, const std::vector<float>* distance_field = NULL, const DistanceMapInfo* costmap_info = NULL);
 
   /** @name Plan a trajectory  */
   //@{
@@ -299,8 +318,43 @@ public:
   const ViaPointContainer& getViaPoints() const {return *via_points_;}
 
   //@}
-	  
-  
+
+
+  /** @name Take distance map into account */
+  //@{
+
+
+  /**
+   * @brief Assign a new signed distance field
+   */
+  void setDistanceField(const std::vector<float>* distance_field) { distance_field_ = distance_field;}
+
+
+  /**
+   * @brief Access the internal distance field.
+   * @return Const reference to the distance field.
+   */
+  const std::vector<float>& getDistanceField() const { return *distance_field_; }
+
+  //@}
+
+  /** @name Take costmap info into account */
+  //@{
+
+
+  /**
+   * @brief Assign a new signed costmap info
+   */
+  void setDistanceMapInfo(const DistanceMapInfo* costmap_info) { costmap_info_ = costmap_info;}
+
+  /**
+   * @brief Access the internal costmap info.
+   * @return Const reference to the costmap info.
+   */
+  const DistanceMapInfo* getDistanceMapInfo() const { return costmap_info_; }
+
+  //@}
+
   /** @name Visualization */
   //@{
   
@@ -580,6 +634,9 @@ protected:
    * @see buildGraph
    * @see optimizeGraph
    */
+
+  void AddEdgesMedialAttraction();
+
   void AddEdgesTimeOptimal();
 
   /**
@@ -662,21 +719,30 @@ protected:
   void AddEdgesVelocityObstacleRatio();
   
   //@}
-  
-  
+
+Eigen::Vector2d findMedialBallCenter(
+  const Eigen::Vector2d& point,
+  const DistanceMapInfo& costmap_info,
+  const std::vector<float>& distance_field);
+
+Eigen::Vector2d performMedialAxisClimb(
+  const Eigen::Vector2d& start_point,
+  const std::vector<float>& distance_field,
+  unsigned int map_width, unsigned int map_height,
+  double resolution, double origin_x, double origin_y);
+
   /**
    * @brief Initialize and configure the g2o sparse optimizer.
    * @return shared pointer to the g2o::SparseOptimizer instance
    */
   boost::shared_ptr<g2o::SparseOptimizer> initOptimizer();
-    
 
   // external objects (store weak pointers)
   const TebConfig* cfg_; //!< Config class that stores and manages all related parameters
   ObstContainer* obstacles_; //!< Store obstacles that are relevant for planning
   const ViaPointContainer* via_points_; //!< Store via points for planning
-  std::vector<ObstContainer> obstacles_per_vertex_; //!< Store the obstacles associated with the n-1 initial vertices
-  
+  std::vector<ObstContainer> obstacles_per_vertex_; //!< Store the obstacles associated with the n-1 initial vertices\
+
   double cost_; //!< Store cost value of the current hyper-graph
   RotType prefer_rotdir_; //!< Store whether to prefer a specific initial rotation in optimization (might be activated in case the robot oscillates)
   
@@ -689,7 +755,10 @@ protected:
 
   bool initialized_; //!< Keeps track about the correct initialization of this class
   bool optimized_; //!< This variable is \c true as long as the last optimization has been completed successful
-  
+private:
+  const DistanceMapInfo* costmap_info_ = nullptr;
+  const std::vector<float>* distance_field_ = nullptr;
+  Eigen::Vector2d medial_point_;
 public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW    
 };
