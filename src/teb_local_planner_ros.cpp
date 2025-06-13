@@ -124,7 +124,7 @@ void TebLocalPlannerROS::initialize(std::string name, tf2_ros::Buffer* tf, costm
     costmap_ros_ = costmap_ros;
     costmap_ = costmap_ros_->getCostmap(); // locking should be done in MoveBase.
 
-    if (!costmap_info_)
+    if (costmap_info_.costmap_data == nullptr)
        updateSignedDistanceField();
 
     // create the planner instance
@@ -135,7 +135,7 @@ void TebLocalPlannerROS::initialize(std::string name, tf2_ros::Buffer* tf, costm
     }
     else
     {
-      planner_ = PlannerInterfacePtr(new TebOptimalPlanner(cfg_, &obstacles_, visualization_, &via_points_, distance_field_, costmap_info_));
+      planner_ = PlannerInterfacePtr(new TebOptimalPlanner(cfg_, &obstacles_, visualization_, &via_points_, &distance_field_, &costmap_info_));
       ROS_INFO("Parallel planning in distinctive topologies disabled.");
     }
 
@@ -1036,19 +1036,22 @@ void TebLocalPlannerROS::updateSignedDistanceField()
 
   ROS_DEBUG("updateSignedDistanceField");
 
-  costmap_info_ = new DistanceMapInfo();
+  costmap_info_.map_width = costmap_->getSizeInCellsX();
+  costmap_info_.map_height = costmap_->getSizeInCellsY();
+  costmap_info_.resolution = costmap_->getResolution();
+  costmap_info_.origin_x = costmap_->getOriginX();
+  costmap_info_.origin_y = costmap_->getOriginY();
+  costmap_info_.costmap_data = costmap_->getCharMap();
 
-  costmap_info_->map_width = costmap_->getSizeInCellsX();
-  costmap_info_->map_height = costmap_->getSizeInCellsY();
-  costmap_info_->resolution = costmap_->getResolution();
-  costmap_info_->origin_x = costmap_->getOriginX();
-  costmap_info_->origin_y = costmap_->getOriginY();
-  costmap_info_->costmap_data = costmap_->getCharMap();
+  distance_field_.assign(
+      costmap_info_.map_width * costmap_info_.map_height,
+      std::numeric_limits<float>::infinity());
 
-  if (distance_field_) delete distance_field_;
-
-  distance_field_ = new std::vector<float>(costmap_info_->map_width * costmap_info_->map_height, std::numeric_limits<float>::infinity());
-  sdt_dead_reckoning(costmap_info_->map_width, costmap_info_->map_height, 253, costmap_info_->costmap_data, distance_field_->data());
+  sdt_dead_reckoning(costmap_info_.map_width,
+                     costmap_info_.map_height,
+                     253,
+                     costmap_info_.costmap_data,
+                     distance_field_.data());
 
   ROS_DEBUG("Finishing update distance map");
 }

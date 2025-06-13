@@ -457,8 +457,8 @@ private:
   boost::shared_ptr<base_local_planner::CostmapModel> costmap_model_;  
   TebConfig cfg_; //!< Config class that stores and manages all related parameters
   FailureDetector failure_detector_; //!< Detect if the robot got stucked
-  std::vector<float>* distance_field_;
-  DistanceMapInfo* costmap_info_;
+  std::vector<float> distance_field_;
+  DistanceMapInfo costmap_info_;
 
 
   std::vector<geometry_msgs::PoseStamped> global_plan_; //!< Store the current global plan

@@ -99,8 +99,6 @@ struct DistanceMapInfo
     : map_width(0), map_height(0), resolution(0), origin_x(0), origin_y(0), costmap_data(nullptr) {}
 };
 
-extern const std::vector<float>* distance_field_; ; //!< Store signed distance field for compute medial points
-
 /**
  * @class TebOptimalPlanner
  * @brief This class optimizes an internal Timed Elastic Band trajectory using the g2o-framework.
@@ -351,7 +349,7 @@ public:
    * @brief Access the internal costmap info.
    * @return Const reference to the costmap info.
    */
-  const DistanceMapInfo* getDistanceMapInfo() const { return costmap_info_; }
+  const DistanceMapInfo& getDistanceMapInfo() const { return *costmap_info_; }
 
   //@}
 
@@ -722,8 +720,8 @@ protected:
 
 Eigen::Vector2d findMedialBallCenter(
   const Eigen::Vector2d& point,
-  const DistanceMapInfo& costmap_info,
-  const std::vector<float>& distance_field);
+  const std::vector<float>& distance_field,
+  const DistanceMapInfo& costmap_info);
 
 Eigen::Vector2d performMedialAxisClimb(
   const Eigen::Vector2d& start_point,
@@ -741,7 +739,9 @@ Eigen::Vector2d performMedialAxisClimb(
   const TebConfig* cfg_; //!< Config class that stores and manages all related parameters
   ObstContainer* obstacles_; //!< Store obstacles that are relevant for planning
   const ViaPointContainer* via_points_; //!< Store via points for planning
-  std::vector<ObstContainer> obstacles_per_vertex_; //!< Store the obstacles associated with the n-1 initial vertices\
+  std::vector<ObstContainer> obstacles_per_vertex_; //!< Store the obstacles associated with the n-1 initial vertices
+  const DistanceMapInfo* costmap_info_;
+  const std::vector<float>* distance_field_;
 
   double cost_; //!< Store cost value of the current hyper-graph
   RotType prefer_rotdir_; //!< Store whether to prefer a specific initial rotation in optimization (might be activated in case the robot oscillates)
@@ -756,8 +756,6 @@ Eigen::Vector2d performMedialAxisClimb(
   bool initialized_; //!< Keeps track about the correct initialization of this class
   bool optimized_; //!< This variable is \c true as long as the last optimization has been completed successful
 private:
-  const DistanceMapInfo* costmap_info_ = nullptr;
-  const std::vector<float>* distance_field_ = nullptr;
   Eigen::Vector2d medial_point_;
 public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW    

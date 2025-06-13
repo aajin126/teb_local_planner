@@ -54,13 +54,12 @@
 #include <memory>
 #include <limits>
 
-
 namespace teb_local_planner
 {
 
 // ============== Implementation ===================
 
-TebOptimalPlanner::TebOptimalPlanner() : cfg_(NULL), obstacles_(NULL), via_points_(NULL), cost_(HUGE_VAL), prefer_rotdir_(RotType::none),
+TebOptimalPlanner::TebOptimalPlanner() : cfg_(NULL), obstacles_(NULL), via_points_(NULL), distance_field_(NULL), costmap_info_(NULL), cost_(HUGE_VAL), prefer_rotdir_(RotType::none),
                                          initialized_(false), optimized_(false)
 {    
 }
@@ -661,7 +660,7 @@ void TebOptimalPlanner::AddEdgesMedialAttraction()
 
   int n = teb_.sizePoses();
 
-  if (!costmap_info_)
+  if (costmap_info_->costmap_data == nullptr)
   {
     ROS_ERROR("costmap info is null!");
     return;
@@ -674,13 +673,16 @@ void TebOptimalPlanner::AddEdgesMedialAttraction()
 
   medial_point_list_.clear();  // 리스트 초기화
 
-  for (int i = 1; i < n-2; ++i)
+  if (n<3) // we do not have any degrees of freedom for reaching medial-points
+    return;
+
+  for (int i = 1; i < n; ++i)
   {
     const VertexPose* pose = teb_.PoseVertex(i);
     const Eigen::Vector2d& pos = pose->position();
 
     ROS_DEBUG("Compute Medial Point");
-    medial_point_ = findMedialBallCenter(pos, *costmap_info_, *distance_field_);
+    medial_point_ = findMedialBallCenter(pos, *distance_field_, *costmap_info_);
     medial_point_list_.push_back(medial_point_);  // 리스트에 저장
     ROS_DEBUG("Finish Computing Medial Point");
 
@@ -851,10 +853,10 @@ void TebOptimalPlanner::AddEdgesVelocityObstacleRatio()
 
 Eigen::Vector2d TebOptimalPlanner::findMedialBallCenter(
   const Eigen::Vector2d& point,
-  const DistanceMapInfo& costmap_info,
-  const std::vector<float>& distance_field)
+  const std::vector<float>& distance_field,
+  const DistanceMapInfo& costmap_info)
 {
-    ROS_DEBUG("calculate medial ball center");
+    //ROS_DEBUG("calculate medial ball center");
 
     unsigned int map_width = costmap_info.map_width;
     unsigned int map_height = costmap_info.map_height;
@@ -863,6 +865,23 @@ Eigen::Vector2d TebOptimalPlanner::findMedialBallCenter(
     double origin_y = costmap_info.origin_y;
 
     ROS_INFO("distance_field size = %lu", distance_field.size());
+
+//    std::ofstream outFile("/home/glab/distance_field.txt", std::ios::app); // 파일을 append 모드로 열기
+//    if (outFile.is_open()) {
+//       outFile << "=== Distance Field Dump ===\n";
+//       for (unsigned int y = 0; y < map_height; ++y)
+//       {
+//          for (unsigned int x = 0; x < map_width; ++x)
+//          {
+//             int idx = x + y * map_width;
+//             outFile << distance_field[idx] << " ";
+//          }
+//          outFile << "\n";
+//       }
+//       outFile.close();
+//       } else {
+//       std::cerr << "Failed to open file for writing." << std::endl;
+//    }
 
     Eigen::Vector2d medial_center = performMedialAxisClimb(point, distance_field, map_width, map_height, resolution, origin_x, origin_y);
     ROS_DEBUG("finishing perform climb");
@@ -876,23 +895,9 @@ Eigen::Vector2d TebOptimalPlanner::performMedialAxisClimb(
   unsigned int map_width, unsigned int map_height,
   double resolution, double origin_x, double origin_y)
 {
-    if (!distance_field_)
-    {
-      ROS_ERROR("Distance field is null!");
-    }
-    ROS_DEBUG("Distance field is filled!");
-    ROS_INFO("distance_field size = %lu", distance_field.size());
-
-    ROS_INFO("Map Info:");
-    ROS_INFO("  map_width   = %u", map_width);
-    ROS_INFO("  map_height  = %u", map_height);
-    ROS_INFO("  resolution  = %.4f", resolution);
-    ROS_INFO("  origin_x    = %.4f", origin_x);
-    ROS_INFO("  origin_y    = %.4f", origin_y);
 
     int cur_x = static_cast<int>((start_point.x() - origin_x) / resolution);
     int cur_y = static_cast<int>((start_point.y() - origin_y) / resolution);
-    ROS_DEBUG("calculate cur position");
     ROS_INFO("Initial cell index: cur_x = %d, cur_y = %d", cur_x, cur_y);
     int cur_idx = cur_x + cur_y * map_width;
     ROS_INFO("  cur_idx    = %d", cur_idx);
@@ -950,7 +955,7 @@ Eigen::Vector2d TebOptimalPlanner::performMedialAxisClimb(
         cur_y = best_y;
         cur_idx = cur_x + cur_y * map_width;
         cur_dist = distance_field[cur_idx];
-        ROS_INFO("  fin_dist    = %.4f", cur_dist);
+        //ROS_INFO("  fin_dist    = %.4f", cur_dist);
 
         iteration++;
     }
@@ -958,6 +963,7 @@ Eigen::Vector2d TebOptimalPlanner::performMedialAxisClimb(
     return Eigen::Vector2d(origin_x + (cur_x + 0.5) * resolution,
                            origin_y + (cur_y + 0.5) * resolution);
 }
+
 
 bool TebOptimalPlanner::hasDiverged() const
 {
