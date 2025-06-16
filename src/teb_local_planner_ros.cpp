@@ -916,7 +916,6 @@ geometry_msgs::Point TebLocalPlannerROS::performMedialAxisClimb(
     int cur_x = static_cast<int>((start_point.x - origin_x) / resolution);
     int cur_y = static_cast<int>((start_point.y - origin_y) / resolution);
     int cur_idx = cur_x + cur_y * map_width;
-    ROS_INFO("  cur_idx    = %d", cur_idx);
     float cur_dist = distance_field[cur_idx];
 
     bool moved = true;
@@ -963,7 +962,6 @@ geometry_msgs::Point TebLocalPlannerROS::performMedialAxisClimb(
         cur_x = best_x;
         cur_y = best_y;
         cur_idx = cur_x + cur_y * map_width;
-        ROS_INFO("  fin_idx    = %d", cur_idx);
         cur_dist = distance_field[cur_idx];
 
         iteration++;

@@ -218,10 +218,12 @@ bool TebOptimalPlanner::optimizeTEB(int iterations_innerloop, int iterations_out
         return false;
     }
     optimized_ = true;
-    
+
     if (compute_cost_afterwards && i==iterations_outerloop-1) // compute cost vec only in the last iteration
+    {
+      ROS_INFO("Compute cost");
       computeCurrentCost(obst_cost_scale, viapoint_cost_scale, alternative_time_cost);
-      
+    }
     clearGraph();
     
     weight_multiplier *= cfg_->optim.weight_adapt_factor;
@@ -1075,14 +1077,17 @@ void TebOptimalPlanner::computeCurrentCost(double obst_cost_scale, double viapoi
         || dynamic_cast<EdgeInflatedObstacle*>(*it) != nullptr
         || dynamic_cast<EdgeDynamicObstacle*>(*it) != nullptr)
     {
+      ROS_INFO("EdgeObstacle");
       cur_cost *= obst_cost_scale;
     }
     else if (dynamic_cast<EdgeViaPoint*>(*it) != nullptr)
     {
+      ROS_INFO("EdgeViaPoint");
       cur_cost *= viapoint_cost_scale;
     }
     else if (dynamic_cast<EdgeTimeOptimal*>(*it) != nullptr && alternative_time_cost)
     {
+      ROS_INFO("EdgeTimeOptimal");
       continue; // skip these edges if alternative_time_cost is active
     }
     cost_ += cur_cost;
