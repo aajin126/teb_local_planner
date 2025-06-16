@@ -139,7 +139,7 @@ public:
 
   void publishGridSearchPath(const std::vector<geometry_msgs::Point>& grid_search_path);
   void visualizeSamples(const std::vector<geometry_msgs::Point>& samples);
-  void visualizeMedialBall(const std::vector<Eigen::Vector2d>& centers);
+  void visualizeMedialBall(const std::vector<std::pair<Eigen::Vector2d, double>>& medial_point_list_);
   void visualizeNarrowSpace(const geometry_msgs::Point& center, double radius);
 
   void publishInfeasibleRobotFootprintModel(const PoseSE2& current_pose, const BaseRobotFootprintModel& robot_model, const std::string& ns = "RobotInfeasibleFootprintModel",

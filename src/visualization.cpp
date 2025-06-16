@@ -185,37 +185,48 @@ void TebVisualization::publishLocalPlanAndPoses(const TimedElasticBand& teb) con
     marker_pub_.publish(marker);
   }
 
-void TebVisualization::visualizeMedialBall(const std::vector<Eigen::Vector2d>& centers)
+void TebVisualization::visualizeMedialBall(const std::vector<std::pair<Eigen::Vector2d, double>>& medial_point_list_)
 {
+  // 공통 속성 설정
   visualization_msgs::Marker marker;
   marker.header.frame_id = "map";
-  marker.header.stamp = ros::Time::now();
-  marker.ns = "medial_points";
-  marker.id = 0;
-  marker.type = visualization_msgs::Marker::SPHERE_LIST;
-  marker.action = visualization_msgs::Marker::ADD;
+  marker.header.stamp    = ros::Time::now();
+  marker.ns              = "medial_balls";
+  marker.type            = visualization_msgs::Marker::LINE_STRIP;
+  marker.action          = visualization_msgs::Marker::ADD;
 
-  marker.scale.x = 0.1;  // 점 크기
-  marker.scale.y = 0.1;
-  marker.scale.z = 0.1;
-
-  marker.color.a = 1.0;
-  marker.color.r = 1.0;
+  marker.scale.x = 0.02;   // 선 두께
+  marker.color.a = 1.0;    // 투명도
+  marker.color.r = 1.0;    // 빨강
   marker.color.g = 0.0;
   marker.color.b = 0.0;
 
-  for (const auto& center : centers)
-  {
-    geometry_msgs::Point p;
-    p.x = center.x();
-    p.y = center.y();
-    p.z = 0.0;
-    marker.points.push_back(p);
-  }
+  marker.lifetime = ros::Duration(1.0);  // 1초 뒤 자동 제거
 
-  marker.lifetime = ros::Duration(1.0);
-  marker_pub_.publish(marker);
+  // 각 (center, radius)마다 별도 마커 생성·출력
+  for (size_t i = 0; i < medial_point_list_.size(); ++i)
+  {
+    const auto& cp   = medial_point_list_[i];
+    const auto& cen  = cp.first;
+    double      r    = cp.second;
+
+    marker.id = static_cast<int>(i);   // 고유 ID 지정
+    marker.points.clear();
+
+    // 한 원을 충분히 세그먼트로 근사
+    for (double angle = 0.0; angle <= 2 * M_PI; angle += M_PI / 36.0)
+    {
+      geometry_msgs::Point p;
+      p.x = cen.x() + r * std::cos(angle);
+      p.y = cen.y() + r * std::sin(angle);
+      p.z = 0.0;
+      marker.points.push_back(p);
+    }
+
+    marker_pub_.publish(marker);
+  }
 }
+
 
 //  void TebVisualization::visualizeMedialBall(const geometry_msgs::Point& center, double radius)
 //  {

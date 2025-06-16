@@ -718,7 +718,7 @@ protected:
   
   //@}
 
-Eigen::Vector2d findMedialBallCenter(
+std::pair<Eigen::Vector2d, double> findMedialBallCenter(
   const Eigen::Vector2d& point,
   const std::vector<float>& distance_field,
   const DistanceMapInfo& costmap_info);
@@ -757,6 +757,7 @@ Eigen::Vector2d performMedialAxisClimb(
   bool optimized_; //!< This variable is \c true as long as the last optimization has been completed successful
 private:
   Eigen::Vector2d medial_point_;
+  std::vector<Eigen::Vector2d> medial_point_storage_;
 public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW    
 };

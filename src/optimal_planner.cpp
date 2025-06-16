@@ -340,19 +340,10 @@ bool TebOptimalPlanner::buildGraph(double weight_multiplier)
   
   // add TEB vertices
   AddTEBVertices();
-  
-  // // add Edges (local cost functions)
-  // if (cfg_->obstacles.legacy_obstacle_association)
-  //   AddEdgesObstaclesLegacy(weight_multiplier);
-  // else
-  //   AddEdgesObstacles(weight_multiplier);
-
-  // if (cfg_->obstacles.include_dynamic_obstacles)
-  //   AddEdgesDynamicObstacles();
 
   AddEdgesMedialAttraction();
 
-  AddEdgesViaPoints();
+  //AddEdgesViaPoints();
   
   AddEdgesVelocity();
   
@@ -652,7 +643,10 @@ void TebOptimalPlanner::AddEdgesAcceleration()
 
 void TebOptimalPlanner::AddEdgesMedialAttraction()
 {
-  std::vector<Eigen::Vector2d> medial_point_list_;
+  std::vector<std::pair<Eigen::Vector2d, double>> medial_point_list_;
+  //std::vector<Eigen::Vector2d> medial_point_storage_;
+
+
 
   if (cfg_->optim.weight_medialpoint == 0)
     return;
@@ -670,7 +664,7 @@ void TebOptimalPlanner::AddEdgesMedialAttraction()
     ROS_ERROR("Distance field is null!");
     return;
   }
-
+  medial_point_storage_.clear();
   medial_point_list_.clear();  // 리스트 초기화
 
   if (n<3) // we do not have any degrees of freedom for reaching medial-points
@@ -682,8 +676,13 @@ void TebOptimalPlanner::AddEdgesMedialAttraction()
     const Eigen::Vector2d& pos = pose->position();
 
     ROS_DEBUG("Compute Medial Point");
-    medial_point_ = findMedialBallCenter(pos, *distance_field_, *costmap_info_);
-    medial_point_list_.push_back(medial_point_);  // 리스트에 저장
+    auto result =  findMedialBallCenter(pos, *distance_field_, *costmap_info_);
+
+    medial_point_storage_.emplace_back(result.first);
+    const Eigen::Vector2d* medial_ptr = &medial_point_storage_.back();
+    double radius = result.second;
+
+    medial_point_list_.emplace_back(*medial_ptr, radius);  // 리스트에 저장
     ROS_DEBUG("Finish Computing Medial Point");
 
     Eigen::Matrix<double,1,1> information;
@@ -692,7 +691,7 @@ void TebOptimalPlanner::AddEdgesMedialAttraction()
     EdgeMedialAttraction* edge_medial_attraction = new EdgeMedialAttraction;
     edge_medial_attraction->setVertex(0, teb_.PoseVertex(i));
     edge_medial_attraction->setInformation(information);
-    edge_medial_attraction->setParameters(*cfg_, &medial_point_);
+    edge_medial_attraction->setParameters(*cfg_, medial_ptr);
     optimizer_->addEdge(edge_medial_attraction);
   }
 
@@ -851,7 +850,7 @@ void TebOptimalPlanner::AddEdgesVelocityObstacleRatio()
   }
 }
 
-Eigen::Vector2d TebOptimalPlanner::findMedialBallCenter(
+std::pair<Eigen::Vector2d, double> TebOptimalPlanner::findMedialBallCenter(
   const Eigen::Vector2d& point,
   const std::vector<float>& distance_field,
   const DistanceMapInfo& costmap_info)
@@ -866,27 +865,15 @@ Eigen::Vector2d TebOptimalPlanner::findMedialBallCenter(
 
     ROS_INFO("distance_field size = %lu", distance_field.size());
 
-//    std::ofstream outFile("/home/glab/distance_field.txt", std::ios::app); // 파일을 append 모드로 열기
-//    if (outFile.is_open()) {
-//       outFile << "=== Distance Field Dump ===\n";
-//       for (unsigned int y = 0; y < map_height; ++y)
-//       {
-//          for (unsigned int x = 0; x < map_width; ++x)
-//          {
-//             int idx = x + y * map_width;
-//             outFile << distance_field[idx] << " ";
-//          }
-//          outFile << "\n";
-//       }
-//       outFile.close();
-//       } else {
-//       std::cerr << "Failed to open file for writing." << std::endl;
-//    }
-
     Eigen::Vector2d medial_center = performMedialAxisClimb(point, distance_field, map_width, map_height, resolution, origin_x, origin_y);
+    int grid_x = static_cast<int>((medial_center.x() - origin_x) / resolution);
+    int grid_y = static_cast<int>((medial_center.y() - origin_y) / resolution);
+    int idx = grid_x + grid_y * map_width;
+    double radius = distance_field[idx]* resolution;
+
     ROS_DEBUG("finishing perform climb");
 
-    return medial_center;
+    return { medial_center, radius };
 }
 
 Eigen::Vector2d TebOptimalPlanner::performMedialAxisClimb(
