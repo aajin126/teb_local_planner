@@ -662,7 +662,7 @@ std::vector<std::pair<geometry_msgs::Point, double>> TebLocalPlannerROS::detectN
     }
   }
 
-  double goal_threshold = 0.3;
+  double goal_threshold = 0.2;
 
   geometry_msgs::Point robot_position;
   robot_position.x = robot_pose_.x();
@@ -699,7 +699,7 @@ std::vector<std::pair<geometry_msgs::Point, double>> TebLocalPlannerROS::detectN
 
     double distance_to_goal = euclideanDistance(final_center, transformed_plan.back().pose.position);
 
-    ROS_INFO("distance to goal : %lf", distance_to_goal);
+    //ROS_INFO("distance to goal : %lf", distance_to_goal);
 
     // threshold 
     if (medial_radius < thre && medial_radius >= 0.05 && distance_to_goal > goal_threshold)
@@ -737,8 +737,6 @@ double TebLocalPlannerROS::calculateAngle(const geometry_msgs::Point& p1, const 
   return 0.0;
 }
 
-// helper func: 주어진 grid 좌표 (mx, my)가 costmap 범위 내에 있고 장애물(또는 정보 없음)인지 검사.
-// if obstalce  1, or return 0.
 int TebLocalPlannerROS::checkAndCount(int mx, int my)
 {
   if (mx < 0 || my < 0 || 
@@ -752,26 +750,22 @@ int TebLocalPlannerROS::checkAndCount(int mx, int my)
 
 bool TebLocalPlannerROS::getObstaclePointsInCircle(const geometry_msgs::Point& center, double radius)
 {
-  int min_obstacles = 2;  // narrow하다고 판단하기 위한 최소 장애물 점 개수
+  int min_obstacles = 2;
 
-  // 중심 좌표를 costmap의 grid index로 변환
   unsigned int center_mx, center_my;
   if (!costmap_->worldToMap(center.x, center.y, center_mx, center_my))
     return false;  // center가 costmap 범위 밖이면 그냥 false
-  
-  // 반경을 grid 단위(셀 수)로 변환 (해상도로 나누어 정수화)
+
   double resolution = costmap_->getResolution();
   int grid_radius = std::max(1, static_cast<int>(radius / resolution));
 
   int obstacleCount = 0;
 
-  // Bresenham의 원 알고리즘을 사용하여 원 둘레상의 셀을 계산
   int x = grid_radius;
   int y = 0;
   int err = 1 - x;  // 초기 결정 변수
 
   while (y <= x) {
-    // 원의 8분할 대칭 영역에 해당하는 셀들을 검사
     obstacleCount += checkAndCount(center_mx + x, center_my + y);
     obstacleCount += checkAndCount(center_mx + y, center_my + x);
     obstacleCount += checkAndCount(center_mx - x, center_my + y);
