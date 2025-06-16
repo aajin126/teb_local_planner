@@ -423,6 +423,7 @@ void TebOptimalPlanner::AddTEBVertices()
 {
   // add vertices to graph
   ROS_DEBUG("Add vertices");
+  ROS_DEBUG("Add vertices : %d\n", teb_.sizePoses());
   ROS_DEBUG_COND(cfg_->optim.optimization_verbose, "Adding TEB vertices ...");
   unsigned int id_counter = 0; // used for vertices ids
   obstacles_per_vertex_.resize(teb_.sizePoses());
@@ -701,8 +702,6 @@ void TebOptimalPlanner::AddEdgesMedialAttraction()
   ROS_DEBUG("Finish Add medial point");
 }
 
-
-
 void TebOptimalPlanner::AddEdgesTimeOptimal()
 {
   if (cfg_->optim.weight_optimaltime==0) 
@@ -885,6 +884,7 @@ Eigen::Vector2d TebOptimalPlanner::performMedialAxisClimb(
 
     int cur_x = static_cast<int>((start_point.x() - origin_x) / resolution);
     int cur_y = static_cast<int>((start_point.y() - origin_y) / resolution);
+    ROS_INFO("Initial world coordinate: x = %d, y = %d", start_point.x(), start_point.y());
     ROS_INFO("Initial cell index: cur_x = %d, cur_y = %d", cur_x, cur_y);
     int cur_idx = cur_x + cur_y * map_width;
     ROS_INFO("  cur_idx    = %d", cur_idx);
@@ -1003,25 +1003,28 @@ void TebOptimalPlanner::computeCurrentCost(double obst_cost_scale, double viapoi
   {
     double cur_cost = (*it)->chi2();
 
-    if (dynamic_cast<EdgeObstacle*>(*it) != nullptr
-        || dynamic_cast<EdgeInflatedObstacle*>(*it) != nullptr
-        || dynamic_cast<EdgeDynamicObstacle*>(*it) != nullptr)
+    // if (dynamic_cast<EdgeObstacle*>(*it) != nullptr
+    //     || dynamic_cast<EdgeInflatedObstacle*>(*it) != nullptr
+    //     || dynamic_cast<EdgeDynamicObstacle*>(*it) != nullptr)
+    // {
+    //   cur_cost *= obst_cost_scale;
+    // }
+    // else if (dynamic_cast<EdgeViaPoint*>(*it) != nullptr)
+    // {
+    //   cur_cost *= viapoint_cost_scale;
+    // }
+    if (dynamic_cast<EdgeMedialAttraction*>(*it) != nullptr)
     {
       cur_cost *= obst_cost_scale;
-    }
-    else if (dynamic_cast<EdgeViaPoint*>(*it) != nullptr)
-    {
-      cur_cost *= viapoint_cost_scale;
-    }
-    else if (dynamic_cast<EdgeMedialAttraction*>(*it) != nullptr)
-    {
-      cur_cost *= obst_cost_scale;
+      ROS_INFO("EdgeMedialAttraction");
     }
     else if (dynamic_cast<EdgeTimeOptimal*>(*it) != nullptr && alternative_time_cost)
     {
+      ROS_INFO("EdgeTimeOptimal");
       continue; // skip these edges if alternative_time_cost is active
     }
     cost_ += cur_cost;
+    ROS_INFO("cost : %d", cost_);
   }
 
   // delete temporary created graph

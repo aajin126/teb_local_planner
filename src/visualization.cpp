@@ -201,10 +201,29 @@ void TebVisualization::visualizeMedialBall(const std::vector<std::pair<Eigen::Ve
   marker.color.g = 0.0;
   marker.color.b = 0.0;
 
-  marker.lifetime = ros::Duration(1.0);  // 1초 뒤 자동 제거
+  marker.lifetime = ros::Duration(0.0);
 
-  // 각 (center, radius)마다 별도 마커 생성·출력
-  for (size_t i = 0; i < medial_point_list_.size(); ++i)
+  visualization_msgs::Marker center_marker;
+  center_marker.header = marker.header;
+  center_marker.ns     = "medial_centers";
+  center_marker.type   = visualization_msgs::Marker::SPHERE;
+  center_marker.action = visualization_msgs::Marker::ADD;
+  center_marker.scale.x = 0.05;
+  center_marker.scale.y = 0.05;
+  center_marker.scale.z = 0.05;
+  center_marker.color.a = 1.0;
+  center_marker.color.r = 0.0;
+  center_marker.color.g = 0.0;
+  center_marker.color.b = 1.0;
+  center_marker.lifetime = ros::Duration(0.0);
+
+  // 현재 갱신할 마커 수
+  const size_t new_marker_count = medial_point_list_.size();
+
+  // 마커 출력을 위한 최대 index 추적
+  static size_t last_marker_count = 0;
+
+  for (size_t i = 0; i < new_marker_count; ++i)
   {
     const auto& cp   = medial_point_list_[i];
     const auto& cen  = cp.first;
@@ -213,7 +232,6 @@ void TebVisualization::visualizeMedialBall(const std::vector<std::pair<Eigen::Ve
     marker.id = static_cast<int>(i);   // 고유 ID 지정
     marker.points.clear();
 
-    // 한 원을 충분히 세그먼트로 근사
     for (double angle = 0.0; angle <= 2 * M_PI; angle += M_PI / 36.0)
     {
       geometry_msgs::Point p;
@@ -223,8 +241,37 @@ void TebVisualization::visualizeMedialBall(const std::vector<std::pair<Eigen::Ve
       marker.points.push_back(p);
     }
 
+    marker.action = visualization_msgs::Marker::ADD;
     marker_pub_.publish(marker);
+
+    // 중심점 마커
+    center_marker.id = static_cast<int>(i);
+    center_marker.pose.position.x = cen.x();
+    center_marker.pose.position.y = cen.y();
+    center_marker.pose.position.z = 0.0;
+    center_marker.pose.orientation.w = 1.0;  // 정방향
+
+    center_marker.action = visualization_msgs::Marker::ADD;
+    marker_pub_.publish(center_marker);
   }
+
+  // 남은 이전 마커 삭제
+  for (size_t i = new_marker_count; i < last_marker_count; ++i)
+  {
+    // 원 삭제
+    marker.id = static_cast<int>(i);
+    marker.points.clear();
+    marker.action = visualization_msgs::Marker::DELETE;
+    marker_pub_.publish(marker);
+
+    // 중심점 삭제
+    center_marker.id = static_cast<int>(i);
+    center_marker.action = visualization_msgs::Marker::DELETE;
+    marker_pub_.publish(center_marker);
+  }
+
+
+  last_marker_count = new_marker_count;
 }
 
 
