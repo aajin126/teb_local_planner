@@ -694,15 +694,15 @@ std::vector<std::pair<geometry_msgs::Point, double>> TebLocalPlannerROS::detectN
 
     double dot = dx * heading_x + dy * heading_y;
 
-    if (dot < 0)
-      continue;
+//    if (dot < 0)
+//      continue;
 
     double distance_to_goal = euclideanDistance(final_center, transformed_plan.back().pose.position);
 
     //ROS_INFO("distance to goal : %lf", distance_to_goal);
 
     // threshold 
-    if (medial_radius < thre && medial_radius >= 0.05 && distance_to_goal > goal_threshold)
+    if (medial_radius < thre && medial_radius >= 0.1 /*&& distance_to_goal > goal_threshold*/)
     {
       medial_axis_point.emplace_back(final_center, medial_radius);
       visualization_->visualizeMedialBall(final_center, medial_radius);
@@ -754,7 +754,7 @@ bool TebLocalPlannerROS::getObstaclePointsInCircle(const geometry_msgs::Point& c
 
   unsigned int center_mx, center_my;
   if (!costmap_->worldToMap(center.x, center.y, center_mx, center_my))
-    return false;  // center가 costmap 범위 밖이면 그냥 false
+    return false;
 
   double resolution = costmap_->getResolution();
   int grid_radius = std::max(1, static_cast<int>(radius / resolution));
@@ -763,7 +763,7 @@ bool TebLocalPlannerROS::getObstaclePointsInCircle(const geometry_msgs::Point& c
 
   int x = grid_radius;
   int y = 0;
-  int err = 1 - x;  // 초기 결정 변수
+  int err = 1 - x;
 
   while (y <= x) {
     obstacleCount += checkAndCount(center_mx + x, center_my + y);
@@ -816,76 +816,6 @@ std::vector<geometry_msgs::Point> TebLocalPlannerROS::generateSamples(
   return samples;
 }
 
-
-//std::vector<geometry_msgs::Point> TebLocalPlannerROS::generateSamples(
-//  const std::vector<geometry_msgs::PoseStamped>& transformed_plan,
-//  const costmap_2d::Costmap2D& costmap)
-//{
-//PointCloud2D cloud; // transformed_plan의 x,y 좌표를 kd-tree용 포인트 클라우드로 변환
-//cloud.pts.reserve(transformed_plan.size());
-//for (const auto& pose : transformed_plan)
-//  cloud.pts.push_back({ pose.pose.position.x, pose.pose.position.y });
-//
-//// nanoflann 2D kd-tree 구축
-//typedef nanoflann::KDTreeSingleIndexAdaptor<
-//    nanoflann::L2_Simple_Adaptor<double, PointCloud2D>,
-//    PointCloud2D,
-//    2 /* dimension */
-//> KDTree2D;
-//KDTree2D kd_tree(2, cloud, nanoflann::KDTreeSingleIndexAdaptorParams(10));
-//kd_tree.buildIndex();
-//
-//// Costmap 정보 및 난수 생성기 초기화
-//std::vector<geometry_msgs::Point> samples;
-//double origin_x = costmap.getOriginX();
-//double origin_y = costmap.getOriginY();
-//double resolution = costmap.getResolution();
-//unsigned int width = costmap.getSizeInCellsX();
-//unsigned int height = costmap.getSizeInCellsY();
-//std::random_device rd;
-//std::mt19937 gen(rd());
-//std::uniform_int_distribution<> dis_x(0, width - 1);
-//std::uniform_int_distribution<> dis_y(0, height - 1);
-//
-//// sampling parameter
-//double lambda = 1.0;
-//double threshold_distance = 0.2;
-//double threshold_distance_sq = threshold_distance * threshold_distance;
-//
-//// 원하는 샘플 개수(num_samples)는 클래스 멤버 또는 상수로 정의되어 있다고 가정
-//while (samples.size() < num_samples)
-//{
-//  int mx = dis_x(gen);
-//  int my = dis_y(gen);
-//
-//  // costmap에서 FREE_SPACE 셀만 사용
-//  if (costmap.getCost(mx, my) == costmap_2d::FREE_SPACE)
-//  {
-//    geometry_msgs::Point sample;
-//    sample.x = origin_x + mx * resolution;
-//    sample.y = origin_y + my * resolution;
-//
-//    // kd-tree로 sample에 대해 최근접 이웃 검색 (2D)
-//    double query_pt[2] = { sample.x, sample.y };
-//    size_t nearest_idx;
-//    double out_dist_sq;
-//    nanoflann::KNNResultSet<double> resultSet(1);
-//    resultSet.init(&nearest_idx, &out_dist_sq);
-//    kd_tree.findNeighbors(resultSet, query_pt, nanoflann::SearchParameters(10));
-//
-//    // 글로벌 경로와의 제곱 거리가 임계값 이내이면 채택
-//    if (out_dist_sq <= threshold_distance_sq)
-//    {
-//      double d_G = std::sqrt(out_dist_sq);  // 실제 거리 계산
-//      double sampling_weight = lambda * std::exp(-lambda * d_G);
-//      if (std::uniform_real_distribution<>(0, 1)(gen) < sampling_weight)
-//        samples.push_back(sample);
-//    }
-//  }
-//}
-//
-//return samples;
-//}
 
 bool TebLocalPlannerROS::isObstacleAtPoint(double x, double y, double search_radius)
 {
