@@ -750,7 +750,7 @@ int TebLocalPlannerROS::checkAndCount(int mx, int my)
 
 bool TebLocalPlannerROS::getObstaclePointsInCircle(const geometry_msgs::Point& center, double radius)
 {
-  int min_obstacles = 2;
+  int min_obstacles = 1;
 
   unsigned int center_mx, center_my;
   if (!costmap_->worldToMap(center.x, center.y, center_mx, center_my))
@@ -800,7 +800,7 @@ std::vector<geometry_msgs::Point> TebLocalPlannerROS::generateSamples(
 {
   std::vector<geometry_msgs::Point> samples;
 
-  const size_t step = 5;
+  const size_t step = 3;
 
   for (size_t i = 0; i < transformed_plan.size(); i += step)
   {
@@ -864,7 +864,7 @@ geometry_msgs::Point TebLocalPlannerROS::performMedialAxisClimb(
     float cur_dist = distance_field[cur_idx];
 
     // threshold 조건 추가
-    const float threshold = 0.3; // meter 단위
+    const float threshold = 0.4; // meter 단위
 
     if (cur_dist * resolution >= threshold)
     {
@@ -899,7 +899,6 @@ geometry_msgs::Point TebLocalPlannerROS::performMedialAxisClimb(
                 float n_dist = distance_field[n_idx];
 
                 if (n_dist * resolution >= threshold) {
-                    // threshold를 만족하면 바로 medial center로 간주하고 return
                     geometry_msgs::Point medial_center;
                     medial_center.x = origin_x + (nx + 0.5) * resolution;
                     medial_center.y = origin_y + (ny + 0.5) * resolution;
