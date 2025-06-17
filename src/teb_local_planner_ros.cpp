@@ -647,7 +647,7 @@ std::vector<std::pair<geometry_msgs::Point, double>> TebLocalPlannerROS::detectN
 
   visualization_->visualizeSamples(samples);
 
-  double obst_radius = 0.6;
+  double obst_radius = 0.3;
 
   std::vector<geometry_msgs::Point> narrow_points; // Store samples with obstacles
 
@@ -848,7 +848,6 @@ std::pair<geometry_msgs::Point, double> TebLocalPlannerROS::findMedialBallRadius
     return { medial_center, radius };
 }
 
-//1 step grid 
 geometry_msgs::Point TebLocalPlannerROS::performMedialAxisClimb(
   const geometry_msgs::Point& start_point,
   const costmap_2d::Costmap2D& costmap,
@@ -864,12 +863,22 @@ geometry_msgs::Point TebLocalPlannerROS::performMedialAxisClimb(
     int cur_idx = cur_x + cur_y * map_width;
     float cur_dist = distance_field[cur_idx];
 
+    // threshold 조건 추가
+    const float threshold = 0.3; // meter 단위
+
+    if (cur_dist * resolution >= threshold)
+    {
+        geometry_msgs::Point medial_center;
+        medial_center.x = origin_x + (cur_x + 0.5) * resolution;
+        medial_center.y = origin_y + (cur_y + 0.5) * resolution;
+        medial_center.z = 0.0;
+        return medial_center;
+    }
+
     bool moved = true;
     int max_iterations = 100;
     int iteration = 0;
 
-    std::vector<geometry_msgs::Point> grid_search_path;
-    // sample point를 medial axis 방향으로 옮기기 위한 hill-climbing 알고리즘
     while (moved && iteration < max_iterations)
     {
         moved = false;
@@ -877,20 +886,27 @@ geometry_msgs::Point TebLocalPlannerROS::performMedialAxisClimb(
         int best_x = cur_x;
         int best_y = cur_y;
 
-        // 8방향 중 가장 distance 값이 큰 방향으로 이동
         for (int dy = -1; dy <= 1; dy++) {
             for (int dx = -1; dx <= 1; dx++) {
                 if (dx == 0 && dy == 0) continue;
 
                 int nx = cur_x + dx;
                 int ny = cur_y + dy;
-                // 탐색 위치가 costmap 범위 내에 있는지 확인
                 if (nx < 0 || ny < 0 || nx >= static_cast<int>(map_width) || ny >= static_cast<int>(map_height))
                     continue;
 
                 int n_idx = nx + ny * map_width;
                 float n_dist = distance_field[n_idx];
-                // Move to the cell with a greater distance.
+
+                if (n_dist * resolution >= threshold) {
+                    // threshold를 만족하면 바로 medial center로 간주하고 return
+                    geometry_msgs::Point medial_center;
+                    medial_center.x = origin_x + (nx + 0.5) * resolution;
+                    medial_center.y = origin_y + (ny + 0.5) * resolution;
+                    medial_center.z = 0.0;
+                    return medial_center;
+                }
+
                 if (n_dist > best_dist) {
                     best_dist = n_dist;
                     best_x = nx;
@@ -900,11 +916,9 @@ geometry_msgs::Point TebLocalPlannerROS::performMedialAxisClimb(
             }
         }
 
-        // 더 먼 셀이 없다면 종료 (local maximum)
         if (!moved)
             break;
 
-        // 이동
         cur_x = best_x;
         cur_y = best_y;
         cur_idx = cur_x + cur_y * map_width;
@@ -913,7 +927,6 @@ geometry_msgs::Point TebLocalPlannerROS::performMedialAxisClimb(
         iteration++;
     }
 
-    // 최종 위치를 좌표로 변환
     geometry_msgs::Point medial_center;
     medial_center.x = origin_x + (cur_x + 0.5) * resolution;
     medial_center.y = origin_y + (cur_y + 0.5) * resolution;
@@ -921,6 +934,7 @@ geometry_msgs::Point TebLocalPlannerROS::performMedialAxisClimb(
 
     return medial_center;
 }
+
 
 
 void TebLocalPlannerROS::updateCustomViaPointsContainer(const std::vector<geometry_msgs::PoseStamped>& transformed_plan, const costmap_2d::Costmap2D& costmap)
