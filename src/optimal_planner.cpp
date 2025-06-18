@@ -1422,73 +1422,42 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
   if (look_ahead_idx < 0 || look_ahead_idx >= teb().sizePoses())
     look_ahead_idx = teb().sizePoses() - 1;
 
-//  for (int i = 0; i < teb().sizeTimeDiffs(); ++i)
-//  {
-//    const PoseSE2& pose1 = teb().Pose(i);
-//    const PoseSE2& pose2 = teb().Pose(i+1);
-//
-//    // CCD
-//    if (isSegmentInCollision(pose1, pose2, *distance_field_, *costmap_info_))
-//    {
-//      ROS_INFO("Segment in Collision");
-//      PoseSE2 mid_pose = PoseSE2(
-//          0.5 * (pose1.x() + pose2.x()),
-//          0.5 * (pose1.y() + pose2.y()),
-//          0.5 * (pose1.theta() + pose2.theta())
-//      );
-//      double dt = teb().TimeDiff(i);
-//      double dt_new = dt * 0.5;
-//      ROS_INFO("add pose between %d-th teb pose and %d-th teb pose ", i, i+1);
-//      //teb().deleteTimeDiff(i);
-//      //teb().insertTimeDiff(i,dt_new);
-//
-//      teb().TimeDiff(i) = dt_new;
-//      teb().insertPose(i+1, mid_pose);
-//      teb().insertTimeDiff(i+1, dt_new);  // dt_mid
-//
-//      teb().fixTimeDiff(i);
-//      teb().fixTimeDiff(i+1);
-//      ROS_INFO("Finish to add pose between %d-th teb pose and %d-th teb pose ", i, i+1);
-//    }
-//  }
+  int i = 0;
+  bool any_inserted = false;
+  while (i < teb().sizeTimeDiffs() && (i + 1) < teb().sizePoses())
+  {
+    const PoseSE2& pose1 = teb().Pose(i);
+    const PoseSE2& pose2 = teb().Pose(i + 1);
 
-    int i = 0;
-    bool any_inserted = false;
-    while (i < teb().sizeTimeDiffs())
+    if (isSegmentInCollision(pose1, pose2, *distance_field_, *costmap_info_))
     {
-      const PoseSE2& pose1 = teb().Pose(i);
-      const PoseSE2& pose2 = teb().Pose(i + 1);
+      ROS_INFO("Segment in Collision at %d", i);
 
-      if (isSegmentInCollision(pose1, pose2, *distance_field_, *costmap_info_))
-      {
-        ROS_INFO("Segment in Collision at %d", i);
+      PoseSE2 mid_pose(
+        0.5 * (pose1.x() + pose2.x()),
+        0.5 * (pose1.y() + pose2.y()),
+        0.5 * (pose1.theta() + pose2.theta())
+      );
 
-        PoseSE2 mid_pose(
-          0.5 * (pose1.x() + pose2.x()),
-          0.5 * (pose1.y() + pose2.y()),
-          0.5 * (pose1.theta() + pose2.theta())
-        );
+      double dt = teb().TimeDiff(i);
+      double dt_new = dt * 0.5;
 
-        double dt = teb().TimeDiff(i);
-        double dt_new = dt * 0.5;
+      teb().TimeDiff(i) = dt_new;
+      teb().insertPose(i + 1, mid_pose);
+      teb().insertTimeDiff(i + 1, dt_new);
 
-        teb().TimeDiff(i) = dt_new;
-        teb().insertPose(i + 1, mid_pose);
-        teb().insertTimeDiff(i + 1, dt_new);
+      teb().fixTimeDiff(i);
+      teb().fixTimeDiff(i + 1);
 
-        teb().fixTimeDiff(i);
-        teb().fixTimeDiff(i + 1);
+      any_inserted = true;
 
-        any_inserted = true;
-
-        // i 그대로 유지해서 삽입된 새 segment를 재검사할 수 있게 함
-        //continue;
-      }
-
-      i += 2;  // 충돌 없으면 다음으로
     }
-    if(any_inserted)
-      optimizeTEB(cfg_->optim.no_inner_iterations, cfg_->optim.no_outer_iterations);
+
+    i += 2;  // 충돌 없으면 다음으로
+  }
+
+  if(any_inserted)
+    optimizeTEB(cfg_->optim.no_inner_iterations, cfg_->optim.no_outer_iterations);
 
   for (int i=0; i <= look_ahead_idx; ++i)
   {
