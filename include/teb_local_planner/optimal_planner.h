@@ -760,6 +760,7 @@ bool isSegmentInCollision(const PoseSE2& pose1, const PoseSE2& pose2,const std::
 private:
   Eigen::Vector2d medial_point_;
   std::vector<Eigen::Vector2d> medial_point_storage_;
+  int collision = 0;
 public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW    
 };
