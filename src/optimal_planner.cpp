@@ -193,21 +193,12 @@ bool TebOptimalPlanner::optimizeTEB(int iterations_innerloop, int iterations_out
   ROS_DEBUG("optimizeTEB");
   double weight_multiplier = 1.0;
 
-  // TODO(roesmann): we introduced the non-fast mode with the support of dynamic obstacles
-  //                (which leads to better results in terms of x-y-t homotopy planning).
-  //                 however, we have not tested this mode intensively yet, so we keep
-  //                 the legacy fast mode as default until we finish our tests.
   bool fast_mode = !cfg_->obstacles.include_dynamic_obstacles;
   
   for(int i=0; i<iterations_outerloop; ++i)
   {
     if (cfg_->trajectory.teb_autosize)
-    {
-      //ROS_DEBUG("AUTORESIZE");
-      //teb_.autoResize(cfg_->trajectory.dt_ref, cfg_->trajectory.dt_hysteresis, cfg_->trajectory.min_samples, cfg_->trajectory.max_samples);
       teb_.autoResize(cfg_->trajectory.dt_ref, cfg_->trajectory.dt_hysteresis, cfg_->trajectory.min_samples, cfg_->trajectory.max_samples, fast_mode);
-
-    }
 
     success = buildGraph(weight_multiplier);
     if (!success) 
@@ -1431,6 +1422,34 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
   if (look_ahead_idx < 0 || look_ahead_idx >= teb().sizePoses())
     look_ahead_idx = teb().sizePoses() - 1;
 
+  for (int i = 0; i < look_ahead_idx; ++i)
+  {
+    const PoseSE2& pose1 = teb().Pose(i);
+    const PoseSE2& pose2 = teb().Pose(i+1);
+
+    // CCD
+    if (isSegmentInCollision(pose1, pose2, *distance_field_, *costmap_info_))
+    {
+      PoseSE2 mid_pose = PoseSE2(
+          0.5 * (pose1.x() + pose2.x()),
+          0.5 * (pose1.y() + pose2.y()),
+          0.5 * (pose1.theta() + pose2.theta())
+      );
+      double dt = teb().TimeDiff(i);
+      double dt_new = dt * 0.5;
+
+      teb().deleteTimeDiff(i);
+      teb().insertTimeDiff(i,dt_new);
+      teb().insertPose(i+1, mid_pose);
+      teb().insertTimeDiff(i+1, dt_new);  // dt_mid
+
+      teb().fixTimeDiff(i);
+      teb().fixTimeDiff(i+1);
+      ROS_INFO("add pose between %d-th teb pose and %d-th teb pose ", i, i+1);
+    }
+  }
+  optimizeTEB(cfg_->optim.no_inner_iterations, cfg_->optim.no_outer_iterations);
+
   for (int i=0; i <= look_ahead_idx; ++i)
   {
     if ( costmap_model->footprintCost(teb().Pose(i).x(), teb().Pose(i).y(), teb().Pose(i).theta(), footprint_spec, inscribed_radius, circumscribed_radius) == -1 )
@@ -1442,50 +1461,50 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
       return false;
     }
   }
-  for (int i = 0; i < look_ahead_idx; ++i)
-  {
-    const PoseSE2& pose1 = teb().Pose(i);
-    const PoseSE2& pose2 = teb().Pose(i+1);
-
-    // CCD
-    if (isSegmentInCollision(pose1, pose2,*distance_field_))
-    {
-      if (visualization_)
-        visualization_->publishInfeasibleRobotPose(pose1, *cfg_->robot_model, footprint_spec);
-
-      PoseSE2 mid_pose = PoseSE2(
-          0.5 * (pose1.x() + pose2.x()),
-          0.5 * (pose1.y() + pose2.y()),
-          0.5 * (pose1.theta() + pose2.theta())
-      );
-      double dt = teb().TimeDiff(i);
-      double dt_new = dt * 0.5;
-
-      teb().addPoseAndTimeDiff(mid_pose, dt_new);
-      teb().deleteTimediff(i);
-      teb().insertTimeDiff(i,dt_new);
-      teb().insertTimeDiff(i+1, dt_new);  // dt_mid
-
-      optimizeTEB(cfg_->optim.no_inner_iterations, 1);
-    }
-  }
 
   return true;
 }
 
-bool TebOptimalPlanner::isSegmentInCollision(const PoseSE2& pose1, const PoseSE2& pose2,const std::vector<float>& distance_field)
+bool TebOptimalPlanner::isSegmentInCollision(const PoseSE2& pose1, const PoseSE2& pose2,const std::vector<float>& distance_field, const DistanceMapInfo& costmap_info)
 {
-  const int num_checks = 10;
-  for (int i = 0; i <= num_checks; ++i)
-  {
-    double ratio = static_cast<double>(i) / num_checks;
-    double x = pose1.x() + ratio * (pose2.x() - pose1.x());
-    double y = pose1.y() + ratio * (pose2.y() - pose1.y());
-    double theta = pose1.theta() + ratio * (pose2.theta() - pose1.theta());
 
-      return true;
-  }
-  return false;
+  unsigned int width = costmap_info.map_width;
+  unsigned int height = costmap_info.map_height;
+  double resolution = costmap_info.resolution;
+  double origin_x = costmap_info.origin_x;
+  double origin_y = costmap_info.origin_y;
+
+  // 1. 두 pose 사이 회전 각도 차이
+  double dtheta = fabs(g2o::normalize_theta(pose2.theta() - pose1.theta()));
+
+  // 2. distance between poses
+  double dx = pose2.x() - pose1.x();
+  double dy = pose2.y() - pose1.y();
+  double dist_pose_to_pose = std::sqrt(dx*dx + dy*dy);
+
+  // 3. distance between obs and pose1
+  int mx1 = static_cast<int>((pose1.x() - origin_x) / resolution);
+  int my1 = static_cast<int>((pose1.y() - origin_y) / resolution);
+  float d_obs1 = 0.0;
+  if (mx1 >= 0 && my1 >= 0 && mx1 < width && my1 < height)
+    d_obs1 = distance_field[my1 * width + mx1];
+  else
+    return true;
+
+  // 4. distance between obs and pose2
+  int mx2 = static_cast<int>((pose2.x() - origin_x) / resolution);
+  int my2 = static_cast<int>((pose2.y() - origin_y) / resolution);
+  float d_obs2 = 0.0;
+  if (mx2 >= 0 && my2 >= 0 && mx2 < width && my2 < height)
+    d_obs2 = distance_field[my2 * width + mx2];
+  else
+    return true;
+
+  // 5. collision check
+  if (dtheta * dist_pose_to_pose >= d_obs1 + d_obs2)
+    return true; // potential collision
+
+  return false; // collision-free
 }
 
 } // namespace teb_local_planner

@@ -729,6 +729,8 @@ Eigen::Vector2d performMedialAxisClimb(
   unsigned int map_width, unsigned int map_height,
   double resolution, double origin_x, double origin_y);
 
+bool isSegmentInCollision(const PoseSE2& pose1, const PoseSE2& pose2,const std::vector<float>& distance_field, const DistanceMapInfo& costmap_info);
+
   /**
    * @brief Initialize and configure the g2o sparse optimizer.
    * @return shared pointer to the g2o::SparseOptimizer instance

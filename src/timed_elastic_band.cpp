@@ -223,6 +223,15 @@ void TimedElasticBand::setTimeDiffVertexFixed(int index, bool status)
   timediff_vec_.at(index)->setFixed(status);
 }
 
+void TimedElasticBand::fixTimeDiff(int index)
+{
+  fixed_index_vec_.insert(index);
+}
+
+bool TimedElasticBand::isTimeDiffFixed(int index) const
+{
+  return fixed_index_vec_.count(index) > 0;
+}
 
 void TimedElasticBand::autoResize(double dt_ref, double dt_hysteresis, int min_samples, int max_samples, bool fast_mode)
 {  
@@ -236,6 +245,9 @@ void TimedElasticBand::autoResize(double dt_ref, double dt_hysteresis, int min_s
     modified = false;
     for(int i=0; i < sizeTimeDiffs(); ++i) // TimeDiff connects Point(i) with Point(i+1)
     {
+      if (isTimeDiffFixed(i))
+        continue;
+
       if(TimeDiff(i) > dt_ref + dt_hysteresis && sizeTimeDiffs()<max_samples)
       {
           // Force the planner to have equal timediffs between poses (dt_ref +/- dt_hyteresis).

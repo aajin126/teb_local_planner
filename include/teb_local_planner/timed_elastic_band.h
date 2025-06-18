@@ -343,8 +343,9 @@ public:
   void deleteTimeDiffs(int index, int number);
   
   //@}
-  
-  
+
+  void fixTimeDiff(int index);
+  bool isTimeDiffFixed(int index) const;
   /** @name Init the trajectory */
   //@{
   
@@ -644,7 +645,8 @@ public:
 protected:
   PoseSequence pose_vec_; //!< Internal container storing the sequence of optimzable pose vertices
   TimeDiffSequence timediff_vec_;  //!< Internal container storing the sequence of optimzable timediff vertices
-  
+  std::set<int> fixed_index_vec_;
+
 public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 };
