@@ -777,102 +777,6 @@ void TebOptimalPlanner::AddEdgesVelocity()
   }
 }
 
-void TebOptimalPlanner::AddEdgesViaPoints()
-{
-  if (cfg_->optim.weight_viapoint==0 || via_points_==NULL || via_points_->empty() )
-    return; // if weight equals zero skip adding edges!
-
-  int start_pose_idx = 0;
-  
-  int n = teb_.sizePoses();
-  if (n<3) // we do not have any degrees of freedom for reaching via-points
-    return;
-  
-  for (ViaPointContainer::const_iterator vp_it = via_points_->begin(); vp_it != via_points_->end(); ++vp_it)
-  {
-    
-    int index = teb_.findClosestTrajectoryPose(*vp_it, NULL, start_pose_idx);
-    if (cfg_->trajectory.via_points_ordered)
-      start_pose_idx = index+2; // skip a point to have a DOF inbetween for further via-points
-     
-    // check if point conicides with goal or is located behind it
-    if ( index > n-2 ) 
-      index = n-2; // set to a pose before the goal, since we can move it away!
-    // check if point coincides with start or is located before it
-    if ( index < 1)
-    {
-      if (cfg_->trajectory.via_points_ordered)
-      {
-        index = 1; // try to connect the via point with the second (and non-fixed) pose. It is likely that autoresize adds new poses inbetween later.
-      }
-      else
-      {
-        ROS_DEBUG("TebOptimalPlanner::AddEdgesViaPoints(): skipping a via-point that is close or behind the current robot pose.");
-        continue; // skip via points really close or behind the current robot pose
-      }
-    }
-    Eigen::Matrix<double,1,1> information;
-    information.fill(cfg_->optim.weight_viapoint);
-    
-    EdgeViaPoint* edge_viapoint = new EdgeViaPoint;
-    edge_viapoint->setVertex(0,teb_.PoseVertex(index));
-    edge_viapoint->setInformation(information);
-    edge_viapoint->setParameters(*cfg_, &(*vp_it));
-    optimizer_->addEdge(edge_viapoint);   
-  }
-}
-
-void TebOptimalPlanner::AddEdgesVelocity()
-{
-  if (cfg_->robot.max_vel_y == 0) // non-holonomic robot
-  {
-    if ( cfg_->optim.weight_max_vel_x==0 && cfg_->optim.weight_max_vel_theta==0)
-      return; // if weight equals zero skip adding edges!
-
-    int n = teb_.sizePoses();
-    Eigen::Matrix<double,2,2> information;
-    information(0,0) = cfg_->optim.weight_max_vel_x;
-    information(1,1) = cfg_->optim.weight_max_vel_theta;
-    information(0,1) = 0.0;
-    information(1,0) = 0.0;
-
-    for (int i=0; i < n - 1; ++i)
-    {
-      EdgeVelocity* velocity_edge = new EdgeVelocity;
-      velocity_edge->setVertex(0,teb_.PoseVertex(i));
-      velocity_edge->setVertex(1,teb_.PoseVertex(i+1));
-      velocity_edge->setVertex(2,teb_.TimeDiffVertex(i));
-      velocity_edge->setInformation(information);
-      velocity_edge->setTebConfig(*cfg_);
-      optimizer_->addEdge(velocity_edge);
-    }
-  }
-  else // holonomic-robot
-  {
-    if ( cfg_->optim.weight_max_vel_x==0 && cfg_->optim.weight_max_vel_y==0 && cfg_->optim.weight_max_vel_theta==0)
-      return; // if weight equals zero skip adding edges!
-      
-    int n = teb_.sizePoses();
-    Eigen::Matrix<double,3,3> information;
-    information.fill(0);
-    information(0,0) = cfg_->optim.weight_max_vel_x;
-    information(1,1) = cfg_->optim.weight_max_vel_y;
-    information(2,2) = cfg_->optim.weight_max_vel_theta;
-
-    for (int i=0; i < n - 1; ++i)
-    {
-      EdgeVelocityHolonomic* velocity_edge = new EdgeVelocityHolonomic;
-      velocity_edge->setVertex(0,teb_.PoseVertex(i));
-      velocity_edge->setVertex(1,teb_.PoseVertex(i+1));
-      velocity_edge->setVertex(2,teb_.TimeDiffVertex(i));
-      velocity_edge->setInformation(information);
-      velocity_edge->setTebConfig(*cfg_);
-      optimizer_->addEdge(velocity_edge);
-    } 
-    
-  }
-}
-
 void TebOptimalPlanner::AddEdgesAcceleration()
 {
   if (cfg_->optim.weight_acc_lim_x==0  && cfg_->optim.weight_acc_lim_theta==0) 
@@ -977,59 +881,59 @@ void TebOptimalPlanner::AddEdgesAcceleration()
   }
 }
 
-//void TebOptimalPlanner::AddEdgesMedialAttraction()
-//{
-//  std::vector<std::pair<Eigen::Vector2d, double>> medial_point_list_;
-//  //std::vector<Eigen::Vector2d> medial_point_storage_;
-//
-//
-//
-//  if (cfg_->optim.weight_medialpoint == 0)
-//    return;
-//  ROS_DEBUG("Add medial point");
-//
-//  int n = teb_.sizePoses();
-//
-//  if (costmap_info_->costmap_data == nullptr)
-//  {
-//    ROS_ERROR("costmap info is null!");
-//    return;
-//  }
-//  if (!distance_field_)
-//  {
-//    ROS_ERROR("Distance field is null!");
-//    return;
-//  }
-//  medial_point_storage_.clear();
-//  medial_point_list_.clear();  // 리스트 초기화
-//
-//  if (n<3) // we do not have any degrees of freedom for reaching medial-points
-//    return;
-//
-//  for (int i = 1; i < n; ++i)
-//  {
-//    const VertexPose* pose = teb_.PoseVertex(i);
-//    const Eigen::Vector2d& pos = pose->position();
-//
-//    ROS_DEBUG("Compute Medial Point");
-//    auto result =  findMedialBallCenter(pos, *distance_field_, *costmap_info_);
-//
-//    medial_point_storage_.emplace_back(result.first);
-//    const Eigen::Vector2d* medial_ptr = &medial_point_storage_.back();
-//    double radius = result.second;
-//
-//    medial_point_list_.emplace_back(*medial_ptr, radius);  // 리스트에 저장
-//    ROS_DEBUG("Finish Computing Medial Point");
-//
-//    Eigen::Matrix<double,1,1> information;
-//    information.fill(cfg_->optim.weight_medialpoint);
-//
-//    EdgeMedialAttraction* edge_medial_attraction = new EdgeMedialAttraction;
-//    edge_medial_attraction->setVertex(0, teb_.PoseVertex(i));
-//    edge_medial_attraction->setInformation(information);
-//    edge_medial_attraction->setParameters(*cfg_, medial_ptr);
-//    optimizer_->addEdge(edge_medial_attraction);
-//  }
+void TebOptimalPlanner::AddEdgesMedialAttraction()
+{
+  std::vector<std::pair<Eigen::Vector2d, double>> medial_point_list_;
+  //std::vector<Eigen::Vector2d> medial_point_storage_;
+
+
+
+  if (cfg_->optim.weight_medialpoint == 0)
+    return;
+  ROS_DEBUG("Add medial point");
+
+  int n = teb_.sizePoses();
+
+  if (costmap_info_->costmap_data == nullptr)
+  {
+    ROS_ERROR("costmap info is null!");
+    return;
+  }
+  if (!distance_field_)
+  {
+    ROS_ERROR("Distance field is null!");
+    return;
+  }
+  medial_point_storage_.clear();
+  medial_point_list_.clear();  // 리스트 초기화
+
+  if (n<3) // we do not have any degrees of freedom for reaching medial-points
+    return;
+
+  for (int i = 1; i < n; ++i)
+  {
+    const VertexPose* pose = teb_.PoseVertex(i);
+    const Eigen::Vector2d& pos = pose->position();
+
+    ROS_DEBUG("Compute Medial Point");
+    auto result =  findMedialBallCenter(pos, *distance_field_, *costmap_info_);
+
+    medial_point_storage_.emplace_back(result.first);
+    const Eigen::Vector2d* medial_ptr = &medial_point_storage_.back();
+    double radius = result.second;
+
+    medial_point_list_.emplace_back(*medial_ptr, radius);  // 리스트에 저장
+    ROS_DEBUG("Finish Computing Medial Point");
+
+    Eigen::Matrix<double,1,1> information;
+    information.fill(cfg_->optim.weight_medialpoint);
+
+    EdgeMedialAttraction* edge_medial_attraction = new EdgeMedialAttraction;
+    edge_medial_attraction->setVertex(0, teb_.PoseVertex(i));
+    edge_medial_attraction->setInformation(information);
+    edge_medial_attraction->setParameters(*cfg_, medial_ptr);
+    optimizer_->addEdge(edge_medial_attraction);
+  }
 
   // 전체 리스트 시각화
   visualization_->visualizeMedialBall(medial_point_list_);
@@ -1547,36 +1451,6 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
       }
       return false;
     }
-    // Checks if the distance between two poses is higher than the robot radius or the orientation diff is bigger than the specified threshold
-    // and interpolates in that case.
-    // (if obstacles are pushing two consecutive poses away, the center between two consecutive poses might coincide with the obstacle ;-)!
-//    if (i<look_ahead_idx)
-//    {
-//      double delta_rot = g2o::normalize_theta(g2o::normalize_theta(teb().Pose(i+1).theta()) -
-//                                              g2o::normalize_theta(teb().Pose(i).theta()));
-//      Eigen::Vector2d delta_dist = teb().Pose(i+1).position()-teb().Pose(i).position();
-//      if(fabs(delta_rot) > cfg_->trajectory.min_resolution_collision_check_angular || delta_dist.norm() > inscribed_radius)
-//      {
-//        int n_additional_samples = std::max(std::ceil(fabs(delta_rot) / cfg_->trajectory.min_resolution_collision_check_angular),
-//                                            std::ceil(delta_dist.norm() / inscribed_radius)) - 1;
-//        PoseSE2 intermediate_pose = teb().Pose(i);
-//        for(int step = 0; step < n_additional_samples; ++step)
-//        {
-//          intermediate_pose.position() = intermediate_pose.position() + delta_dist / (n_additional_samples + 1.0);
-//          intermediate_pose.theta() = g2o::normalize_theta(intermediate_pose.theta() +
-//                                                           delta_rot / (n_additional_samples + 1.0));
-//          if ( costmap_model->footprintCost(intermediate_pose.x(), intermediate_pose.y(), intermediate_pose.theta(),
-//            footprint_spec, inscribed_radius, circumscribed_radius) == -1 )
-//          {
-//            if (visualization_)
-//            {
-//              visualization_->publishInfeasibleRobotPose(intermediate_pose, *cfg_->robot_model, footprint_spec);
-//            }
-//            return false;
-//          }
-//        }
-//      }
-//    }
   }
   return true;
 }
