@@ -376,7 +376,27 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
     
   // Now perform the actual planning
 //   bool success = planner_->plan(robot_pose_, robot_goal_, robot_vel_, cfg_.goal_tolerance.free_goal_vel); // straight line init
+
+  auto start = std::chrono::high_resolution_clock::now();
+  ROS_DEBUG("Start planning");
   bool success = planner_->plan(transformed_plan, &robot_vel_, cfg_.goal_tolerance.free_goal_vel);
+  // 시간 측정 종료
+  auto end = std::chrono::high_resolution_clock::now();
+
+  // 경과 시간 계산 (마이크로초 단위)
+  auto duration = std::chrono::duration<double, std::milli>(end - start).count();
+
+  // 파일에 저장
+  std::ofstream outFile("/home/glab/execution_time.txt", std::ios::app); // 파일을 append 모드로 열기
+  if (outFile.is_open()) {
+      outFile << "Optimization time: " << duration << " ms" << std::endl;
+      outFile.close();
+  } else {
+      std::cerr << "Failed to open file for writing." << std::endl;
+  }
+
+  // 콘솔 출력
+  std::cout << "Optimization time: " << duration << " ms" << std::endl;
   if (!success)
   {
     planner_->clearPlanner(); // force reinitialization for next time
