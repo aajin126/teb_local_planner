@@ -203,7 +203,7 @@ bool TebOptimalPlanner::optimizeTEB(int iterations_innerloop, int iterations_out
   {
     if (cfg_->trajectory.teb_autosize)
     {
-      ROS_DEBUG("AUTORESIZE");
+      //ROS_DEBUG("AUTORESIZE");
       //teb_.autoResize(cfg_->trajectory.dt_ref, cfg_->trajectory.dt_hysteresis, cfg_->trajectory.min_samples, cfg_->trajectory.max_samples);
       teb_.autoResize(cfg_->trajectory.dt_ref, cfg_->trajectory.dt_hysteresis, cfg_->trajectory.min_samples, cfg_->trajectory.max_samples, fast_mode);
 
@@ -1431,18 +1431,8 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
   if (look_ahead_idx < 0 || look_ahead_idx >= teb().sizePoses())
     look_ahead_idx = teb().sizePoses() - 1;
 
-  if (feasibility_check_lookahead_distance > 0){
-    for (int i=1; i < teb().sizePoses(); ++i){
-      double pose_distance=std::hypot(teb().Pose(i).x()-teb().Pose(0).x(), teb().Pose(i).y()-teb().Pose(0).y());
-      if(pose_distance > feasibility_check_lookahead_distance){
-        look_ahead_idx = i - 1;
-        break;
-      }
-    }
-  }
-
   for (int i=0; i <= look_ahead_idx; ++i)
-  {           
+  {
     if ( costmap_model->footprintCost(teb().Pose(i).x(), teb().Pose(i).y(), teb().Pose(i).theta(), footprint_spec, inscribed_radius, circumscribed_radius) == -1 )
     {
       if (visualization_)
@@ -1452,7 +1442,50 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
       return false;
     }
   }
+  for (int i = 0; i < look_ahead_idx; ++i)
+  {
+    const PoseSE2& pose1 = teb().Pose(i);
+    const PoseSE2& pose2 = teb().Pose(i+1);
+
+    // CCD
+    if (isSegmentInCollision(pose1, pose2,*distance_field_))
+    {
+      if (visualization_)
+        visualization_->publishInfeasibleRobotPose(pose1, *cfg_->robot_model, footprint_spec);
+
+      PoseSE2 mid_pose = PoseSE2(
+          0.5 * (pose1.x() + pose2.x()),
+          0.5 * (pose1.y() + pose2.y()),
+          0.5 * (pose1.theta() + pose2.theta())
+      );
+      double dt = teb().TimeDiff(i);
+      double dt_new = dt * 0.5;
+
+      teb().addPoseAndTimeDiff(mid_pose, dt_new);
+      teb().deleteTimediff(i);
+      teb().insertTimeDiff(i,dt_new);
+      teb().insertTimeDiff(i+1, dt_new);  // dt_mid
+
+      optimizeTEB(cfg_->optim.no_inner_iterations, 1);
+    }
+  }
+
   return true;
+}
+
+bool TebOptimalPlanner::isSegmentInCollision(const PoseSE2& pose1, const PoseSE2& pose2,const std::vector<float>& distance_field)
+{
+  const int num_checks = 10;
+  for (int i = 0; i <= num_checks; ++i)
+  {
+    double ratio = static_cast<double>(i) / num_checks;
+    double x = pose1.x() + ratio * (pose2.x() - pose1.x());
+    double y = pose1.y() + ratio * (pose2.y() - pose1.y());
+    double theta = pose1.theta() + ratio * (pose2.theta() - pose1.theta());
+
+      return true;
+  }
+  return false;
 }
 
 } // namespace teb_local_planner
