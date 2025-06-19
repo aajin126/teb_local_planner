@@ -135,7 +135,6 @@ void TebOptimalPlanner::registerG2OTypes()
   g2o::Factory* factory = g2o::Factory::instance();
   factory->registerType("VERTEX_POSE", new g2o::HyperGraphElementCreator<VertexPose>);
   factory->registerType("VERTEX_TIMEDIFF", new g2o::HyperGraphElementCreator<VertexTimeDiff>);
-
   factory->registerType("EDGE_TIME_OPTIMAL", new g2o::HyperGraphElementCreator<EdgeTimeOptimal>);
   factory->registerType("EDGE_SHORTEST_PATH", new g2o::HyperGraphElementCreator<EdgeShortestPath>);
   factory->registerType("EDGE_VELOCITY", new g2o::HyperGraphElementCreator<EdgeVelocity>);
@@ -246,6 +245,8 @@ bool TebOptimalPlanner::plan(const std::vector<geometry_msgs::PoseStamped>& init
   if (!teb_.isInit())
   {
     ROS_DEBUG("initialize");
+    teb().clearFixedTimeDiffs();
+    collision = 0;
     teb_.initTrajectoryToGoal(initial_plan, cfg_->robot.max_vel_x, cfg_->robot.max_vel_theta, cfg_->trajectory.global_plan_overwrite_orientation,
       cfg_->trajectory.min_samples, cfg_->trajectory.allow_init_with_backwards_motion);
     ROS_DEBUG("finish initialize");
@@ -263,6 +264,8 @@ bool TebOptimalPlanner::plan(const std::vector<geometry_msgs::PoseStamped>& init
     {
       ROS_DEBUG("New goal: distance to existing goal is higher than the specified threshold. Reinitalizing trajectories.");
       teb_.clearTimedElasticBand();
+      teb().clearFixedTimeDiffs();
+      collision = 0;
       teb_.initTrajectoryToGoal(initial_plan, cfg_->robot.max_vel_x, cfg_->robot.max_vel_theta, cfg_->trajectory.global_plan_overwrite_orientation,
         cfg_->trajectory.min_samples, cfg_->trajectory.allow_init_with_backwards_motion);
     }
@@ -969,8 +972,6 @@ void TebOptimalPlanner::AddEdgesShortestPath()
   }
 }
 
-
-
 void TebOptimalPlanner::AddEdgesKinematicsDiffDrive()
 {
   if (cfg_->optim.weight_kinematics_nh==0 && cfg_->optim.weight_kinematics_forward_drive==0)
@@ -1056,7 +1057,6 @@ void TebOptimalPlanner::AddEdgesPreferRotDir()
 
 void TebOptimalPlanner::AddEdgesVelocityObstacleRatio()
 {
-  ROS_DEBUG("AddEdgesVelocityObstacleRatio");
   Eigen::Matrix<double,2,2> information;
   information(0,0) = cfg_->optim.weight_velocity_obstacle_ratio;
   information(1,1) = cfg_->optim.weight_velocity_obstacle_ratio;
@@ -1250,7 +1250,6 @@ void TebOptimalPlanner::computeCurrentCost(double obst_cost_scale, double viapoi
 //    }
     else if (dynamic_cast<EdgeTimeOptimal*>(*it) != nullptr && alternative_time_cost)
     {
-      ROS_INFO("EdgeTimeOptimal");
       continue; // skip these edges if alternative_time_cost is active
     }
     cost_ += cur_cost;
@@ -1424,10 +1423,23 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
 
   int i = 0;
   bool any_inserted = false;
+  ROS_INFO("== Timediff BEFORE insertion ==");
+  for (int t = 0; t < teb().sizeTimeDiffs(); ++t)
+  {
+    std::ofstream outFile("/home/glab/execution_time.txt", std::ios::app);
+    if (outFile.is_open()) {
+        outFile << "BeforeTimeDiff[ " << t << "] = " << teb().TimeDiff(t) << std::endl;
+        outFile.close();
+    } else {
+        std::cerr << "Failed to open file for writing." << std::endl;
+    }
+    ROS_INFO("  TimeDiff[%d] = %f", t, teb().TimeDiff(t));
+  }
   while (i < teb().sizeTimeDiffs() && (i + 1) < teb().sizePoses())
   {
     const PoseSE2& pose1 = teb().Pose(i);
     const PoseSE2& pose2 = teb().Pose(i + 1);
+    ROS_INFO("Number of pose : %d", teb().sizePoses());
 
     if (isSegmentInCollision(pose1, pose2, *distance_field_, *costmap_info_))
     {
@@ -1448,16 +1460,31 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
 
       teb().fixTimeDiff(i);
       teb().fixTimeDiff(i + 1);
+      ROS_INFO("Number of pose : %d", teb().sizePoses());
 
       any_inserted = true;
 
     }
-
     i += 2;
   }
 
   if(any_inserted)
+  {
+    ROS_INFO("== Timediff AFTER insertion ==");
+    for (int t = 0; t < teb().sizeTimeDiffs(); ++t)
+    {
+      std::ofstream outFile("/home/glab/execution_time.txt", std::ios::app);
+      if (outFile.is_open()) {
+        outFile << "After TimeDiff[ " << t << "] = " << teb().TimeDiff(t) << std::endl;
+        outFile.close();
+      } else {
+        std::cerr << "Failed to open file for writing." << std::endl;
+      }
+      ROS_INFO("  TimeDiff[%d] = %f", t, teb().TimeDiff(t));
+    }
+
     optimizeTEB(cfg_->optim.no_inner_iterations, cfg_->optim.no_outer_iterations);
+  }
 
   for (int i=0; i <= look_ahead_idx; ++i)
   {
@@ -1470,7 +1497,6 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
       return false;
     }
   }
-
   return true;
 }
 

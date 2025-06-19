@@ -233,6 +233,11 @@ bool TimedElasticBand::isTimeDiffFixed(int index) const
   return fixed_index_vec_.count(index) > 0;
 }
 
+void TimedElasticBand::clearFixedTimeDiffs()
+{
+  fixed_index_vec_.clear();
+}
+
 void TimedElasticBand::autoResize(double dt_ref, double dt_hysteresis, int min_samples, int max_samples, bool fast_mode)
 {  
   //ROS_INFO("AUTO RESIZE");

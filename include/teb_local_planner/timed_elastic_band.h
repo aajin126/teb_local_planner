@@ -346,6 +346,7 @@ public:
 
   void fixTimeDiff(int index);
   bool isTimeDiffFixed(int index) const;
+  void clearFixedTimeDiffs();
   /** @name Init the trajectory */
   //@{
   
