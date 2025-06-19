@@ -1453,7 +1453,7 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
 
     }
 
-    i += 2;  // 충돌 없으면 다음으로
+    i += 2;
   }
 
   if(any_inserted)
