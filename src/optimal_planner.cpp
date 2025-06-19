@@ -259,7 +259,10 @@ bool TebOptimalPlanner::plan(const std::vector<geometry_msgs::PoseStamped>& init
     if (teb_.sizePoses()>0
         && (goal_.position() - teb_.BackPose().position()).norm() < cfg_->trajectory.force_reinit_new_goal_dist
         && fabs(g2o::normalize_theta(goal_.theta() - teb_.BackPose().theta())) < cfg_->trajectory.force_reinit_new_goal_angular) // actual warm start!
+    {
+      teb().clearFixedTimeDiffs();
       teb_.updateAndPruneTEB(start_, goal_, cfg_->trajectory.min_samples); // update TEB
+    }
     else // goal too far away -> reinit
     {
       ROS_DEBUG("New goal: distance to existing goal is higher than the specified threshold. Reinitalizing trajectories.");
@@ -1423,18 +1426,18 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
 
   int i = 0;
   bool any_inserted = false;
-  ROS_INFO("== Timediff BEFORE insertion ==");
-  for (int t = 0; t < teb().sizeTimeDiffs(); ++t)
-  {
-    std::ofstream outFile("/home/glab/execution_time.txt", std::ios::app);
-    if (outFile.is_open()) {
-        outFile << "BeforeTimeDiff[ " << t << "] = " << teb().TimeDiff(t) << std::endl;
-        outFile.close();
-    } else {
-        std::cerr << "Failed to open file for writing." << std::endl;
-    }
-    ROS_INFO("  TimeDiff[%d] = %f", t, teb().TimeDiff(t));
-  }
+//  ROS_INFO("== Timediff BEFORE insertion ==");
+//  for (int t = 0; t < teb().sizeTimeDiffs(); ++t)
+//  {
+//    std::ofstream outFile("/home/glab/execution_time.txt", std::ios::app);
+//    if (outFile.is_open()) {
+//        outFile << "BeforeTimeDiff[ " << t << "] = " << teb().TimeDiff(t) << std::endl;
+//        outFile.close();
+//    } else {
+//        std::cerr << "Failed to open file for writing." << std::endl;
+//    }
+//    ROS_INFO("  TimeDiff[%d] = %f", t, teb().TimeDiff(t));
+//  }
   while (i < teb().sizeTimeDiffs() && (i + 1) < teb().sizePoses())
   {
     const PoseSE2& pose1 = teb().Pose(i);
@@ -1470,18 +1473,18 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
 
   if(any_inserted)
   {
-    ROS_INFO("== Timediff AFTER insertion ==");
-    for (int t = 0; t < teb().sizeTimeDiffs(); ++t)
-    {
-      std::ofstream outFile("/home/glab/execution_time.txt", std::ios::app);
-      if (outFile.is_open()) {
-        outFile << "After TimeDiff[ " << t << "] = " << teb().TimeDiff(t) << std::endl;
-        outFile.close();
-      } else {
-        std::cerr << "Failed to open file for writing." << std::endl;
-      }
-      ROS_INFO("  TimeDiff[%d] = %f", t, teb().TimeDiff(t));
-    }
+//    ROS_INFO("== Timediff AFTER insertion ==");
+//    for (int t = 0; t < teb().sizeTimeDiffs(); ++t)
+//    {
+//      std::ofstream outFile("/home/glab/execution_time.txt", std::ios::app);
+//      if (outFile.is_open()) {
+//        outFile << "After TimeDiff[ " << t << "] = " << teb().TimeDiff(t) << std::endl;
+//        outFile.close();
+//      } else {
+//        std::cerr << "Failed to open file for writing." << std::endl;
+//      }
+//      ROS_INFO("  TimeDiff[%d] = %f", t, teb().TimeDiff(t));
+//    }
 
     optimizeTEB(cfg_->optim.no_inner_iterations, cfg_->optim.no_outer_iterations);
   }
