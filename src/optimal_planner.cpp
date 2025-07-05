@@ -346,7 +346,8 @@ bool TebOptimalPlanner::buildGraph(double weight_multiplier)
 
   if (cfg_->obstacles.include_dynamic_obstacles)
     AddEdgesDynamicObstacles();
-  //AddEdgesMedialAttraction();
+
+  AddEdgesMedialAttraction();
 
   AddEdgesViaPoints();
   
@@ -881,9 +882,6 @@ void TebOptimalPlanner::AddEdgesAcceleration()
 void TebOptimalPlanner::AddEdgesMedialAttraction()
 {
   std::vector<std::pair<Eigen::Vector2d, double>> medial_point_list_;
-  //std::vector<Eigen::Vector2d> medial_point_storage_;
-
-
 
   if (cfg_->optim.weight_medialpoint == 0)
     return;
@@ -1418,136 +1416,136 @@ void TebOptimalPlanner::getFullTrajectory(std::vector<TrajectoryPointMsg>& traje
 }
 
 
-bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
-                                             double inscribed_radius, double circumscribed_radius, int look_ahead_idx, double feasibility_check_lookahead_distance)
-{
-  if (look_ahead_idx < 0 || look_ahead_idx >= teb().sizePoses())
-    look_ahead_idx = teb().sizePoses() - 1;
-
-  int i = 0;
-  bool any_inserted = false;
-//  ROS_INFO("== Timediff BEFORE insertion ==");
-//  for (int t = 0; t < teb().sizeTimeDiffs(); ++t)
+//bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
+//                                             double inscribed_radius, double circumscribed_radius, int look_ahead_idx, double feasibility_check_lookahead_distance)
+//{
+//  if (look_ahead_idx < 0 || look_ahead_idx >= teb().sizePoses())
+//    look_ahead_idx = teb().sizePoses() - 1;
+//
+//  int i = 0;
+//  bool any_inserted = false;
+////  ROS_INFO("== Timediff BEFORE insertion ==");
+////  for (int t = 0; t < teb().sizeTimeDiffs(); ++t)
+////  {
+////    std::ofstream outFile("/home/glab/execution_time.txt", std::ios::app);
+////    if (outFile.is_open()) {
+////        outFile << "BeforeTimeDiff[ " << t << "] = " << teb().TimeDiff(t) << std::endl;
+////        outFile.close();
+////    } else {
+////        std::cerr << "Failed to open file for writing." << std::endl;
+////    }
+////    ROS_INFO("  TimeDiff[%d] = %f", t, teb().TimeDiff(t));
+////  }
+//  while (i < teb().sizeTimeDiffs() && (i + 1) < teb().sizePoses())
 //  {
-//    std::ofstream outFile("/home/glab/execution_time.txt", std::ios::app);
-//    if (outFile.is_open()) {
-//        outFile << "BeforeTimeDiff[ " << t << "] = " << teb().TimeDiff(t) << std::endl;
-//        outFile.close();
-//    } else {
-//        std::cerr << "Failed to open file for writing." << std::endl;
-//    }
-//    ROS_INFO("  TimeDiff[%d] = %f", t, teb().TimeDiff(t));
-//  }
-  while (i < teb().sizeTimeDiffs() && (i + 1) < teb().sizePoses())
-  {
-    const PoseSE2& pose1 = teb().Pose(i);
-    const PoseSE2& pose2 = teb().Pose(i + 1);
-    ROS_INFO("Number of pose : %d", teb().sizePoses());
-
-    if (isSegmentInCollision(pose1, pose2, *distance_field_, *costmap_info_))
-    {
-      ROS_INFO("Segment in Collision at %d", i);
-
-      PoseSE2 mid_pose(
-        0.5 * (pose1.x() + pose2.x()),
-        0.5 * (pose1.y() + pose2.y()),
-        0.5 * (pose1.theta() + pose2.theta())
-      );
-
-      double dt = teb().TimeDiff(i);
-      double dt_new = dt * 0.5;
-
-      teb().TimeDiff(i) = dt_new;
-      teb().insertPose(i + 1, mid_pose);
-      teb().insertTimeDiff(i + 1, dt_new);
-
-      teb().fixTimeDiff(i);
-      teb().fixTimeDiff(i + 1);
-      ROS_INFO("Number of pose : %d", teb().sizePoses());
-
-      any_inserted = true;
-
-    }
-    i += 2;
-  }
-
-  if(any_inserted)
-  {
-//    ROS_INFO("== Timediff AFTER insertion ==");
-//    for (int t = 0; t < teb().sizeTimeDiffs(); ++t)
+//    const PoseSE2& pose1 = teb().Pose(i);
+//    const PoseSE2& pose2 = teb().Pose(i + 1);
+//    ROS_INFO("Number of pose : %d", teb().sizePoses());
+//
+//    if (isSegmentInCollision(pose1, pose2, *distance_field_, *costmap_info_))
 //    {
-//      std::ofstream outFile("/home/glab/execution_time.txt", std::ios::app);
-//      if (outFile.is_open()) {
-//        outFile << "After TimeDiff[ " << t << "] = " << teb().TimeDiff(t) << std::endl;
-//        outFile.close();
-//      } else {
-//        std::cerr << "Failed to open file for writing." << std::endl;
-//      }
-//      ROS_INFO("  TimeDiff[%d] = %f", t, teb().TimeDiff(t));
+//      ROS_INFO("Segment in Collision at %d", i);
+//
+//      PoseSE2 mid_pose(
+//        0.5 * (pose1.x() + pose2.x()),
+//        0.5 * (pose1.y() + pose2.y()),
+//        0.5 * (pose1.theta() + pose2.theta())
+//      );
+//
+//      double dt = teb().TimeDiff(i);
+//      double dt_new = dt * 0.5;
+//
+//      teb().TimeDiff(i) = dt_new;
+//      teb().insertPose(i + 1, mid_pose);
+//      teb().insertTimeDiff(i + 1, dt_new);
+//
+//      teb().fixTimeDiff(i);
+//      teb().fixTimeDiff(i + 1);
+//      ROS_INFO("Number of pose : %d", teb().sizePoses());
+//
+//      any_inserted = true;
+//
 //    }
-
-    optimizeTEB(cfg_->optim.no_inner_iterations, cfg_->optim.no_outer_iterations);
-  }
-
-  for (int i=0; i <= look_ahead_idx; ++i)
-  {
-    if ( costmap_model->footprintCost(teb().Pose(i).x(), teb().Pose(i).y(), teb().Pose(i).theta(), footprint_spec, inscribed_radius, circumscribed_radius) == -1 )
-    {
-      if (visualization_)
-      {
-        visualization_->publishInfeasibleRobotPose(teb().Pose(i), *cfg_->robot_model, footprint_spec);
-      }
-      return false;
-    }
-  }
-  return true;
-}
-
-
-bool TebOptimalPlanner::isSegmentInCollision(const PoseSE2& pose1, const PoseSE2& pose2,const std::vector<float>& distance_field, const DistanceMapInfo& costmap_info)
-{
-
-  unsigned int width = costmap_info.map_width;
-  unsigned int height = costmap_info.map_height;
-  double resolution = costmap_info.resolution;
-  double origin_x = costmap_info.origin_x;
-  double origin_y = costmap_info.origin_y;
-
-  // 1. 두 pose 사이 회전 각도 차이
-  double dtheta = fabs(g2o::normalize_theta(pose2.theta() - pose1.theta()));
-
-  // 2. distance between poses
-  double dx = pose2.x() - pose1.x();
-  double dy = pose2.y() - pose1.y();
-  double dist_pose_to_pose = std::sqrt(dx*dx + dy*dy);
-
-  // 3. distance between obs and pose1
-  int mx1 = static_cast<int>((pose1.x() - origin_x) / resolution);
-  int my1 = static_cast<int>((pose1.y() - origin_y) / resolution);
-  float d_obs1 = 0.0;
-  int idx1 = my1 * width + mx1;
-  d_obs1 = distance_field[idx1] * resolution;
-
-
-  // 4. distance between obs and pose2
-  int mx2 = static_cast<int>((pose2.x() - origin_x) / resolution);
-  int my2 = static_cast<int>((pose2.y() - origin_y) / resolution);
-  float d_obs2 = 0.0;
-  int idx2 = my2 * width + mx2;
-  d_obs2 = distance_field[idx2] * resolution;
-
-  ROS_INFO("distance between pose : %f, sum of distance btw pose and obs : %f", dist_pose_to_pose, d_obs1 + d_obs2);
-  ROS_INFO("collision : %d", collision);
-  // 5. collision check
-  if (dist_pose_to_pose >= d_obs1 + d_obs2)
-  {
-     collision += 1;
-     ROS_INFO("collision : %d", collision);
-     return true; // potential collision
-  }
-
-  //ROS_INFO("collision-free");
-  return false; // collision-free
-}
+//    i += 2;
+//  }
+//
+//  if(any_inserted)
+//  {
+////    ROS_INFO("== Timediff AFTER insertion ==");
+////    for (int t = 0; t < teb().sizeTimeDiffs(); ++t)
+////    {
+////      std::ofstream outFile("/home/glab/execution_time.txt", std::ios::app);
+////      if (outFile.is_open()) {
+////        outFile << "After TimeDiff[ " << t << "] = " << teb().TimeDiff(t) << std::endl;
+////        outFile.close();
+////      } else {
+////        std::cerr << "Failed to open file for writing." << std::endl;
+////      }
+////      ROS_INFO("  TimeDiff[%d] = %f", t, teb().TimeDiff(t));
+////    }
+//
+//    optimizeTEB(cfg_->optim.no_inner_iterations, cfg_->optim.no_outer_iterations);
+//  }
+//
+//  for (int i=0; i <= look_ahead_idx; ++i)
+//  {
+//    if ( costmap_model->footprintCost(teb().Pose(i).x(), teb().Pose(i).y(), teb().Pose(i).theta(), footprint_spec, inscribed_radius, circumscribed_radius) == -1 )
+//    {
+//      if (visualization_)
+//      {
+//        visualization_->publishInfeasibleRobotPose(teb().Pose(i), *cfg_->robot_model, footprint_spec);
+//      }
+//      return false;
+//    }
+//  }
+//  return true;
+//}
+//
+//
+//bool TebOptimalPlanner::isSegmentInCollision(const PoseSE2& pose1, const PoseSE2& pose2,const std::vector<float>& distance_field, const DistanceMapInfo& costmap_info)
+//{
+//
+//  unsigned int width = costmap_info.map_width;
+//  unsigned int height = costmap_info.map_height;
+//  double resolution = costmap_info.resolution;
+//  double origin_x = costmap_info.origin_x;
+//  double origin_y = costmap_info.origin_y;
+//
+//  // 1. 두 pose 사이 회전 각도 차이
+//  double dtheta = fabs(g2o::normalize_theta(pose2.theta() - pose1.theta()));
+//
+//  // 2. distance between poses
+//  double dx = pose2.x() - pose1.x();
+//  double dy = pose2.y() - pose1.y();
+//  double dist_pose_to_pose = std::sqrt(dx*dx + dy*dy);
+//
+//  // 3. distance between obs and pose1
+//  int mx1 = static_cast<int>((pose1.x() - origin_x) / resolution);
+//  int my1 = static_cast<int>((pose1.y() - origin_y) / resolution);
+//  float d_obs1 = 0.0;
+//  int idx1 = my1 * width + mx1;
+//  d_obs1 = distance_field[idx1] * resolution;
+//
+//
+//  // 4. distance between obs and pose2
+//  int mx2 = static_cast<int>((pose2.x() - origin_x) / resolution);
+//  int my2 = static_cast<int>((pose2.y() - origin_y) / resolution);
+//  float d_obs2 = 0.0;
+//  int idx2 = my2 * width + mx2;
+//  d_obs2 = distance_field[idx2] * resolution;
+//
+//  ROS_INFO("distance between pose : %f, sum of distance btw pose and obs : %f", dist_pose_to_pose, d_obs1 + d_obs2);
+//  ROS_INFO("collision : %d", collision);
+//  // 5. collision check
+//  if (dist_pose_to_pose >= d_obs1 + d_obs2)
+//  {
+//     collision += 1;
+//     ROS_INFO("collision : %d", collision);
+//     return true; // potential collision
+//  }
+//
+//  //ROS_INFO("collision-free");
+//  return false; // collision-free
+//}
 
 } // namespace teb_local_planner
