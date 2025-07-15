@@ -553,7 +553,16 @@ public:
           double circumscribed_radius=0.0, int look_ahead_idx=-1, double feasibility_check_lookahead_distance=-1.0);
   
   //@}
-  
+
+  std::pair<Eigen::Vector2d, double> findMedialBallCenter(
+  const Eigen::Vector2d& point,
+  const std::vector<float>& distance_field,
+  const DistanceMapInfo& costmap_info);
+
+  Eigen::Vector2d performMedialAxisClimb(const Eigen::Vector2d& start_point, const std::vector<float>& distance_field, unsigned int map_width, unsigned int map_height, double resolution, double origin_x, double origin_y);
+
+bool isSegmentInCollision(const PoseSE2& pose1, const PoseSE2& pose2,const std::vector<float>& distance_field, const DistanceMapInfo& costmap_info);
+bool refineSegment(size_t idx, base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec, double inscribed_radius, double circumscribed_radius, double min_dt);
 protected:
   
   /** @name Hyper-Graph creation and optimization */
@@ -717,20 +726,6 @@ protected:
   void AddEdgesVelocityObstacleRatio();
   
   //@}
-
-std::pair<Eigen::Vector2d, double> findMedialBallCenter(
-  const Eigen::Vector2d& point,
-  const std::vector<float>& distance_field,
-  const DistanceMapInfo& costmap_info);
-
-Eigen::Vector2d performMedialAxisClimb(
-  const Eigen::Vector2d& start_point,
-  const std::vector<float>& distance_field,
-  unsigned int map_width, unsigned int map_height,
-  double resolution, double origin_x, double origin_y);
-
-bool isSegmentInCollision(const PoseSE2& pose1, const PoseSE2& pose2,const std::vector<float>& distance_field, const DistanceMapInfo& costmap_info);
-
   /**
    * @brief Initialize and configure the g2o sparse optimizer.
    * @return shared pointer to the g2o::SparseOptimizer instance

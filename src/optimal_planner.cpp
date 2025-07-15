@@ -347,7 +347,7 @@ bool TebOptimalPlanner::buildGraph(double weight_multiplier)
   if (cfg_->obstacles.include_dynamic_obstacles)
     AddEdgesDynamicObstacles();
 
-  AddEdgesMedialAttraction();
+  //AddEdgesMedialAttraction();
 
   AddEdgesViaPoints();
   
@@ -1121,7 +1121,7 @@ Eigen::Vector2d TebOptimalPlanner::performMedialAxisClimb(
     ROS_INFO("  cur_idx    = %d", cur_idx);
     float cur_dist = distance_field[cur_idx];
     ROS_INFO("  cur_dist    = %.4f", cur_dist);
-    const float threshold = 0.4;
+    const float threshold = 0.3;
 
     if (cur_dist * resolution >= threshold)
     {
@@ -1416,27 +1416,29 @@ void TebOptimalPlanner::getFullTrajectory(std::vector<TrajectoryPointMsg>& traje
 }
 
 
-bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
-                                             double inscribed_radius, double circumscribed_radius, int look_ahead_idx, double feasibility_check_lookahead_distance)
-{
-  if (look_ahead_idx < 0 || look_ahead_idx >= teb().sizePoses())
-    look_ahead_idx = teb().sizePoses() - 1;
+//original
+//bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
+//                                             double inscribed_radius, double circumscribed_radius, int look_ahead_idx, double feasibility_check_lookahead_distance)
+//{
+//  if (look_ahead_idx < 0 || look_ahead_idx >= teb().sizePoses())
+//    look_ahead_idx = teb().sizePoses() - 1;
+//
+//  for (int i=0; i <= look_ahead_idx; ++i)
+//  {
+//    if ( costmap_model->footprintCost(teb().Pose(i).x(), teb().Pose(i).y(), teb().Pose(i).theta(), footprint_spec, inscribed_radius, circumscribed_radius) == -1 )
+//    {
+//      if (visualization_)
+//      {
+//        visualization_->publishInfeasibleRobotPose(teb().Pose(i), *cfg_->robot_model, footprint_spec);
+//      }
+//      return false;
+//    }
+//  }
+//  return true;
+//}
+//
 
-  for (int i=0; i <= look_ahead_idx; ++i)
-  {
-    if ( costmap_model->footprintCost(teb().Pose(i).x(), teb().Pose(i).y(), teb().Pose(i).theta(), footprint_spec, inscribed_radius, circumscribed_radius) == -1 )
-    {
-      if (visualization_)
-      {
-        visualization_->publishInfeasibleRobotPose(teb().Pose(i), *cfg_->robot_model, footprint_spec);
-      }
-      return false;
-    }
-  }
-  return true;
-}
-
-
+//midpoint
 //bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
 //                                             double inscribed_radius, double circumscribed_radius, int look_ahead_idx, double feasibility_check_lookahead_distance)
 //{
@@ -1532,7 +1534,7 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
 //  double origin_x = costmap_info.origin_x;
 //  double origin_y = costmap_info.origin_y;
 //
-//  // 1. 두 pose 사이 회전 각도 차이
+//  // 1. angular diff
 //  double dtheta = fabs(g2o::normalize_theta(pose2.theta() - pose1.theta()));
 //
 //  // 2. distance between poses
@@ -1568,5 +1570,160 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
 //  //ROS_INFO("collision-free");
 //  return false; // collision-free
 //}
+
+bool TebOptimalPlanner::isTrajectoryFeasible(
+    base_local_planner::CostmapModel* costmap_model,
+    const std::vector<geometry_msgs::Point>& footprint_spec,
+    double inscribed_radius,
+    double circumscribed_radius,
+    int look_ahead_idx,
+    double feasibility_check_lookahead_distance)
+{
+  // clamp lookahead index
+  if (look_ahead_idx < 0 || look_ahead_idx >= teb().sizePoses())
+    look_ahead_idx = teb().sizePoses() - 1;
+
+  bool any_global_inserted = false;
+  //const double min_dt = cfg_->optim.min_dt;
+  const double min_dt = 0.15;
+
+  // Repeat until no more bisection insertions
+  bool any_iteration;
+  do {
+    any_iteration = false;
+    size_t N = teb().sizePoses() > 0 ? teb().sizePoses() - 1 : 0;
+    int max_i = std::min( look_ahead_idx, static_cast<int>(teb().sizePoses()) - 1 );
+    for (int i = 0; i <= max_i; ++i)
+    {
+      // guard against out-of-range after insertions
+      if (i + 1 >= teb().sizePoses())
+        break;
+      // only check up to lookahead index
+//      if (static_cast<int>(i) >= look_ahead_idx)
+//        break;
+
+      if (refineSegment(i, costmap_model, footprint_spec,
+                        inscribed_radius, circumscribed_radius,
+                        min_dt))
+      {
+        any_iteration = true;
+        // break to recompute N and avoid stale indices
+        //break;
+      }
+    }
+    any_global_inserted |= any_iteration;
+  } while (any_iteration);
+
+  // If we inserted new poses, reoptimize
+  if (any_global_inserted)
+  {
+    optimizeTEB(cfg_->optim.no_inner_iterations, cfg_->optim.no_outer_iterations);
+  }
+
+  // Final footprint collision check up to lookahead
+  int final_max_i = std::min( look_ahead_idx, static_cast<int>(teb().sizePoses()) - 1 );
+
+  for (int i = 0; i <= final_max_i; ++i)
+  {
+    if (costmap_model->footprintCost(
+            teb().Pose(i).x(), teb().Pose(i).y(), teb().Pose(i).theta(),
+            footprint_spec, inscribed_radius, circumscribed_radius) == -1)
+    {
+      if (visualization_)
+        visualization_->publishInfeasibleRobotPose(
+            teb().Pose(i), *cfg_->robot_model, footprint_spec);
+      return false;
+    }
+  }
+  return true;
+}
+
+
+bool TebOptimalPlanner::refineSegment(
+    size_t idx,
+    base_local_planner::CostmapModel* costmap_model,
+    const std::vector<geometry_msgs::Point>& footprint_spec,
+    double inscribed_radius,
+    double circumscribed_radius,
+    double min_dt)
+{
+  // ensure valid segment
+  if (idx + 1 >= teb().sizePoses())
+    return false;
+
+  // poses and timing
+  const PoseSE2& p1 = teb().Pose(idx);
+  const PoseSE2& p2 = teb().Pose(idx + 1);
+  double dt = teb().TimeDiff(idx);
+
+  // extract distance field info
+  const auto& info = *costmap_info_;
+  unsigned w = info.map_width;
+  unsigned h = info.map_height;
+  double res = info.resolution;
+  double ox = info.origin_x;
+  double oy = info.origin_y;
+  const auto& df = *distance_field_;
+
+  // 1) geometric distance
+  double dx = p2.x() - p1.x();
+  double dy = p2.y() - p1.y();
+  double dist = std::hypot(dx, dy);
+
+  // 2) obstacle distances at endpoints (guard index bounds)
+  int mx1 = g2o::clamp(int((p1.x() - ox) / res), 0, int(w - 1));
+  int my1 = g2o::clamp(int((p1.y() - oy) / res), 0, int(h - 1));
+  int mx2 = g2o::clamp(int((p2.x() - ox) / res), 0, int(w - 1));
+  int my2 = g2o::clamp(int((p2.y() - oy) / res), 0, int(h - 1));
+  float d_obs1 = df[my1 * w + mx1] * res;
+  float d_obs2 = df[my2 * w + mx2] * res;
+
+  double uncovered = dist - (d_obs1 + d_obs2);
+  if (uncovered <= 0 || dt <= min_dt)
+    return false;
+
+  // check actual endpoint collision
+  if (costmap_model->footprintCost(
+          p1.x(), p1.y(), p1.theta(), footprint_spec,
+          inscribed_radius, circumscribed_radius) == -1 ||
+      costmap_model->footprintCost(
+          p2.x(), p2.y(), p2.theta(), footprint_spec,
+          inscribed_radius, circumscribed_radius) == -1)
+  {
+    return false;
+  }
+
+  // compute mid fraction in uncovered region
+  double start_frac = d_obs1 / dist;
+  double end_frac   = 1.0 - d_obs2 / dist;
+  double mid_frac   = 0.5 * (start_frac + end_frac);
+
+  ROS_INFO("Before insert: #poses=%zu, #timediffs=%zu",
+           teb().sizePoses(), teb().sizeTimeDiffs());
+
+  // build and insert mid pose
+  PoseSE2 mid(
+    p1.x() + mid_frac * dx,
+    p1.y() + mid_frac * dy,
+    g2o::normalize_theta(
+      p1.theta() + mid_frac * g2o::normalize_theta(p2.theta() - p1.theta())
+    )
+  );
+
+  double dt1 = dt * mid_frac;
+  double dt2 = dt - dt1;
+
+  teb().TimeDiff(idx) = dt1;
+  teb().insertPose(idx + 1, mid);
+  teb().insertTimeDiff(idx + 1, dt2);
+  teb().fixTimeDiff(idx);
+  teb().fixTimeDiff(idx + 1);
+
+  ROS_INFO("After  insert: #poses=%zu, #timediffs=%zu",
+           teb().sizePoses(), teb().sizeTimeDiffs());
+
+  return true;
+}
+
 
 } // namespace teb_local_planner

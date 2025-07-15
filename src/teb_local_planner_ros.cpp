@@ -257,7 +257,7 @@ bool TebLocalPlannerROS::computeVelocityCommands(geometry_msgs::Twist& cmd_vel)
   }
   
   // 콘솔 출력
-  ROS_INFO("Execution time: %d ms \n", duration);
+  ROS_INFO("Execution time: %f ms \n", duration);
   cmd_vel = cmd_vel_stamped.twist;
 
   return outcome == mbf_msgs::ExePathResult::SUCCESS;
