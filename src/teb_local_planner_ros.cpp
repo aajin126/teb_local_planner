@@ -556,11 +556,19 @@ std::vector<std::pair<geometry_msgs::Point, double>> TebLocalPlannerROS::detectN
   double resolution = costmap.getResolution();
   double origin_x = costmap.getOriginX();
   double origin_y = costmap.getOriginY();
+  unsigned int padded_width = costmap_info_.map_width + 2;
+  unsigned int padded_height = costmap_info_.map_height + 2;
+  int* px_raw = (int*)malloc(padded_width * padded_height * sizeof(int));
+  int* py_raw = (int*)malloc(padded_width * padded_height * sizeof(int));
 
   // 2. create distance field
   std::vector<float> distance_field(map_width * map_height, std::numeric_limits<float>::infinity());
-  sdt_dead_reckoning(map_width, map_height, 253, costmap_data, distance_field.data());
-
+  sdt_dead_reckoning(map_width, map_height, 253, costmap_data, distance_field.data(), px_raw, py_raw);
+  px_->assign(px_raw, px_raw + padded_width * padded_height);
+  py_->assign(py_raw, py_raw + padded_width * padded_height);
+  ROS_WARN_STREAM("px_ is " << (px_ ? "not null" : "null"));
+  free(px_raw);
+  free(py_raw);
   for (const auto& sample : samples)
   {
     auto obstacles_in_circle = getObstaclePointsInCircle(sample, obst_radius);
@@ -1045,16 +1053,9 @@ void TebLocalPlannerROS::updateSignedDistanceField()
   costmap_info_.origin_y = costmap_->getOriginY();
   costmap_info_.costmap_data = costmap_->getCharMap();
 
-  distance_field_.assign(
-      costmap_info_.map_width * costmap_info_.map_height,
-      std::numeric_limits<float>::infinity());
+  distance_field_.assign(costmap_info_.map_width * costmap_info_.map_height, std::numeric_limits<float>::infinity());
 
-  sdt_dead_reckoning(costmap_info_.map_width,
-                     costmap_info_.map_height,
-                     253,
-                     costmap_info_.costmap_data,
-                     distance_field_.data());
-
+  sdt_dead_reckoning(costmap_info_.map_width, costmap_info_.map_height,253, costmap_info_.costmap_data, distance_field_.data());
   ROS_DEBUG("Finishing update distance map");
 }
 

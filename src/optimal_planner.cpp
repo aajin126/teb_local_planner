@@ -1624,43 +1624,47 @@ Eigen::Vector2d TebOptimalPlanner::getModifiedPosition(const Eigen::Vector2d pos
 {
   const auto& info = *costmap_info_;
   const auto& df   = *distance_field_;
+  const int padded_width = info.map_width + 2;
+  const int padded_height = info.map_height + 2;
+  float eps = 1e-2;
+  // 1. World → grid index
+  int grid_x = static_cast<int>((pose.x() - info.origin_x) / info.resolution);
+  int grid_y = static_cast<int>((pose.y() - info.origin_y) / info.resolution);
 
-  // wtm
-  int mx = static_cast<int>((pose.x() - info.origin_x) / info.resolution);
-  int my = static_cast<int>((pose.y() - info.origin_y) / info.resolution);
-
-  if (mx < 1 || my < 1 || mx >= static_cast<int>(info.map_width) - 1 || my >= static_cast<int>(info.map_height) - 1)
+  //2. Check bounds
+  if (grid_x < 1 || grid_y < 1 || grid_x >= static_cast<int>(info.map_width) - 1 || grid_y >= static_cast<int>(info.map_height) - 1)
     return Eigen::Vector2d(pose.x(), pose.y());
 
   ROS_INFO("wtm");
 
-  // Calculate Gradient
-  float dx = (distanceFieldAt(mx + 1, my) - distanceFieldAt(mx - 1, my)) / 2.0f;
-  float dy = (distanceFieldAt(mx, my + 1) - distanceFieldAt(mx, my - 1)) / 2.0f;
+  // 3. Closest obstacle position from px_, py_ (assumed to be stored in padded form)
+  int closest_x = (*px_)[(grid_x + 1) + (grid_y + 1) * padded_width];
+  int closest_y = (*py_)[(grid_x + 1) + (grid_y + 1) * padded_width];
+
+  // 4. Convert back to world coordinates
+  double closet_world_x = info.origin_x + (closest_x) * info.resolution;
+  double closet_world_y = info.origin_y + (closest_y) * info.resolution;
 
   ROS_INFO("Calculate Gradient");
 
-  Eigen::Vector2f grad(dx, dy);
+  Eigen::Vector2d nearest = {closet_world_x, closet_world_y};
 
-  ROS_INFO("grad");
 
-  if (grad.norm() < 1e-5)
-    ROS_INFO("if");
-    return Eigen::Vector2d(pose.x(), pose.y());
 
-  grad.normalize();
-  ROS_INFO("norm");
-  float dist = distanceFieldAt(mx, my);
-  Eigen::Vector2f direction = -grad * (dist + 0.3) * info.resolution;
+  float distance = distanceFieldAt(pose.x(), pose.y());
 
-  double nearest_x = pose.x() + static_cast<double>(direction.x());
-  double nearest_y = pose.y() + static_cast<double>(direction.y());
-  ROS_INFO("nearest");
-  Eigen::Vector2d nearest = {nearest_x, nearest_y};
+  Eigen::Vector2d direction;
 
-  visualization_->visualizeIntermediatePoint(nearest);
+  if (distance <= 0.0)
+    direction = (nearest - pose).normalized();
+  else
+    direction = (pose - nearest).normalized();
 
-  return nearest;
+  Eigen::Vector2d new_nearest = pose + (2.5 - distance + eps) * direction;
+
+  visualization_->visualizeIntermediatePoint(new_nearest);
+
+  return new_nearest;
 }
 
 //non-covered bisetion

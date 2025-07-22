@@ -111,8 +111,8 @@ void sdt_dead_reckoning(unsigned int width, unsigned int height, unsigned char t
 	#define I(x, y) (image[(x) + (y) * width] > threshold)
 	// The internal buffers are padded x and y are in the range 0..padded_width-1 and 0..padded_height-1
 	#define D(x, y) padded_distance_field[(x) + (y) * (padded_width)]
-	#define PX(x, y) px[(x) + (y) * padded_width]
-	#define PY(x, y) py[(x) + (y) * padded_width]
+	#define PX(x, y) px_out[(x) + (y) * padded_width]
+	#define PY(x, y) py_out[(x) + (y) * padded_width]
 	// We use a macro instead of the hypotf() function because it's a major performance boost (~26ms down to ~17ms)
 	#define LENGTH(x, y) sqrtf((x)*(x) + (y)*(y))
 

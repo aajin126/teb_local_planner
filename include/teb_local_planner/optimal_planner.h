@@ -49,7 +49,6 @@
 #include <teb_local_planner/planner_interface.h>
 #include <teb_local_planner/visualization.h>
 #include <teb_local_planner/robot_footprint_model.h>
-#include <teb_local_planner/tebDebugLogger.h>
 // g2o lib stuff
 #include <g2o/core/sparse_optimizer.h>
 #include <g2o/core/block_solver.h>
@@ -380,7 +379,6 @@ public:
   virtual void visualize();
   
   //@}
-  
   
   /** @name Utility methods and more */
   //@{
