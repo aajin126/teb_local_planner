@@ -49,7 +49,7 @@
 #include <teb_local_planner/planner_interface.h>
 #include <teb_local_planner/visualization.h>
 #include <teb_local_planner/robot_footprint_model.h>
-
+#include <teb_local_planner/tebDebugLogger.h>
 // g2o lib stuff
 #include <g2o/core/sparse_optimizer.h>
 #include <g2o/core/block_solver.h>
@@ -72,6 +72,7 @@
 
 #include <limits.h>
 #include <vector>
+#include <numeric>
 
 namespace teb_local_planner
 {
@@ -97,6 +98,13 @@ struct DistanceMapInfo
 
   DistanceMapInfo()
     : map_width(0), map_height(0), resolution(0), origin_x(0), origin_y(0), costmap_data(nullptr) {}
+};
+
+struct SegmentRefineResult
+{
+  std::vector<PoseSE2> poses;
+  std::vector<double>  dts;
+  bool any_inserted = false;
 };
 
 /**
@@ -534,8 +542,16 @@ public:
    * @todo The acceleration profile is not added at the moment.
    * @param[out] trajectory the resulting trajectory
    */
+
+  static double normalizeTheta(double ang);
+
   void getFullTrajectory(std::vector<TrajectoryPointMsg>& trajectory) const;
-  
+
+  double computeArcLength(const PoseSE2& p1, const PoseSE2& p2);
+
+  SegmentRefineResult bisectSegmentLocal(const PoseSE2& p_start, const PoseSE2& p_end, double dt,
+    base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
+    double inscribed_radius, double circumscribed_radius, bool is_root, int depth);
   /**
    * @brief Check whether the planned trajectory is feasible or not.
    * 
@@ -553,7 +569,6 @@ public:
           double circumscribed_radius=0.0, int look_ahead_idx=-1, double feasibility_check_lookahead_distance=-1.0);
   
   //@}
-
   std::pair<Eigen::Vector2d, double> findMedialBallCenter(
   const Eigen::Vector2d& point,
   const std::vector<float>& distance_field,
@@ -561,8 +576,9 @@ public:
 
   Eigen::Vector2d performMedialAxisClimb(const Eigen::Vector2d& start_point, const std::vector<float>& distance_field, unsigned int map_width, unsigned int map_height, double resolution, double origin_x, double origin_y);
 
-bool isSegmentInCollision(const PoseSE2& pose1, const PoseSE2& pose2,const std::vector<float>& distance_field, const DistanceMapInfo& costmap_info);
-bool refineSegment(size_t idx, base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec, double inscribed_radius, double circumscribed_radius, double min_dt);
+  double distanceFieldAt(double wx, double wy) const;
+  double euclideanDistance(const PoseSE2& p1, const PoseSE2& p2);
+  bool isSegmentInCollision(const PoseSE2& pose1, const PoseSE2& pose2,const std::vector<float>& distance_field, const DistanceMapInfo& costmap_info);
 protected:
   
   /** @name Hyper-Graph creation and optimization */
@@ -753,11 +769,15 @@ protected:
   bool initialized_; //!< Keeps track about the correct initialization of this class
   bool optimized_; //!< This variable is \c true as long as the last optimization has been completed successful
 private:
+  std::vector<double> ref_timediffs_;
+  std::vector<double> hyst_timediffs_;
   Eigen::Vector2d medial_point_;
   std::vector<Eigen::Vector2d> medial_point_storage_;
   int collision = 0;
+  int MAX_DEPTH = 5;
 public:
-  EIGEN_MAKE_ALIGNED_OPERATOR_NEW    
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
 };
 
 //! Abbrev. for shared instances of the TebOptimalPlanner

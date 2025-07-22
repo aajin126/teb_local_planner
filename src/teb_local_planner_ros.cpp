@@ -455,6 +455,7 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
     costmap_2d::calculateMinAndMaxDistances(footprint_spec_, robot_inscribed_radius_, robot_circumscribed_radius);
   }
 
+  ROS_INFO("feasibility check");
   bool feasible = planner_->isTrajectoryFeasible(costmap_model_.get(), footprint_spec_, robot_inscribed_radius_, robot_circumscribed_radius, cfg_.trajectory.feasibility_check_no_poses, cfg_.trajectory.feasibility_check_lookahead_distance);
   if (!feasible)
   {
@@ -515,7 +516,8 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
   // store last command (for recovery analysis etc.)
   last_cmd_ = cmd_vel.twist;
   
-  // Now visualize everything    
+  // Now visualize everything
+  ROS_INFO("visualization");
   planner_->visualize();
   visualization_->publishObstacles(obstacles_, costmap_->getResolution());
   visualization_->publishCustomViaPoints(via_points_);

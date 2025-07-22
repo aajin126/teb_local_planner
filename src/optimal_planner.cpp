@@ -126,7 +126,6 @@ void TebOptimalPlanner::visualize()
  
 }
 
-
 /*
  * registers custom vertices and edges in g2o framework
  */
@@ -193,12 +192,22 @@ bool TebOptimalPlanner::optimizeTEB(int iterations_innerloop, int iterations_out
   double weight_multiplier = 1.0;
 
   bool fast_mode = !cfg_->obstacles.include_dynamic_obstacles;
-  
+
   for(int i=0; i<iterations_outerloop; ++i)
   {
-    if (cfg_->trajectory.teb_autosize)
-      teb_.autoResize(cfg_->trajectory.dt_ref, cfg_->trajectory.dt_hysteresis, cfg_->trajectory.min_samples, cfg_->trajectory.max_samples, fast_mode);
+     {
+      size_t M = teb().sizeTimeDiffs();
+      ref_timediffs_.assign(M, cfg_->trajectory.dt_ref);
+      hyst_timediffs_.assign(M, cfg_->trajectory.dt_hysteresis);
+    }
 
+    if (cfg_->trajectory.teb_autosize)
+    {
+      ROS_DEBUG("Start auto resize");
+      //teb_.autoResize(ref_timediffs_, hyst_timediffs_, cfg_->trajectory.dt_ref, cfg_->trajectory.dt_hysteresis, cfg_->trajectory.min_samples, cfg_->trajectory.max_samples, fast_mode);
+      teb_.autoResize(cfg_->trajectory.dt_ref, cfg_->trajectory.dt_hysteresis, cfg_->trajectory.min_samples, cfg_->trajectory.max_samples, fast_mode);
+      ROS_DEBUG("Finish auto resize");
+    }
     success = buildGraph(weight_multiplier);
     if (!success) 
     {
@@ -245,7 +254,7 @@ bool TebOptimalPlanner::plan(const std::vector<geometry_msgs::PoseStamped>& init
   if (!teb_.isInit())
   {
     ROS_DEBUG("initialize");
-    teb().clearFixedTimeDiffs();
+    //teb().clearFixedTimeDiffs();
     collision = 0;
     teb_.initTrajectoryToGoal(initial_plan, cfg_->robot.max_vel_x, cfg_->robot.max_vel_theta, cfg_->trajectory.global_plan_overwrite_orientation,
       cfg_->trajectory.min_samples, cfg_->trajectory.allow_init_with_backwards_motion);
@@ -260,14 +269,14 @@ bool TebOptimalPlanner::plan(const std::vector<geometry_msgs::PoseStamped>& init
         && (goal_.position() - teb_.BackPose().position()).norm() < cfg_->trajectory.force_reinit_new_goal_dist
         && fabs(g2o::normalize_theta(goal_.theta() - teb_.BackPose().theta())) < cfg_->trajectory.force_reinit_new_goal_angular) // actual warm start!
     {
-      teb().clearFixedTimeDiffs();
+      //teb().clearFixedTimeDiffs();
       teb_.updateAndPruneTEB(start_, goal_, cfg_->trajectory.min_samples); // update TEB
     }
     else // goal too far away -> reinit
     {
       ROS_DEBUG("New goal: distance to existing goal is higher than the specified threshold. Reinitalizing trajectories.");
       teb_.clearTimedElasticBand();
-      teb().clearFixedTimeDiffs();
+      //teb().clearFixedTimeDiffs();
       collision = 0;
       teb_.initTrajectoryToGoal(initial_plan, cfg_->robot.max_vel_x, cfg_->robot.max_vel_theta, cfg_->trajectory.global_plan_overwrite_orientation,
         cfg_->trajectory.min_samples, cfg_->trajectory.allow_init_with_backwards_motion);
@@ -1093,7 +1102,7 @@ std::pair<Eigen::Vector2d, double> TebOptimalPlanner::findMedialBallCenter(
     double origin_x = costmap_info.origin_x;
     double origin_y = costmap_info.origin_y;
 
-    ROS_INFO("distance_field size = %lu", distance_field.size());
+    //ROS_INFO("distance_field size = %lu", distance_field.size());
 
     Eigen::Vector2d medial_center = performMedialAxisClimb(point, distance_field, map_width, map_height, resolution, origin_x, origin_y);
     int grid_x = static_cast<int>((medial_center.x() - origin_x) / resolution);
@@ -1101,7 +1110,7 @@ std::pair<Eigen::Vector2d, double> TebOptimalPlanner::findMedialBallCenter(
     int idx = grid_x + grid_y * map_width;
     double radius = distance_field[idx]* resolution;
 
-    ROS_DEBUG("finishing perform climb");
+    //ROS_DEBUG("finishing perform climb");
 
     return { medial_center, radius };
 }
@@ -1112,21 +1121,16 @@ Eigen::Vector2d TebOptimalPlanner::performMedialAxisClimb(
   unsigned int map_width, unsigned int map_height,
   double resolution, double origin_x, double origin_y)
 {
-
     int cur_x = static_cast<int>((start_point.x() - origin_x) / resolution);
     int cur_y = static_cast<int>((start_point.y() - origin_y) / resolution);
-    ROS_INFO("Initial world coordinate: x = %d, y = %d", start_point.x(), start_point.y());
-    ROS_INFO("Initial cell index: cur_x = %d, cur_y = %d", cur_x, cur_y);
+
     int cur_idx = cur_x + cur_y * map_width;
-    ROS_INFO("  cur_idx    = %d", cur_idx);
     float cur_dist = distance_field[cur_idx];
-    ROS_INFO("  cur_dist    = %.4f", cur_dist);
     const float threshold = 0.3;
 
     if (cur_dist * resolution >= threshold)
     {
-        return Eigen::Vector2d(origin_x + (cur_x + 0.5) * resolution,
-                               origin_y + (cur_y + 0.5) * resolution);
+        return Eigen::Vector2d(origin_x + (cur_x + 0.5) * resolution, origin_y + (cur_y + 0.5) * resolution);
     }
 
     bool moved = true;
@@ -1571,159 +1575,597 @@ void TebOptimalPlanner::getFullTrajectory(std::vector<TrajectoryPointMsg>& traje
 //  return false; // collision-free
 //}
 
-bool TebOptimalPlanner::isTrajectoryFeasible(
-    base_local_planner::CostmapModel* costmap_model,
-    const std::vector<geometry_msgs::Point>& footprint_spec,
-    double inscribed_radius,
-    double circumscribed_radius,
-    int look_ahead_idx,
-    double feasibility_check_lookahead_distance)
-{
-  // clamp lookahead index
-  if (look_ahead_idx < 0 || look_ahead_idx >= teb().sizePoses())
-    look_ahead_idx = teb().sizePoses() - 1;
-
-  bool any_global_inserted = false;
-  //const double min_dt = cfg_->optim.min_dt;
-  const double min_dt = 0.15;
-
-  // Repeat until no more bisection insertions
-  bool any_iteration;
-  do {
-    any_iteration = false;
-    size_t N = teb().sizePoses() > 0 ? teb().sizePoses() - 1 : 0;
-    int max_i = std::min( look_ahead_idx, static_cast<int>(teb().sizePoses()) - 1 );
-    for (int i = 0; i <= max_i; ++i)
-    {
-      // guard against out-of-range after insertions
-      if (i + 1 >= teb().sizePoses())
-        break;
-      // only check up to lookahead index
-//      if (static_cast<int>(i) >= look_ahead_idx)
+//ver1.
+//bool TebOptimalPlanner::isTrajectoryFeasible( base_local_planner::CostmapModel* costmap_model,
+//    const std::vector<geometry_msgs::Point>& footprint_spec,
+//    double inscribed_radius, double circumscribed_radius, int look_ahead_idx,
+//    double feasibility_check_lookahead_distance)
+//{
+//  // clamp lookahead index
+//  if (look_ahead_idx < 0 || look_ahead_idx >= teb().sizePoses())
+//    look_ahead_idx = teb().sizePoses() - 1;
+//
+//  bool any_global_inserted = false;
+//  //const double min_dt = cfg_->optim.min_dt;
+//  const double min_dt = 0.15;
+//
+//  // Repeat until no more bisection insertions
+//  bool any_iteration;
+//  do {
+//    any_iteration = false;
+//    size_t N = teb().sizePoses() > 0 ? teb().sizePoses() - 1 : 0;
+//    int max_i = std::min( look_ahead_idx, static_cast<int>(teb().sizePoses()) - 1 );
+//    for (int i = 0; i <= max_i; ++i)
+//    {
+//      // guard against out-of-range after insertions
+//      if (i + 1 >= teb().sizePoses())
 //        break;
+//      // only check up to lookahead index
+////      if (static_cast<int>(i) >= look_ahead_idx)
+////        break;
+//
+//      if (refineSegment(i, costmap_model, footprint_spec,
+//                        inscribed_radius, circumscribed_radius,
+//                        min_dt))
+//      {
+//        any_iteration = true;
+//        // break to recompute N and avoid stale indices
+//        break;
+//      }
+//    }
+//    any_global_inserted |= any_iteration;
+//  } while (any_iteration);
+//
+//  // If we inserted new poses, reoptimize
+//  if (any_global_inserted)
+//  {
+//    optimizeTEB(cfg_->optim.no_inner_iterations, cfg_->optim.no_outer_iterations);
+//  }
+//
+//  // Final footprint collision check up to lookahead
+//  int final_max_i = std::min( look_ahead_idx, static_cast<int>(teb().sizePoses()) - 1 );
+//
+//  for (int i = 0; i <= final_max_i; ++i)
+//  {
+//    if (costmap_model->footprintCost(
+//            teb().Pose(i).x(), teb().Pose(i).y(), teb().Pose(i).theta(),
+//            footprint_spec, inscribed_radius, circumscribed_radius) == -1)
+//    {
+//      if (visualization_)
+//        visualization_->publishInfeasibleRobotPose(
+//            teb().Pose(i), *cfg_->robot_model, footprint_spec);
+//      return false;
+//    }
+//  }
+//  return true;
+//}
+//
+//
+//bool TebOptimalPlanner::refineSegment(size_t idx, base_local_planner::CostmapModel* costmap_model,
+//    const std::vector<geometry_msgs::Point>& footprint_spec,
+//    double inscribed_radius, double circumscribed_radius, double min_dt)
+//{
+//  // ensure valid segment
+//  if (idx + 1 >= teb().sizePoses())
+//    return false;
+//
+//  // poses and timing
+//  const PoseSE2& p1 = teb().Pose(idx);
+//  const PoseSE2& p2 = teb().Pose(idx + 1);
+//  double dt = teb().TimeDiff(idx);
+//
+//  // extract distance field info
+//  const auto& info = *costmap_info_;
+//  unsigned w = info.map_width;
+//  unsigned h = info.map_height;
+//  double res = info.resolution;
+//  double ox = info.origin_x;
+//  double oy = info.origin_y;
+//  const auto& df = *distance_field_;
+//
+//  // 1) geometric distance
+//  double dx = p2.x() - p1.x();
+//  double dy = p2.y() - p1.y();
+//  double dist = std::hypot(dx, dy);
+//
+//  // 2) obstacle distances at endpoints (guard index bounds)
+//  int mx1 = g2o::clamp(int((p1.x() - ox) / res), 0, int(w - 1));
+//  int my1 = g2o::clamp(int((p1.y() - oy) / res), 0, int(h - 1));
+//  int mx2 = g2o::clamp(int((p2.x() - ox) / res), 0, int(w - 1));
+//  int my2 = g2o::clamp(int((p2.y() - oy) / res), 0, int(h - 1));
+//  float d_obs1 = df[my1 * w + mx1] * res;
+//  float d_obs2 = df[my2 * w + mx2] * res;
+//
+//  double uncovered = dist - (d_obs1 + d_obs2);
+//  if (uncovered <= 0 || dt <= min_dt)
+//    return false;
+//
+//  double c1 = costmap_model->footprintCost(p1.x(), p1.y(), p1.theta(), footprint_spec, inscribed_radius, circumscribed_radius);
+//  double c2 = costmap_model->footprintCost(p2.x(), p2.y(), p2.theta(), footprint_spec, inscribed_radius, circumscribed_radius);
+//  if (c1 < 0.0 || c2 < 0.0)
+//  {
+//    return false;
+//  }
+//
+//  // compute proposition of mid fraction in uncovered region
+//  double start_frac = d_obs1 / dist;
+//  double end_frac   = 1.0 - d_obs2 / dist;
+//  double mid_frac   = 0.5 * (start_frac + end_frac);
+//
+//  ROS_INFO("Before insert: #poses=%zu, #timediffs=%zu",
+//           teb().sizePoses(), teb().sizeTimeDiffs());
+//
+//  // build and insert mid pose
+//  PoseSE2 mid(p1.x() + mid_frac * dx, p1.y() + mid_frac * dy,
+//    g2o::normalize_theta(p1.theta() + mid_frac * g2o::normalize_theta(p2.theta() - p1.theta())));
+//
+//  //time diff of bisect poses
+//  double dt1 = dt * mid_frac;
+//  double dt2 = dt - dt1;
+//
+//  double parent_ref  = ref_timediffs_[idx];
+//  double parent_hyst = hyst_timediffs_[idx];
+//
+//  ROS_INFO("[refineSegment] idx=%zu  dt=%.6f  parent_ref=%.6f  min_dt=%.6f  uncovered=%.6f",
+//           idx, dt, parent_ref, min_dt, uncovered);
+//
+//  teb().TimeDiff(idx) = dt1;
+//  teb().insertPose(idx + 1, mid);
+//  teb().insertTimeDiff(idx + 1, dt2);
+//
+//  ROS_INFO("[refineSegment] BEFORE ref insert at idx=%zu: ref[%zu]=%.6f",
+//           idx, idx, parent_ref);
+//
+//  ref_timediffs_[idx] = parent_ref * mid_frac;
+//  ref_timediffs_.insert(ref_timediffs_.begin() + idx + 1, parent_ref * (1.0 - mid_frac));
+//  hyst_timediffs_[idx] = ref_timediffs_[idx];
+//  hyst_timediffs_.insert(hyst_timediffs_.begin() + idx + 1, ref_timediffs_[idx+1]);
+//
+//  ROS_INFO("[refineSegment] AFTER  ref insert at idx=%zu:   ref[%zu]=%.6f, ref[%zu]=%.6f",
+//           idx,
+//           idx,   ref_timediffs_[idx],
+//           idx+1, ref_timediffs_[idx+1]);
+//
+//  ROS_INFO("After  insert: #poses=%zu, #timediffs=%zu",
+//           teb().sizePoses(), teb().sizeTimeDiffs());
+//
+//  return true;
+//}
 
-      if (refineSegment(i, costmap_model, footprint_spec,
-                        inscribed_radius, circumscribed_radius,
-                        min_dt))
-      {
-        any_iteration = true;
-        // break to recompute N and avoid stale indices
-        //break;
-      }
-    }
-    any_global_inserted |= any_iteration;
-  } while (any_iteration);
-
-  // If we inserted new poses, reoptimize
-  if (any_global_inserted)
-  {
-    optimizeTEB(cfg_->optim.no_inner_iterations, cfg_->optim.no_outer_iterations);
-  }
-
-  // Final footprint collision check up to lookahead
-  int final_max_i = std::min( look_ahead_idx, static_cast<int>(teb().sizePoses()) - 1 );
-
-  for (int i = 0; i <= final_max_i; ++i)
-  {
-    if (costmap_model->footprintCost(
-            teb().Pose(i).x(), teb().Pose(i).y(), teb().Pose(i).theta(),
-            footprint_spec, inscribed_radius, circumscribed_radius) == -1)
-    {
-      if (visualization_)
-        visualization_->publishInfeasibleRobotPose(
-            teb().Pose(i), *cfg_->robot_model, footprint_spec);
-      return false;
-    }
-  }
-  return true;
+//ver2.
+// helpers for arc‐length interpolation
+double TebOptimalPlanner::normalizeTheta(double ang) {
+  while (ang >= M_PI)  ang -= 2*M_PI;
+  while (ang < -M_PI)  ang += 2*M_PI;
+  return ang;
 }
 
+double TebOptimalPlanner::computeArcLength(const PoseSE2& p1, const PoseSE2& p2) {
+  // 1) chord length
+  double dx = p2.x() - p1.x(), dy = p2.y() - p1.y();
+  double c = std::hypot(dx, dy);
+  // 2) heading difference
+  double dtheta = normalizeTheta(p2.theta() - p1.theta());
+  if (std::fabs(dtheta) < 1e-6) return c;
+  // 3) radius from chord & angle
+  double R = c / (2.0 * std::sin(dtheta * 0.5));
+  // 4) arc length
+  return std::fabs(R * dtheta);
+}
 
-bool TebOptimalPlanner::refineSegment(
-    size_t idx,
-    base_local_planner::CostmapModel* costmap_model,
-    const std::vector<geometry_msgs::Point>& footprint_spec,
-    double inscribed_radius,
-    double circumscribed_radius,
-    double min_dt)
+//non-covered bisetion
+SegmentRefineResult TebOptimalPlanner::bisectSegmentLocal(const PoseSE2& p_start, const PoseSE2& p_end, double dt,
+    base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
+    double inscribed_radius, double circumscribed_radius, bool is_root, int depth)
 {
-  // ensure valid segment
-  if (idx + 1 >= teb().sizePoses())
-    return false;
 
-  // poses and timing
-  const PoseSE2& p1 = teb().Pose(idx);
-  const PoseSE2& p2 = teb().Pose(idx + 1);
-  double dt = teb().TimeDiff(idx);
+  SegmentRefineResult result;
+  result.poses = { p_start, p_end };
+  result.dts   = { dt };
 
-  // extract distance field info
+//  if (depth > MAX_DEPTH)
+//  {
+//    ROS_WARN("Exceeded max depth for segment refine");
+//    return result;
+//  }
+  // 1) arc length
+  double L = computeArcLength(p_start, p_end);
+  if (L < 0.001)
+    return result;
+
+  // 2) obstacle distances
   const auto& info = *costmap_info_;
-  unsigned w = info.map_width;
-  unsigned h = info.map_height;
-  double res = info.resolution;
-  double ox = info.origin_x;
-  double oy = info.origin_y;
-  const auto& df = *distance_field_;
+  const auto& df   = *distance_field_;
 
-  // 1) geometric distance
-  double dx = p2.x() - p1.x();
-  double dy = p2.y() - p1.y();
-  double dist = std::hypot(dx, dy);
+  double d1 = distanceFieldAt(p_start.x(), p_start.y());
+  double d2 = distanceFieldAt(p_end.x(), p_end.y());
 
-  // 2) obstacle distances at endpoints (guard index bounds)
-  int mx1 = g2o::clamp(int((p1.x() - ox) / res), 0, int(w - 1));
-  int my1 = g2o::clamp(int((p1.y() - oy) / res), 0, int(h - 1));
-  int mx2 = g2o::clamp(int((p2.x() - ox) / res), 0, int(w - 1));
-  int my2 = g2o::clamp(int((p2.y() - oy) / res), 0, int(h - 1));
-  float d_obs1 = df[my1 * w + mx1] * res;
-  float d_obs2 = df[my2 * w + mx2] * res;
+  double L_eu = euclideanDistance(p_start, p_end);
 
-  double uncovered = dist - (d_obs1 + d_obs2);
-  if (uncovered <= 0 || dt <= min_dt)
-    return false;
-
-  // check actual endpoint collision
-  if (costmap_model->footprintCost(
-          p1.x(), p1.y(), p1.theta(), footprint_spec,
-          inscribed_radius, circumscribed_radius) == -1 ||
-      costmap_model->footprintCost(
-          p2.x(), p2.y(), p2.theta(), footprint_spec,
-          inscribed_radius, circumscribed_radius) == -1)
+  // 3) covered region check using arc length (exact collision check)
+  if (L - (d1 + d2) <= 0.0)
   {
-    return false;
+    return result;
+  }
+  ROS_INFO("depth :%d", depth);
+
+  // 4) compute fractions using euclidean distance
+  double f_start = d1 / L_eu;
+  double f_end   = 1.0 - d2 / L_eu;
+  double f_mid   = 0.5 * (f_start + f_end);
+
+  // 5) interpolation
+  auto interp = [&](const PoseSE2& A, const PoseSE2& B, double frac){
+    PoseSE2 out;
+    out.x() = A.x() + frac * (B.x() - A.x());
+    out.y() = A.y() + frac * (B.y() - A.y());
+    out.theta() = normalizeTheta(A.theta() + frac * normalizeTheta(B.theta() - A.theta()));
+    return out;
+  };
+
+  PoseSE2 A = interp(p_start, p_end, f_start);
+  PoseSE2 M = interp(p_start, p_end, f_mid);
+  PoseSE2 B = interp(p_start, p_end, f_end);
+
+  ROS_INFO("start position x :%f, y: %f  mid position x :%f, y: %f end position x :%f, y: %f ", A.x(), A.y(), M.x(), M.y(), B.x(), B.y());
+
+  // 6) mid collision → medial-ball
+  if (distanceFieldAt(M.x(), M.y()) < 0.2)
+  {
+    ROS_INFO("distance : %f", distanceFieldAt(M.x(), M.y()));
+    auto [mc, r] = findMedialBallCenter(Eigen::Vector2d(M.x(), M.y()), df, info);
+    M.x() = mc.x();
+    M.y() = mc.y();
+    ROS_INFO("new mid position x :%f, y: %f ",M.x(), M.y());
   }
 
-  // compute mid fraction in uncovered region
-  double start_frac = d_obs1 / dist;
-  double end_frac   = 1.0 - d_obs2 / dist;
-  double mid_frac   = 0.5 * (start_frac + end_frac);
+  // 7) time split
+  double span = f_end - f_start;
 
-  ROS_INFO("Before insert: #poses=%zu, #timediffs=%zu",
-           teb().sizePoses(), teb().sizeTimeDiffs());
+  if (span <= 1e-3)
+    return result;
 
-  // build and insert mid pose
-  PoseSE2 mid(
-    p1.x() + mid_frac * dx,
-    p1.y() + mid_frac * dy,
-    g2o::normalize_theta(
-      p1.theta() + mid_frac * g2o::normalize_theta(p2.theta() - p1.theta())
-    )
-  );
-
-  double dt1 = dt * mid_frac;
+  double dt1 = dt * ((f_mid - f_start) / span);
   double dt2 = dt - dt1;
 
-  teb().TimeDiff(idx) = dt1;
-  teb().insertPose(idx + 1, mid);
-  teb().insertTimeDiff(idx + 1, dt2);
-  teb().fixTimeDiff(idx);
-  teb().fixTimeDiff(idx + 1);
+  // 8) Recursive Call (A→M), (M→B)
+  SegmentRefineResult left = bisectSegmentLocal(A, M, dt1, costmap_model, footprint_spec, inscribed_radius, circumscribed_radius, false, depth+1);
+  SegmentRefineResult right = bisectSegmentLocal(M, B, dt2, costmap_model,footprint_spec, inscribed_radius, circumscribed_radius, false, depth+1);
 
-  ROS_INFO("After  insert: #poses=%zu, #timediffs=%zu",
-           teb().sizePoses(), teb().sizeTimeDiffs());
+  // 9) Merging
+  result.poses = std::move(left.poses);
+  result.dts   = std::move(left.dts);
 
-  return true;
+  if (!right.poses.empty())
+  {
+    // poses
+    result.poses.insert(result.poses.end(), right.poses.begin() + 1, right.poses.end());
+    // dts
+    result.dts.insert(result.dts.end(), right.dts.begin(), right.dts.end());
+  }
+
+  //result.any_inserted = true || left.any_inserted || right.any_inserted;
+
+  if (is_root)
+  {
+    if (!result.poses.empty())
+      result.poses.front() = p_start;
+    if (result.poses.size() >= 2)
+      result.poses.back()  = p_end;
+  }
+
+  return result;
 }
 
+//bisection
+//SegmentRefineResult TebOptimalPlanner::bisectSegmentLocal(const PoseSE2& p_start, const PoseSE2& p_end, double dt,
+//    base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
+//    double inscribed_radius, double circumscribed_radius, bool is_root, int depth)
+//{
+//
+//  SegmentRefineResult result;
+//  result.poses = { p_start, p_end };
+//  result.dts   = { dt };
+//
+//  // 1) arc length
+//  double L = computeArcLength(p_start, p_end);
+//  if (L < 0.001)
+//    return result;
+//
+//  // 2) obstacle distances
+//  const auto& info = *costmap_info_;
+//  const auto& df   = *distance_field_;
+//
+//  double d1 = distanceFieldAt(p_start.x(), p_start.y());
+//  double d2 = distanceFieldAt(p_end.x(), p_end.y());
+//
+//  double L_eu = euclideanDistance(p_start, p_end);
+//
+//  // 3) covered region check using arc length (exact collision check)
+//  if (L - (d1 + d2) <= 0.0)
+//  {
+//    ROS_INFO("L_ok :%f", L);
+//    return result;
+//  }
+//  ROS_INFO("non covered dist :%f", L - (d1 + d2));
+//  ROS_INFO("start position x :%f, y: %f   end position x :%f, y: %f ", p_start.x(), p_start.y(),p_end.x(), p_end.y());
+//  ROS_INFO("L :%f", L);
+//  ROS_INFO("depth :%d", depth);
+//
+//  // 4) compute fractions using euclidean distance
+//  double f_start = d1 / L_eu;
+//  double f_end   = 1.0 - d2 / L_eu;
+//  double f_mid   = 0.5 * (f_start + f_end);
+//
+//  if (f_start >= f_end)
+//    return result;
+//
+//  // 5) interpolation
+//  auto interp = [&](const PoseSE2& A, const PoseSE2& B, double frac){
+//    PoseSE2 out;
+//    out.x() = A.x() + frac * (B.x() - A.x());
+//    out.y() = A.y() + frac * (B.y() - A.y());
+//    out.theta() = normalizeTheta(A.theta() + frac * normalizeTheta(B.theta() - A.theta()));
+//    return out;
+//  };
+//
+//  PoseSE2 A = interp(p_start, p_end, 0.0);
+//  PoseSE2 M = interp(p_start, p_end, f_mid);
+//  PoseSE2 B = interp(p_start, p_end, 0.0);
+//
+//  // 6) mid collision → medial-ball
+//  if (distanceFieldAt(M.x(), M.y()) < 0.2)
+//  {
+//    ROS_INFO("distance : %f", distanceFieldAt(M.x(), M.y()));
+//    auto [mc, r] = findMedialBallCenter(Eigen::Vector2d(M.x(), M.y()), df, info);
+//    M.x() = mc.x();
+//    M.y() = mc.y();
+//    ROS_INFO("new distance : %f", distanceFieldAt(mc.x(), mc.y()));
+//  }
+//
+//  // 7) time split
+//  double span = f_end - f_start;
+//
+//  if (span <= 1e-3)
+//    return result;
+//
+//  double dt1 = dt * ((f_mid - f_start) / span);
+//  double dt2 = dt - dt1;
+//
+//  // 8) Recursive Call (A→M), (M→B)
+//  SegmentRefineResult left = bisectSegmentLocal(A, M, dt1, costmap_model, footprint_spec, inscribed_radius, circumscribed_radius, false, depth+1);
+//  SegmentRefineResult right = bisectSegmentLocal(M, B, dt2, costmap_model,footprint_spec, inscribed_radius, circumscribed_radius, false, depth+1);
+//
+//  // 9) Merging
+//  result.poses = std::move(left.poses);
+//  result.dts   = std::move(left.dts);
+//
+//  if (!right.poses.empty())
+//  {
+//    // poses
+//    result.poses.insert(result.poses.end(), right.poses.begin() + 1, right.poses.end());
+//    // dts
+//    result.dts.insert(result.dts.end(), right.dts.begin(), right.dts.end());
+//  }
+//
+//  //result.any_inserted = true || left.any_inserted || right.any_inserted;
+//
+//  if (is_root)
+//  {
+//    if (!result.poses.empty())
+//      result.poses.front() = p_start;
+//    if (result.poses.size() >= 2)
+//      result.poses.back()  = p_end;
+//  }
+//
+//  return result;
+//}
+
+double TebOptimalPlanner::distanceFieldAt(double wx, double wy) const
+{
+    const auto& info = *costmap_info_;
+    const auto& df   = *distance_field_;
+    int w = info.map_width;
+    int h = info.map_height;
+    double res = info.resolution;
+    double ox = info.origin_x;
+    double oy = info.origin_y;
+
+    int grid_x = static_cast<int>((wx - ox) / res);
+    int grid_y = static_cast<int>((wy - oy) / res);
+    int idx = grid_x + grid_y * w;
+
+    return df[idx] * res;   // stored value (grid units) → meters
+}
+
+double TebOptimalPlanner::euclideanDistance(const PoseSE2& p1, const PoseSE2& p2)
+{
+    double dx = p1.x() - p2.x();
+    double dy = p1.y() - p2.y();
+    return std::hypot(dx, dy);
+}
+
+bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
+    double inscribed_radius, double circumscribed_radius, int look_ahead_idx, double feasibility_check_lookahead_distance)
+{
+
+  // 0) clamp lookahead
+//  if (look_ahead_idx < 0 || look_ahead_idx >= teb().sizePoses())
+//    look_ahead_idx = teb().sizePoses() - 1;
+
+  std::ofstream outFile("/home/glab/bisection_log.txt", std::ios::app);
+  for (size_t idx = 0; idx < teb().sizePoses(); ++idx)
+  {
+    if (outFile.is_open())
+    {
+      outFile << "----- Initial TEB pose -----\n";
+      outFile << "TEB pose idx : " << idx << " -> poses = " << teb().Pose(idx) << "\n";
+    }
+    else
+    {
+      std::cerr << "File not opened\n";
+    }
+  }
+
+//  for (size_t idx = 0; idx <teb().sizePoses()-1 ; ++idx)
+//  {
+//    if (outFile.is_open())
+//    {
+//      outFile << "----- Initial TEB Time diff -----\n";
+//      outFile << "time diff idx : " << idx << " -> dt = " << teb().TimeDiff(idx) << "\n";
+//    }
+//    else
+//    {
+//      std::cerr << "File not opened\n";
+//    }
+//  }
+
+  // 1) initial pose collision → medial‐ball correction
+  for (int i = 0; i <= teb().sizePoses() - 1; ++i) {
+    auto &p = teb().Pose(i);
+    double c = costmap_model->footprintCost(
+      p.x(), p.y(), p.theta(),
+      footprint_spec, inscribed_radius, circumscribed_radius);
+    if (c < 0.0) {
+      auto [mc, r] = findMedialBallCenter(Eigen::Vector2d(p.x(), p.y()), *distance_field_, *costmap_info_);
+      teb().Pose(i).x() = mc.x();
+      teb().Pose(i).y() = mc.y();
+      for (size_t idx = 0; idx < teb().sizePoses(); ++idx)
+      {
+        if (outFile.is_open())
+        {
+          outFile << "----- Modified TEB pose -----\n";
+          outFile << "TEB pose idx : " << idx << " -> poses = " << teb().Pose(idx) << "\n";
+        }
+        else
+        {
+          std::cerr << "File not opened\n";
+        }
+      }
+    }
+  }
+
+  // 2) build per-segment local vectors
+  size_t M = teb().sizePoses()>0 ? teb().sizePoses()-1 : 0;
+  std::vector<std::vector<PoseSE2>> segmentPoses(M);
+  std::vector<std::vector<double>>  segmentTimeDiffs(M);
+  std::vector<double> segLengths(M, 0.0);
+  for (size_t i=0; i<M; ++i) {
+    segmentPoses[i]     = { teb().Pose(i), teb().Pose(i+1) };
+    segmentTimeDiffs[i] = { teb().TimeDiff(i) };
+    segLengths[i] = computeArcLength(segmentPoses[i][0], segmentPoses[i][1]);
+  }
+
+
+//  if (outFile.is_open()) {
+//     outFile << "----- Segment Lengths BEFORE sort -----\n";
+//     for (size_t i=0; i<M; ++i) {
+//       outFile << "  seg " << i << " length=" << segLengths[i] << "\n";
+//     }
+//  } else {
+//     std::cerr << "Failed to open file for writing." << std::endl;
+//  }
+
+  // 3) sort by descending arc‐length
+  std::vector<size_t> arc_order(M);
+  std::iota(arc_order.begin(), arc_order.end(), 0);
+  std::sort(arc_order.begin(), arc_order.end(),
+          [&](size_t a, size_t b){return segLengths[a] > segLengths[b];});
+
+
+//  if (outFile.is_open())
+//  {
+//    outFile << "Arc-length order (descending):\n";
+//    for (size_t rank=0; rank<arc_order.size(); ++rank)
+//      outFile << "  rank " << rank << " -> seg " << arc_order[rank]
+//              << " (len=" << segLengths[arc_order[rank]] << ")\n";
+//  }
+
+  // 4) refine each segment locally
+  int depth = 0;
+  for (size_t k : arc_order) {
+    const PoseSE2& s = segmentPoses[k][0];
+    const PoseSE2& e = segmentPoses[k][1];
+    double dt = segmentTimeDiffs[k][0];
+
+    SegmentRefineResult r = bisectSegmentLocal(s, e, dt, costmap_model, footprint_spec, inscribed_radius, circumscribed_radius, true, depth);
+    // r.poses: [s, mid..., e]
+    if (r.poses.size() >= 2 && r.dts.size() == r.poses.size()-1)
+    {
+      segmentPoses[k]     = std::move(r.poses);
+      segmentTimeDiffs[k] = std::move(r.dts);
+      //any_inserted_global = any_inserted_global || r.any_inserted;
+//      if (outFile.is_open())
+//      {
+//        outFile << "----- After Refine -----\n";
+//        outFile << "Refined seg " << k << " -> poses=" << segmentPoses[k].size()
+//                << " dts=" << segmentTimeDiffs[k].size() << "\n";
+//      }
+    }
+//    else
+//    {
+//      if (outFile.is_open())
+//        outFile << "Seg " << k << " unchanged.\n";
+//    }
+  }
+
+  // 5) apply all insertions back into teb()
+
+  int offset = 0;
+  for (size_t i = 0; i < segmentPoses.size(); ++i)
+  {
+    const auto& P = segmentPoses[i];
+    const auto& T = segmentTimeDiffs[i];
+    if (P.size() < 2 || T.size() != P.size() - 1)
+      continue;
+
+    int gidx = static_cast<int>(i) + offset;
+
+    teb().TimeDiff(gidx) = T[0];
+
+    bool has_next = (i + 1 < segmentPoses.size());
+    bool next_is_adjacent = false;
+
+    if (has_next)
+    {
+      const PoseSE2& next_start = segmentPoses[i + 1].front();
+      const PoseSE2& current_end = P.back();
+
+      double eps = 1e-4;
+      next_is_adjacent =
+        std::fabs(next_start.x() - current_end.x()) < eps &&
+        std::fabs(next_start.y() - current_end.y()) < eps &&
+        std::fabs(normalizeTheta(next_start.theta() - current_end.theta())) < eps;
+    }
+    size_t limit = P.size();
+    if (next_is_adjacent)
+      --limit;
+
+    for (size_t j = 1; j < limit; ++j)
+    {
+      teb().insertPose(gidx + 1, P[j]);
+      teb().insertTimeDiff(gidx + 1, T[j]);  // T[j] corresponds to P[j] -> P[j+1]
+      ++offset;
+      ++gidx;
+    }
+  }
+
+  for (size_t i = 0; i < teb().sizePoses(); ++i)
+  {
+    if (outFile.is_open())
+    {
+      outFile << "----- Final TEB pose -----\n";
+      outFile << "TEB pose idx : " << i << " -> poses = " << teb().Pose(i) << "\n";
+    }
+    else
+    {
+      std::cerr << "File not opened\n";
+    }
+
+    ROS_INFO("TEB pose idx : %d , pose = (%f, %f, %f) \n", i, teb().Pose(i).x(), teb().Pose(i).y(), teb().Pose(i).theta() );
+  }
+
+  return true;
+  }
 
 } // namespace teb_local_planner
