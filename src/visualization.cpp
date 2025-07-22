@@ -451,7 +451,7 @@ void TebVisualization::publishRobotPose(const PoseSE2& pose,
   publishRobotFootprint(pose, footprint, "RobotPose/footprint", toColorMsg(1.0, 0.0, 0.0, 1.0)); // blue
 }
 
-void TebVisualization::visualizeIntermediatePoint(const PoseSE2& pose, const std::string& ns)
+void TebVisualization::visualizeIntermediatePoint(const Eigen::Vector2d pose, const std::string& ns)
 {
   if ( printErrorWhenNotInitialized())
     return;
@@ -464,7 +464,6 @@ void TebVisualization::visualizeIntermediatePoint(const PoseSE2& pose, const std
   visualization_msgs::Marker marker;
   marker.header.frame_id = cfg_->map_frame; // map frame
   marker.header.stamp = ros::Time::now();  // current time
-  marker.ns = ns;
   marker.type = visualization_msgs::Marker::POINTS;  // marker type
   marker.action = visualization_msgs::Marker::ADD;  // add marker action
 

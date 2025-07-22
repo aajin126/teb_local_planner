@@ -578,6 +578,7 @@ public:
 
   double distanceFieldAt(double wx, double wy) const;
   double euclideanDistance(const PoseSE2& p1, const PoseSE2& p2);
+  Eigen::Vector2d getModifiedPosition(const Eigen::Vector2d pose);
   bool isSegmentInCollision(const PoseSE2& pose1, const PoseSE2& pose2,const std::vector<float>& distance_field, const DistanceMapInfo& costmap_info);
 protected:
   

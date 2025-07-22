@@ -167,7 +167,7 @@ public:
   void publishRobotPose(const PoseSE2& pose, const BaseRobotFootprintModel& robot_model,
                                   const std::vector<geometry_msgs::Point>& footprint);
 
-  void visualizeIntermediatePoint(const PoseSE2& pose, const std::string& ns = "IntermediatePoints");
+  void visualizeIntermediatePoint(const Eigen::Vector2d pose, const std::string& ns = "IntermediatePoints");
 
   void visualizeNarrGap(const std::vector<std::pair<Eigen::Vector2d, Eigen::Vector2d>>& narrow_gaps);
   /**
