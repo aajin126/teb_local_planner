@@ -65,6 +65,7 @@ void TebVisualization::initialize(ros::NodeHandle& nh, const TebConfig& cfg)
   local_plan_pub_ = nh.advertise<nav_msgs::Path>("local_plan",1);
   teb_poses_pub_ = nh.advertise<geometry_msgs::PoseArray>("teb_poses", 100);
   teb_marker_pub_ = nh.advertise<visualization_msgs::Marker>("teb_markers", 1000);
+  point_marker_pub_ = nh.advertise<visualization_msgs::Marker>("point_markers", 1000);
   feedback_pub_ = nh.advertise<teb_local_planner::FeedbackMsg>("teb_feedback", 10);  
   footprint_pub_ = nh.advertise<visualization_msgs::Marker>("footprint_markers", 1000);
   footprintmodel_pub_ = nh.advertise<visualization_msgs::Marker>("footprintmodel_markers", 1000);
@@ -75,6 +76,7 @@ void TebVisualization::initialize(ros::NodeHandle& nh, const TebConfig& cfg)
   via_point_pub_ = nh.advertise<visualization_msgs::Marker>("via_point_marker", 1);
   marker_pub_ = nh.advertise<visualization_msgs::Marker>("visualization_marker", 5);
   grid_path_pub_ = nh.advertise<visualization_msgs::Marker>("grid_path_marker", 10);
+  arrow_pub_ = nh.advertise<visualization_msgs::Marker>("arrow_markers", 1000);
 
   initialized_ = true; 
 }
@@ -275,37 +277,37 @@ void TebVisualization::visualizeMedialBall(const std::vector<std::pair<Eigen::Ve
 }
 
 
-//  void TebVisualization::visualizeMedialBall(const geometry_msgs::Point& center, double radius)
-//  {
-//    visualization_msgs::Marker marker;
-//    marker.header.frame_id = "map";
-//    marker.header.stamp = ros::Time::now();
-//    marker.ns = "medial_balls";
-//    marker.id = static_cast<int>(center.x * 1000 + center.y * 1000);
-//    marker.type = visualization_msgs::Marker::LINE_STRIP;
-//    marker.action = visualization_msgs::Marker::ADD;
-//
-//    marker.scale.x = 0.02;
-//    marker.color.a = 1.0;
-//    marker.color.r = 1.0;
-//    marker.color.g = 0.0;
-//    marker.color.b = 0.0;
-//
-//    // Draw the medial ball centered at the new position
-//    for (double angle = 0; angle <= 2 * M_PI; angle += M_PI / 36)
-//    {
-//      geometry_msgs::Point p;
-//      p.x = center.x + radius * std::cos(angle);
-//      p.y = center.y + radius * std::sin(angle);
-//      p.z = 0.0;
-//      marker.points.push_back(p);
-//    }
-//
-//    ros::Duration lifetime(1.0);
-//    marker.lifetime = lifetime;
-//
-//    marker_pub_.publish(marker);
-//  }
+  void TebVisualization::visualizeMedialPoint(const Eigen::Vector2d& center, double radius)
+  {
+    visualization_msgs::Marker marker;
+    marker.header.frame_id = "map";
+    marker.header.stamp = ros::Time::now();
+    marker.ns = "medial_balls";
+    marker.id = static_cast<int>(center.x() * 1000 + center.y() * 1000);
+    marker.type = visualization_msgs::Marker::LINE_STRIP;
+    marker.action = visualization_msgs::Marker::ADD;
+
+    marker.scale.x = 0.02;
+    marker.color.a = 1.0;
+    marker.color.r = 1.0;
+    marker.color.g = 0.0;
+    marker.color.b = 0.0;
+
+    // Draw the medial ball centered at the new position
+    for (double angle = 0; angle <= 2 * M_PI; angle += M_PI / 36)
+    {
+      geometry_msgs::Point p;
+      p.x = center.x() + radius * std::cos(angle);
+      p.y = center.y() + radius * std::sin(angle);
+      p.z = 0.0;
+      marker.points.push_back(p);
+    }
+
+    ros::Duration lifetime(1.0);
+    marker.lifetime = lifetime;
+
+    marker_pub_.publish(marker);
+  }
 
   void TebVisualization::visualizeNarrowSpace(const geometry_msgs::Point& center, double radius)
   {
@@ -487,6 +489,96 @@ void TebVisualization::visualizeIntermediatePoint(const Eigen::Vector2d pose, co
 
   // Publish the marker
   teb_marker_pub_.publish(marker);
+}
+
+void TebVisualization::visualizePoint(const Eigen::Vector2d pose1,const Eigen::Vector2d pose2,const Eigen::Vector2d pose3, const std::string& ns)
+{
+  if (printErrorWhenNotInitialized())
+    return;
+
+  // 공통 세팅
+  visualization_msgs::Marker marker;
+  marker.header.frame_id = cfg_->map_frame;
+  marker.header.stamp    = ros::Time::now();
+  marker.ns              = ns;
+  marker.id              = 0;
+  marker.type            = visualization_msgs::Marker::POINTS;
+  marker.action          = visualization_msgs::Marker::ADD;
+
+  marker.scale.x = 0.05;
+  marker.scale.y = 0.05;
+
+  // 점들 추가
+  auto toPoint = [](const Eigen::Vector2d& p){
+    geometry_msgs::Point pt;
+    pt.x = p.x();
+    pt.y = p.y();
+    pt.z = 0.0;
+    return pt;
+  };
+
+  marker.points.reserve(3);
+  marker.colors.reserve(3);
+
+  auto colorRGBA = [](float r, float g, float b, float a = 1.0f){
+    std_msgs::ColorRGBA c;
+    c.r = r; c.g = g; c.b = b; c.a = a;
+    return c;
+  };
+
+  // pose1 & pose2
+  std_msgs::ColorRGBA color12 = colorRGBA(1.0f, 0.0f, 0.0f); // red
+  // pose3
+  std_msgs::ColorRGBA color3  = colorRGBA(0.0f, 0.0f, 1.0f); // blue
+
+  marker.points.push_back(toPoint(pose1));
+  marker.colors.push_back(color12);
+
+  marker.points.push_back(toPoint(pose2));
+  marker.colors.push_back(color12);
+
+  marker.points.push_back(toPoint(pose3));
+  marker.colors.push_back(color3);
+
+  // Check if the points list is empty
+  if (marker.points.empty()) {
+    ROS_WARN("Points list is empty for visualization marker. Skipping visualization.");
+    return;
+  }
+
+  // Publish the marker
+  point_marker_pub_.publish(marker);
+}
+
+void TebVisualization::publishArrow(const Eigen::Vector2d& start, const Eigen::Vector2d& end, const std::string& ns, double shaft_d, double head_d, double head_l)
+{
+  visualization_msgs::Marker m;
+  m.header.frame_id = cfg_->map_frame; // map frame
+  m.header.stamp = ros::Time::now();  // current time
+  m.ns   = ns;
+  m.type = visualization_msgs::Marker::ARROW;
+  m.action = visualization_msgs::Marker::ADD;
+
+  geometry_msgs::Point p0, p1;
+  p0.x = start.x(); p0.y = start.y(); p0.z = 0.0;
+  p1.x = end.x();   p1.y = end.y();   p1.z = 0.0;
+
+  m.points.push_back(p0);
+  m.points.push_back(p1);
+
+  // scale.x = shaft diameter, scale.y = head diameter, scale.z = head length
+  m.scale.x = shaft_d;
+  m.scale.y = head_d;
+  m.scale.z = head_l;
+
+  m.color.a = 1.0;  // alpha (transparency)
+  m.color.r = 1.0;  // red component
+  m.color.g = 0.0;  // green component
+  m.color.b = 0.0;  // blue component
+
+  m.lifetime = ros::Duration(3.0); // forever
+
+  arrow_pub_.publish(m); // advertise beforehand
 }
 
 void TebVisualization::visualizeNarrGap(const std::vector<std::pair<Eigen::Vector2d, Eigen::Vector2d>>& narrow_gaps)

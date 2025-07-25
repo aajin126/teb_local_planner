@@ -77,7 +77,7 @@ v1.0  2018-08-31  Initial release
 	extern "C" {
 #endif
 
-void sdt_dead_reckoning(unsigned int width, unsigned int height, unsigned char threshold,  const unsigned char* image, float* distance_field);
+void sdt_dead_reckoning(unsigned int width, unsigned int height, unsigned char threshold,  const unsigned char* image, float* distance_field, int* px_out, int* py_out);
 
 #ifdef __cplusplus
 	}
@@ -88,7 +88,7 @@ void sdt_dead_reckoning(unsigned int width, unsigned int height, unsigned char t
 #include <stdlib.h>
 #include <math.h>
 
-void sdt_dead_reckoning(unsigned int width, unsigned int height, unsigned char threshold,  const unsigned char* image, float* distance_field) {
+void sdt_dead_reckoning(unsigned int width, unsigned int height, unsigned char threshold,  const unsigned char* image, float* distance_field, int* px_out, int* py_out) {
 	// The internal buffers have a 1px padding around them so we can avoid border checks in the loops below
 	unsigned int padded_width = width + 2;
 	unsigned int padded_height = height + 2;
@@ -111,8 +111,8 @@ void sdt_dead_reckoning(unsigned int width, unsigned int height, unsigned char t
 	#define I(x, y) (image[(x) + (y) * width] > threshold)
 	// The internal buffers are padded x and y are in the range 0..padded_width-1 and 0..padded_height-1
 	#define D(x, y) padded_distance_field[(x) + (y) * (padded_width)]
-	#define PX(x, y) px_out[(x) + (y) * padded_width]
-	#define PY(x, y) py_out[(x) + (y) * padded_width]
+	#define PX(x, y) px[(x) + (y) * padded_width]
+	#define PY(x, y) py[(x) + (y) * padded_width]
 	// We use a macro instead of the hypotf() function because it's a major performance boost (~26ms down to ~17ms)
 	#define LENGTH(x, y) sqrtf((x)*(x) + (y)*(y))
 
@@ -203,6 +203,8 @@ void sdt_dead_reckoning(unsigned int width, unsigned int height, unsigned char t
     for(unsigned int x = 0; x < width; ++x) {
 			float sign = I(x, y) ? -1 : 1;
 			distance_field[x + y*width] = D(x+1, y+1) * sign;
+			px_out[x + y * width] = PX(x + 1, y + 1);
+      py_out[x + y * width] = PY(x + 1, y + 1);
 		}
 	}
 

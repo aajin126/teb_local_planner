@@ -140,6 +140,7 @@ public:
   void publishGridSearchPath(const std::vector<geometry_msgs::Point>& grid_search_path);
   void visualizeSamples(const std::vector<geometry_msgs::Point>& samples);
   void visualizeMedialBall(const std::vector<std::pair<Eigen::Vector2d, double>>& medial_point_list_);
+  void visualizeMedialPoint(const Eigen::Vector2d& center, double radius);
   void visualizeNarrowSpace(const geometry_msgs::Point& center, double radius);
 
   void publishInfeasibleRobotFootprintModel(const PoseSE2& current_pose, const BaseRobotFootprintModel& robot_model, const std::string& ns = "RobotInfeasibleFootprintModel",
@@ -168,7 +169,8 @@ public:
                                   const std::vector<geometry_msgs::Point>& footprint);
 
   void visualizeIntermediatePoint(const Eigen::Vector2d pose, const std::string& ns = "IntermediatePoints");
-
+  void visualizePoint(const Eigen::Vector2d pose1,const Eigen::Vector2d pose2,const Eigen::Vector2d pose3, const std::string& ns = "Points");
+  void publishArrow(const Eigen::Vector2d& start, const Eigen::Vector2d& end, const std::string& ns = "arrow", double shaft_d = 0.02, double head_d  = 0.05, double head_l  = 0.05);
   void visualizeNarrGap(const std::vector<std::pair<Eigen::Vector2d, Eigen::Vector2d>>& narrow_gaps);
   /**
    * @brief Publish obstacle positions to the ros topic \e ../../teb_markers
@@ -291,6 +293,8 @@ protected:
   ros::Publisher via_point_pub_;
   ros::Publisher marker_pub_; 
   ros::Publisher grid_path_pub_;
+  ros::Publisher point_marker_pub_;
+  ros::Publisher arrow_pub_;
   
   const TebConfig* cfg_; //!< Config class that stores and manages all related parameters
   

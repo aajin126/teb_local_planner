@@ -138,7 +138,7 @@ public:
    * @param via_points Container storing via-points (optional)
    */
   TebOptimalPlanner(const TebConfig& cfg, ObstContainer* obstacles = NULL,
-                    TebVisualizationPtr visual = TebVisualizationPtr(), const ViaPointContainer* via_points = NULL, const std::vector<float>* distance_field = NULL, const DistanceMapInfo* costmap_info = NULL);
+                    TebVisualizationPtr visual = TebVisualizationPtr(), const ViaPointContainer* via_points = NULL, const std::vector<float>* distance_field = NULL, const DistanceMapInfo* costmap_info = NULL, const std::vector<int>* px_out= NULL, const std::vector<int>* py_out= NULL);
 
   /**
    * @brief Destruct the optimal planner.
@@ -153,7 +153,7 @@ public:
     * @param via_points Container storing via-points (optional)
     */
   void initialize(const TebConfig& cfg, ObstContainer* obstacles = NULL,
-                  TebVisualizationPtr visual = TebVisualizationPtr(), const ViaPointContainer* via_points = NULL, const std::vector<float>* distance_field = NULL, const DistanceMapInfo* costmap_info = NULL);
+                  TebVisualizationPtr visual = TebVisualizationPtr(), const ViaPointContainer* via_points = NULL, const std::vector<float>* distance_field = NULL, const DistanceMapInfo* costmap_info = NULL, const std::vector<int>* px_out= NULL, const std::vector<int>* py_out= NULL);
 
   /** @name Plan a trajectory  */
   //@{
@@ -546,6 +546,7 @@ public:
   void getFullTrajectory(std::vector<TrajectoryPointMsg>& trajectory) const;
 
   double computeArcLength(const PoseSE2& p1, const PoseSE2& p2);
+  Eigen::Vector2d findPerpMedialAxis(const Eigen::Vector2d& coll_pt, const Eigen::Vector2d& p2, const Eigen::Vector2d& p3, double max_iterations = 100);
 
   SegmentRefineResult bisectSegmentLocal(const PoseSE2& p_start, const PoseSE2& p_end, double dt,
     base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
@@ -571,7 +572,7 @@ public:
   const Eigen::Vector2d& point,
   const std::vector<float>& distance_field,
   const DistanceMapInfo& costmap_info);
-
+  PoseSE2 interpolatePose(const PoseSE2& A, const PoseSE2& B, double frac);
   Eigen::Vector2d performMedialAxisClimb(const Eigen::Vector2d& start_point, const std::vector<float>& distance_field, unsigned int map_width, unsigned int map_height, double resolution, double origin_x, double origin_y);
 
   double distanceFieldAt(double wx, double wy) const;
@@ -754,6 +755,8 @@ protected:
   std::vector<ObstContainer> obstacles_per_vertex_; //!< Store the obstacles associated with the n-1 initial vertices
   const DistanceMapInfo* costmap_info_;
   const std::vector<float>* distance_field_;
+  const std::vector<int>* px_out_;
+  const std::vector<int>* py_out_;
 
   double cost_; //!< Store cost value of the current hyper-graph
   RotType prefer_rotdir_; //!< Store whether to prefer a specific initial rotation in optimization (might be activated in case the robot oscillates)

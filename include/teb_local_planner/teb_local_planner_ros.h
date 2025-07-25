@@ -458,8 +458,8 @@ private:
   TebConfig cfg_; //!< Config class that stores and manages all related parameters
   FailureDetector failure_detector_; //!< Detect if the robot got stucked
   std::vector<float> distance_field_;
-  std::shared_ptr<std::vector<int>> px_;
-  std::shared_ptr<std::vector<int>> py_;
+  std::vector<int> px_out_;
+  std::vector<int> py_out_;
   DistanceMapInfo costmap_info_;
 
 

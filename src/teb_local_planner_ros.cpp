@@ -135,7 +135,7 @@ void TebLocalPlannerROS::initialize(std::string name, tf2_ros::Buffer* tf, costm
     }
     else
     {
-      planner_ = PlannerInterfacePtr(new TebOptimalPlanner(cfg_, &obstacles_, visualization_, &via_points_, &distance_field_, &costmap_info_));
+      planner_ = PlannerInterfacePtr(new TebOptimalPlanner(cfg_, &obstacles_, visualization_, &via_points_, &distance_field_, &costmap_info_, &px_out_, &py_out_));
       ROS_INFO("Parallel planning in distinctive topologies disabled.");
     }
 
@@ -556,19 +556,17 @@ std::vector<std::pair<geometry_msgs::Point, double>> TebLocalPlannerROS::detectN
   double resolution = costmap.getResolution();
   double origin_x = costmap.getOriginX();
   double origin_y = costmap.getOriginY();
+
   unsigned int padded_width = costmap_info_.map_width + 2;
   unsigned int padded_height = costmap_info_.map_height + 2;
-  int* px_raw = (int*)malloc(padded_width * padded_height * sizeof(int));
-  int* py_raw = (int*)malloc(padded_width * padded_height * sizeof(int));
 
-  // 2. create distance field
-  std::vector<float> distance_field(map_width * map_height, std::numeric_limits<float>::infinity());
-  sdt_dead_reckoning(map_width, map_height, 253, costmap_data, distance_field.data(), px_raw, py_raw);
-  px_->assign(px_raw, px_raw + padded_width * padded_height);
-  py_->assign(py_raw, py_raw + padded_width * padded_height);
-  ROS_WARN_STREAM("px_ is " << (px_ ? "not null" : "null"));
-  free(px_raw);
-  free(py_raw);
+
+  px_out_.assign(padded_width * padded_height, -1);
+  py_out_.assign(padded_width * padded_height, -1);
+  distance_field_.assign(costmap_info_.map_width * costmap_info_.map_height, std::numeric_limits<float>::infinity());
+
+  sdt_dead_reckoning(costmap_info_.map_width, costmap_info_.map_height,253, costmap_info_.costmap_data, distance_field_.data(), px_out_.data(), py_out_.data());
+
   for (const auto& sample : samples)
   {
     auto obstacles_in_circle = getObstaclePointsInCircle(sample, obst_radius);
@@ -593,7 +591,7 @@ std::vector<std::pair<geometry_msgs::Point, double>> TebLocalPlannerROS::detectN
   // 3. Find Medial points 
   for (const auto& point : narrow_points)
   {
-    auto medial_result = findMedialBallRadius(point, *costmap_, distance_field);
+    auto medial_result = findMedialBallRadius(point, *costmap_, distance_field_);
     double medial_radius = medial_result.second;
     geometry_msgs::Point final_center = medial_result.first;
 
@@ -1052,10 +1050,16 @@ void TebLocalPlannerROS::updateSignedDistanceField()
   costmap_info_.origin_x = costmap_->getOriginX();
   costmap_info_.origin_y = costmap_->getOriginY();
   costmap_info_.costmap_data = costmap_->getCharMap();
+  unsigned int padded_width = costmap_info_.map_width + 2;
+  unsigned int padded_height = costmap_info_.map_height + 2;
 
+
+  px_out_.assign(padded_width * padded_height, -1);
+  py_out_.assign(padded_width * padded_height, -1);
   distance_field_.assign(costmap_info_.map_width * costmap_info_.map_height, std::numeric_limits<float>::infinity());
 
-  sdt_dead_reckoning(costmap_info_.map_width, costmap_info_.map_height,253, costmap_info_.costmap_data, distance_field_.data());
+  sdt_dead_reckoning(costmap_info_.map_width, costmap_info_.map_height,253, costmap_info_.costmap_data, distance_field_.data(), px_out_.data(), py_out_.data());
+
   ROS_DEBUG("Finishing update distance map");
 }
 
