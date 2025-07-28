@@ -254,10 +254,12 @@ public:
    */	  
   bool optimizeTEB(int iterations_innerloop, int iterations_outerloop, bool compute_cost_afterwards = false,
                    double obst_cost_scale=1.0, double viapoint_cost_scale=1.0, bool alternative_time_cost=false);
+
+  bool reoptimizeTEB(int iterations_innerloop, int iterations_outerloop, bool compute_cost_afterwards = false,
+                   double obst_cost_scale=1.0, double viapoint_cost_scale=1.0, bool alternative_time_cost=false);
   
   //@}
-  
-  
+  bool adaptiveoptimizeTEB(int iterations_innerloop, int iterations_outerloop, bool compute_cost_afterwards= false, double obst_cost_scale=1.0, double viapoint_cost_scale=1.0, bool alternative_time_cost=false);
   /** @name Desired initial and final velocity */
   //@{
   
@@ -546,7 +548,7 @@ public:
   void getFullTrajectory(std::vector<TrajectoryPointMsg>& trajectory) const;
 
   double computeArcLength(const PoseSE2& p1, const PoseSE2& p2);
-  Eigen::Vector2d findPerpMedialAxis(const Eigen::Vector2d& coll_pt, const Eigen::Vector2d& p2, const Eigen::Vector2d& p3, double max_iterations = 100);
+  std::pair<Eigen::Vector2d, double> findPerpMedialAxis(const Eigen::Vector2d& coll_pt, const Eigen::Vector2d& p2, const Eigen::Vector2d& p3, double max_iterations = 100);
 
   SegmentRefineResult bisectSegmentLocal(const PoseSE2& p_start, const PoseSE2& p_end, double dt,
     base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,

@@ -508,6 +508,7 @@ public:
    */    
   // void autoResize(std::vector<double>& ref_timediffs_, std::vector<double>& hyst_timediffs_, double dt_ref, double dt_hysteresis, int min_samples = 3, int max_samples=1000, bool fast_mode=false);
   void autoResize(double dt_ref, double dt_hysteresis, int min_samples, int max_samples, bool fast_mode);
+  void adaptiveautoResize( std::vector<double>& ref_timediffs_,std::vector<double>& hyst_timediffs_, double dt_ref, double dt_hysteresis, int min_samples, int max_samples, bool fast_mode);
 
   /**
    * @brief Set a pose vertex at pos \c index of the pose sequence to be fixed or unfixed during optimization.
