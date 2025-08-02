@@ -491,6 +491,60 @@ void TebVisualization::visualizeIntermediatePoint(const Eigen::Vector2d pose, co
   teb_marker_pub_.publish(marker);
 }
 
+void TebVisualization::visualizetwoPoint(const Eigen::Vector2d pose1, const Eigen::Vector2d pose2, const std::string& ns)
+{
+  if (printErrorWhenNotInitialized())
+    return;
+
+  // 공통 세팅
+  visualization_msgs::Marker marker;
+  marker.header.frame_id = cfg_->map_frame;
+  marker.header.stamp    = ros::Time::now();
+  marker.ns              = ns;
+  marker.id              = 0;
+  marker.type            = visualization_msgs::Marker::POINTS;
+  marker.action          = visualization_msgs::Marker::ADD;
+
+  marker.scale.x = 0.05;
+  marker.scale.y = 0.05;
+
+  // 점들 추가
+  auto toPoint = [](const Eigen::Vector2d& p){
+    geometry_msgs::Point pt;
+    pt.x = p.x();
+    pt.y = p.y();
+    pt.z = 0.0;
+    return pt;
+  };
+
+  marker.points.reserve(2);
+  marker.colors.reserve(2);
+
+  auto colorRGBA = [](float r, float g, float b, float a = 1.0f){
+    std_msgs::ColorRGBA c;
+    c.r = r; c.g = g; c.b = b; c.a = a;
+    return c;
+  };
+
+  std_msgs::ColorRGBA color1  = colorRGBA(0.0f, 0.0f, 1.0f); // blue
+  std_msgs::ColorRGBA color2  = colorRGBA(1.0f, 0.0f, 0.0f); // red
+
+  marker.points.push_back(toPoint(pose1));
+  marker.colors.push_back(color1);
+
+  marker.points.push_back(toPoint(pose2));
+  marker.colors.push_back(color2);
+
+  // Check if the points list is empty
+  if (marker.points.empty()) {
+    ROS_WARN("Points list is empty for visualization marker. Skipping visualization.");
+    return;
+  }
+
+  // Publish the marker
+  point_marker_pub_.publish(marker);
+}
+
 void TebVisualization::visualizePoint(const Eigen::Vector2d pose1,const Eigen::Vector2d pose2,const Eigen::Vector2d pose3, const std::string& ns)
 {
   if (printErrorWhenNotInitialized())

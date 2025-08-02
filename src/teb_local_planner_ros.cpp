@@ -1050,15 +1050,31 @@ void TebLocalPlannerROS::updateSignedDistanceField()
   costmap_info_.origin_x = costmap_->getOriginX();
   costmap_info_.origin_y = costmap_->getOriginY();
   costmap_info_.costmap_data = costmap_->getCharMap();
-  unsigned int padded_width = costmap_info_.map_width + 2;
-  unsigned int padded_height = costmap_info_.map_height + 2;
 
-
-  px_out_.assign(padded_width * padded_height, -1);
-  py_out_.assign(padded_width * padded_height, -1);
+//  std::ofstream fout("/home/glab/costmap_data.txt");
+//
+//  if (fout.is_open())
+//  {
+//    for (unsigned int y = 0; y < costmap_info_.map_height; ++y)
+//    {
+//      for (unsigned int x = 0; x < costmap_info_.map_width; ++x)
+//      {
+//        unsigned int index = x + y * costmap_info_.map_width;
+//         fout << static_cast<int>(costmap_info_.costmap_data[index]) << " ";
+//      }
+//      fout << "\n";
+//    }
+//    fout.close();
+//  }
+//  else
+//  {
+//    ROS_WARN("Failed to open file to save costmap data");
+//  }
+  px_out_.assign(costmap_info_.map_width  * costmap_info_.map_height, -1);
+  py_out_.assign(costmap_info_.map_width  * costmap_info_.map_height, -1);
   distance_field_.assign(costmap_info_.map_width * costmap_info_.map_height, std::numeric_limits<float>::infinity());
 
-  sdt_dead_reckoning(costmap_info_.map_width, costmap_info_.map_height,253, costmap_info_.costmap_data, distance_field_.data(), px_out_.data(), py_out_.data());
+  sdt_dead_reckoning(costmap_info_.map_width, costmap_info_.map_height, 253, costmap_info_.costmap_data, distance_field_.data(), px_out_.data(), py_out_.data());
 
   ROS_DEBUG("Finishing update distance map");
 }

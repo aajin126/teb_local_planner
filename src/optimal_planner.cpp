@@ -296,19 +296,17 @@ bool TebOptimalPlanner::adaptiveoptimizeTEB(int iterations_innerloop, int iterat
 
     if (cfg_->trajectory.teb_autosize)
     {
-      ROS_DEBUG("Start auto resize");
-      std::ofstream outFile("/home/glab/bisection_log.txt", std::ios::app);
-      if (outFile.is_open())
-      {
-        outFile << "ref_timediffs_ size: " << ref_timediffs_.size() << "\n";
-        outFile << "hyst_timediffs_ size: " << hyst_timediffs_.size() << "\n";
-      }
-      else
-      {
-        std::cerr << "File not opened\n";
-      }
+//      std::ofstream outFile("/home/glab/bisection_log.txt", std::ios::app);
+//      if (outFile.is_open())
+//      {
+//        outFile << "ref_timediffs_ size: " << ref_timediffs_.size() << "\n";
+//        outFile << "hyst_timediffs_ size: " << hyst_timediffs_.size() << "\n";
+//      }
+//      else
+//      {
+//        std::cerr << "File not opened\n";
+//      }
       teb_.adaptiveautoResize(ref_timediffs_, hyst_timediffs_, cfg_->trajectory.dt_ref, cfg_->trajectory.dt_hysteresis, cfg_->trajectory.min_samples, cfg_->trajectory.max_samples, fast_mode);
-      ROS_DEBUG("Finish auto resize");
     }
     success = buildGraph(weight_multiplier);
     if (!success)
@@ -1000,11 +998,6 @@ void TebOptimalPlanner::AddEdgesMedialAttraction()
 
   int n = teb_.sizePoses();
 
-  if (costmap_info_->costmap_data == nullptr)
-  {
-    ROS_ERROR("costmap info is null!");
-    return;
-  }
   if (!distance_field_)
   {
     ROS_ERROR("Distance field is null!");
@@ -1542,230 +1535,199 @@ void TebOptimalPlanner::getFullTrajectory(std::vector<TrajectoryPointMsg>& traje
 //  }
 //  return true;
 //}
-//
 
-//pba result
-//bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
-//                                             double inscribed_radius, double circumscribed_radius, int look_ahead_idx, double feasibility_check_lookahead_distance)
-//{
-//  if (look_ahead_idx < 0 || look_ahead_idx >= teb().sizePoses())
-//    look_ahead_idx = teb().sizePoses() - 1;
-//
-//  int i = 0;
-//  bool any_inserted = false;
-////  ROS_INFO("== Timediff BEFORE insertion ==");
-////  for (int t = 0; t < teb().sizeTimeDiffs(); ++t)
-////  {
-////    std::ofstream outFile("/home/glab/execution_time.txt", std::ios::app);
-////    if (outFile.is_open()) {
-////        outFile << "BeforeTimeDiff[ " << t << "] = " << teb().TimeDiff(t) << std::endl;
-////        outFile.close();
-////    } else {
-////        std::cerr << "Failed to open file for writing." << std::endl;
-////    }
-////    ROS_INFO("  TimeDiff[%d] = %f", t, teb().TimeDiff(t));
-////  }
-//  while (i < teb().sizeTimeDiffs() && (i + 1) < teb().sizePoses())
-//  {
-//    const PoseSE2& pose1 = teb().Pose(i);
-//    const PoseSE2& pose2 = teb().Pose(i + 1);
-//    ROS_INFO("Number of pose : %d", teb().sizePoses());
-//
-//    if (isSegmentInCollision(pose1, pose2, *distance_field_, *costmap_info_))
-//    {
-//      ROS_INFO("Segment in Collision at %d", i);
-//
-//      PoseSE2 mid_pose(
-//        0.5 * (pose1.x() + pose2.x()),
-//        0.5 * (pose1.y() + pose2.y()),
-//        0.5 * (pose1.theta() + pose2.theta())
-//      );
-//
-//      double dt = teb().TimeDiff(i);
-//      double dt_new = dt * 0.5;
-//
-//      teb().TimeDiff(i) = dt_new;
-//      teb().insertPose(i + 1, mid_pose);
-//      teb().insertTimeDiff(i + 1, dt_new);
-//
-//      teb().fixTimeDiff(i);
-//      teb().fixTimeDiff(i + 1);
-//      ROS_INFO("Number of pose : %d", teb().sizePoses());
-//
-//      any_inserted = true;
-//
-//    }
-//    i += 2;
-//  }
-//
-//  if(any_inserted)
-//  {
-////    ROS_INFO("== Timediff AFTER insertion ==");
-////    for (int t = 0; t < teb().sizeTimeDiffs(); ++t)
-////    {
-////      std::ofstream outFile("/home/glab/execution_time.txt", std::ios::app);
-////      if (outFile.is_open()) {
-////        outFile << "After TimeDiff[ " << t << "] = " << teb().TimeDiff(t) << std::endl;
-////        outFile.close();
-////      } else {
-////        std::cerr << "Failed to open file for writing." << std::endl;
-////      }
-////      ROS_INFO("  TimeDiff[%d] = %f", t, teb().TimeDiff(t));
-////    }
-//
-//    optimizeTEB(cfg_->optim.no_inner_iterations, cfg_->optim.no_outer_iterations);
-//  }
-//
-//  for (int i=0; i <= look_ahead_idx; ++i)
-//  {
-//    if ( costmap_model->footprintCost(teb().Pose(i).x(), teb().Pose(i).y(), teb().Pose(i).theta(), footprint_spec, inscribed_radius, circumscribed_radius) == -1 )
-//    {
-//      if (visualization_)
-//      {
-//        visualization_->publishInfeasibleRobotPose(teb().Pose(i), *cfg_->robot_model, footprint_spec);
-//      }
-//      return false;
-//    }
-//  }
-//  return true;
-//}
-//
-//
-//bool TebOptimalPlanner::isSegmentInCollision(const PoseSE2& pose1, const PoseSE2& pose2,const std::vector<float>& distance_field, const DistanceMapInfo& costmap_info)
-//{
-//
-//  unsigned int width = costmap_info.map_width;
-//  unsigned int height = costmap_info.map_height;
-//  double resolution = costmap_info.resolution;
-//  double origin_x = costmap_info.origin_x;
-//  double origin_y = costmap_info.origin_y;
-//
-//  // 1. angular diff
-//  double dtheta = fabs(g2o::normalize_theta(pose2.theta() - pose1.theta()));
-//
-//  // 2. distance between poses
-//  double dx = pose2.x() - pose1.x();
-//  double dy = pose2.y() - pose1.y();
-//  double dist_pose_to_pose = std::sqrt(dx*dx + dy*dy);
-//
-//  // 3. distance between obs and pose1
-//  int mx1 = static_cast<int>((pose1.x() - origin_x) / resolution);
-//  int my1 = static_cast<int>((pose1.y() - origin_y) / resolution);
-//  float d_obs1 = 0.0;
-//  int idx1 = my1 * width + mx1;
-//  d_obs1 = distance_field[idx1] * resolution;
-//
-//
-//  // 4. distance between obs and pose2
-//  int mx2 = static_cast<int>((pose2.x() - origin_x) / resolution);
-//  int my2 = static_cast<int>((pose2.y() - origin_y) / resolution);
-//  float d_obs2 = 0.0;
-//  int idx2 = my2 * width + mx2;
-//  d_obs2 = distance_field[idx2] * resolution;
-//
-//  ROS_INFO("distance between pose : %f, sum of distance btw pose and obs : %f", dist_pose_to_pose, d_obs1 + d_obs2);
-//  ROS_INFO("collision : %d", collision);
-//  // 5. collision check
-//  if (dist_pose_to_pose >= d_obs1 + d_obs2)
-//  {
-//     collision += 1;
-//     ROS_INFO("collision : %d", collision);
-//     return true; // potential collision
-//  }
-//
-//  //ROS_INFO("collision-free");
-//  return false; // collision-free
-//}
 
-//ver1.
-//std::pair<Eigen::Vector2d, double> TebOptimalPlanner::findPerpMedialAxis(const Eigen::Vector2d& coll_pt, const Eigen::Vector2d& p2, const Eigen::Vector2d& p3, double max_iterations)
-//{
-//    const auto& df = *distance_field_;
-//    const auto& info = *costmap_info_;
-//
-//    // 1) Compute perpendicular direction n
-//    Eigen::Vector2d d = p3 - p2;
-//    Eigen::Vector2d n(d.y(), -d.x());// perp(d)
-//    if (n.norm() < 1e-6) {
-//      double v = distanceFieldAt(coll_pt.x(), coll_pt.y());
-//      return { coll_pt, v };  // degenerate case
-//    }
-//    n.normalize();
-//
-//    // 3) initialize
-//    Eigen::Vector2d best = coll_pt;
-//    double best_val = distanceFieldAt(best.x() , best.y());
-//    const double  max_dist = 3.5;
-//    std::ofstream outFile("/home/glab/bisection_log.txt", std::ios::app);
-//    if (outFile.is_open())
-//    {
-//      outFile << "Original TEB pose : " << best.x() << ", "<< best.y() << " -> original val = "<< best_val << "\n";
-//    }
-//    else
-//    {
-//      std::cerr << "File not opened\n";
-//    }
-//    // 4) hill climbing
-//    bool moved = true;
-//    int iter = 0;
-//    while (moved && iter++ < max_iterations) {
-//        moved = false;
-//        // +
-//        Eigen::Vector2d cand = best + n * info.resolution;
-//        double val = distanceFieldAt(cand.x(), cand.y());
-//        if (val >= max_dist){
-//          if (outFile.is_open())
-//          {
-//            outFile << "updated TEB pose : " << cand.x() << ", "<< cand.y() << " -> best val = " << val << "\n";
-//          }
-//          else
-//          {
-//            std::cerr << "File not opened\n";
-//          }
-//          visualization_ -> visualizeMedialPoint(cand, val);
-//          return {cand, val};
-//        }
-//        if (val > best_val) {
-//            best = cand;
-//            best_val = val;
-//            moved = true;
-//            if (outFile.is_open())
-//            {
-//              outFile << "updated TEB pose : " << cand.x() << ", "<< cand.y() << " -> best val = " << val << "\n";
-//            }
-//            else
-//            {
-//              std::cerr << "File not opened\n";
-//            }
-//            continue;
-//        }
-//        // -
-//        cand = best - n * info.resolution;
-//        val = distanceFieldAt(cand.x(), cand.y());
-//        if (val >= max_dist){
-//          visualization_ -> visualizeMedialPoint(cand, val);
-//          return {cand, val};
-//        }
-//        if (val > best_val) {
-//            best = cand;
-//            best_val = val;
-//            moved = true;
-//            if (outFile.is_open())
-//            {
-//              outFile << "updated TEB pose : " << cand.x() << ", "<< cand.y() << " -> best val = " << val << "\n";
-//            }
-//            else
-//            {
-//              std::cerr << "File not opened\n";
-//            }
-//        }
-//    }
-//    visualization_ -> visualizeMedialPoint(best, best_val);
-//
-//    return { best, best_val };
-//}
+std::pair<Eigen::Vector2d, double> TebOptimalPlanner::findPenetration(const Eigen::Vector2d& coll_pt,std::ostream& log,double max_iterations)
+{
+    const auto& df   = *distance_field_;  // signed distance field
+    const auto& info = *costmap_info_;
+    ROS_INFO("findpenetration");
 
-std::pair<Eigen::Vector2d, double> TebOptimalPlanner::findPerpMedialAxis(const Eigen::Vector2d& coll_pt, const Eigen::Vector2d& p2, const Eigen::Vector2d& p3, double max_iterations)
+    // 1) 초기화
+    Eigen::Vector2d best = coll_pt;
+    double best_val = distanceFieldAt(best.x(), best.y());
+    const double max_dist = 0.38;
+    Eigen::Vector2d best_point;
+
+    log << "Original TEB pose : " << best.x() << ", " << best.y() << " -> val = "  << best_val << "\n";
+
+    // 2) 침투(penetration) 상태이면, 가장 가까운 경계점(px_out_,py_out_)을 이용해 한 번에 벗어나도록 밀어냄
+    if (best_val < 0.20)
+    {
+        // 2a) world→grid
+        int gx = int((best.x() - info.origin_x) / info.resolution);
+        int gy = int((best.y() - info.origin_y) / info.resolution);
+        int idx = gy * info.map_width + gx;
+
+        // 2b) 가장 가까운 경계점 좌표 (grid→world)
+        int   bx = (*px_out_)[idx]-1;
+        int   by = (*py_out_)[idx]-1;
+        Eigen::Vector2d boundary(info.origin_x + (bx + 0.5) * info.resolution, info.origin_y + (by + 0.5) * info.resolution);
+        visualization_->visualizetwoPoint({boundary.x(),boundary.y()}, {coll_pt.x(),coll_pt.y()});
+
+        // 2c) push 벡터 및 방향
+        Eigen::Vector2d vec;
+        if (best_val < 0.0) {
+            // 장애물 내부 → boundary 쪽으로 나감
+            vec = boundary - best;
+        } else {
+            // 장애물 외부지만 너무 가까움 → boundary에서 멀어지도록
+            vec = best - boundary;
+        }
+        double dp  = vec.norm();
+        Eigen::Vector2d n;
+        if (dp > 1e-3) { n = vec / dp;}
+        else {return { best, best_val };}
+
+        // 3) n 방향으로 grid cell을 따라가며 local maximum 탐색 (최대 0.4m까지만)
+
+        Eigen::Vector2d cur = best;
+        best_point = cur;
+
+        // 시작 셀 index
+        int prev_gx = int((cur.x() - info.origin_x) / info.resolution);
+        int prev_gy = int((cur.y() - info.origin_y) / info.resolution);
+        int iter = 0;
+        while (++iter <= max_iterations)
+        {
+            // n 방향으로 resolution만큼 이동
+            cur = cur + n * info.resolution;
+
+            // 새로운 셀 index
+            int gx = int((cur.x() - info.origin_x) / info.resolution);
+            int gy = int((cur.y() - info.origin_y) / info.resolution);
+
+            // grid 셀이 바뀌지 않았으면 continue
+            if (gx == prev_gx && gy == prev_gy)
+                continue;
+
+            // 범위 초과 시 중단
+            if (gx < 0 || gy < 0 || gx >= int(info.map_width) || gy >= int(info.map_height))
+                break;
+
+            prev_gx = gx;
+            prev_gy = gy;
+
+            // 거리 필드 조회
+            double val = distanceFieldAt(cur.x(), cur.y());
+
+            // local maximum 탐색
+            if (val > best_val)
+            {
+                best_val = val;
+                best_point = cur;
+
+                // 거리 충분하면 조기 종료
+                if (val >= max_dist)
+                    break;
+            }
+            else
+            {
+              // 더 이상 증가하지 않으면 local max
+              break;
+            }
+        }
+    }
+    // 최종 결과 반환
+    return { best_point, best_val };
+}
+
+std::pair<Eigen::Vector2d, double> TebOptimalPlanner::findMedialAxisFromPenetration(const Eigen::Vector2d& coll_pt, const Eigen::Vector2d& p2, const Eigen::Vector2d& p3, std::ostream& log, double max_iterations)
+{
+    const auto& df = *distance_field_;
+    const auto& info = *costmap_info_;
+    ROS_INFO("findMedialAxisFromPenetration");
+
+    Eigen::Vector2d best = coll_pt;
+    double best_val = distanceFieldAt(best.x(), best.y());
+    const double max_dist = 0.35;
+    Eigen::Vector2d best_point;
+    log << "T-1 TEB pose : " << p2.x() << ", "<< p2.y() << "\n";
+    log << "Original TEB pose : " << coll_pt.x() << ", "<< coll_pt.y() << " -> original val = "<< best_val << "\n";
+    log << "T+1 TEB pose : " << p3.x() << ", "<< p3.y() << "\n";
+    // 1) grid index
+    int gx = int((best.x() - info.origin_x) / info.resolution);
+    int gy = int((best.y() - info.origin_y) / info.resolution);
+    int idx = gy * info.map_width + gx;
+
+    // 2) 가장 가까운 경계점(grid → world)
+    int bx = (*px_out_)[idx]-1;
+    int by = (*py_out_)[idx]-1;
+    Eigen::Vector2d boundary(info.origin_x + (bx + 0.5) * info.resolution, info.origin_y + (by + 0.5) * info.resolution);
+
+    visualization_->visualizetwoPoint({boundary.x(), boundary.y()}, {coll_pt.x(), coll_pt.y()});
+
+    // 3) push 벡터 방향
+    Eigen::Vector2d vec;
+    if (best_val < 0.0) vec = boundary - best;
+    else vec = best - boundary;
+
+    if (vec.norm() < 1e-3)
+        return { best, best_val };
+
+    Eigen::Vector2d penetration_vec = vec.normalized();
+
+    // 4) perpendicular vector (n) 방향 결정
+    Eigen::Vector2d d = p3 - p2;
+    Eigen::Vector2d n(d.y(), -d.x());  // perp
+    if (n.norm() < 1e-6)
+        return { best, best_val };
+
+    n.normalize();
+
+    // ±n 중 vec와 내적했을 때 양수인 방향 선택
+    if (n.dot(penetration_vec) < 0)
+        n = -n;
+
+    // 5) 초기화
+    int prev_gx = gx;
+    int prev_gy = gy;
+    best_point = best;
+
+    // 6) ±n 방향으로 grid 따라 local maximum 탐색
+    int iter = 0;
+    while (++iter <= max_iterations)
+    {
+        Eigen::Vector2d cand = best_point + n * info.resolution;
+
+        // grid index 확인
+        int cand_gx = int((cand.x() - info.origin_x) / info.resolution);
+        int cand_gy = int((cand.y() - info.origin_y) / info.resolution);
+
+        // 같은 grid면 continue
+        if (cand_gx == prev_gx && cand_gy == prev_gy)
+            continue;
+
+        prev_gx = cand_gx;
+        prev_gy = cand_gy;
+
+        double val = distanceFieldAt(cand.x(), cand.y());
+
+        if (val >= max_dist)
+        {
+            visualization_->visualizeMedialPoint(cand, val);
+            return { cand, val };
+        }
+
+        if (val > best_val)
+        {
+            best_val = val;
+            best_point = cand;
+            visualization_->visualizeMedialPoint(best_point, best_val);
+        }
+        else
+        {
+            break; // 더 이상 증가하지 않음 → local max
+        }
+    }
+    log << "updated TEB pose : " << best.x() << ", "<< best.y() << " -> best val = " << best_val << "\n";
+
+    return { best_point, best_val };
+
+}
+
+
+std::pair<Eigen::Vector2d, double> TebOptimalPlanner::findPerpMedialAxis(const Eigen::Vector2d& coll_pt, const Eigen::Vector2d& p2, const Eigen::Vector2d& p3, std::ostream& log, double max_iterations)
 {
     const auto& df = *distance_field_;
     const auto& info = *costmap_info_;
@@ -1774,6 +1736,7 @@ std::pair<Eigen::Vector2d, double> TebOptimalPlanner::findPerpMedialAxis(const E
     // 1) Compute perpendicular direction n
     Eigen::Vector2d d = p3 - p2;
     Eigen::Vector2d n(d.y(), -d.x());// perp(d)
+
     if (n.norm() < 1e-6) {
       double v = distanceFieldAt(coll_pt.x(), coll_pt.y());
       return { coll_pt, v };  // degenerate case
@@ -1783,63 +1746,63 @@ std::pair<Eigen::Vector2d, double> TebOptimalPlanner::findPerpMedialAxis(const E
     // 3) initialize
     Eigen::Vector2d best = coll_pt;
     double best_val = distanceFieldAt(best.x() , best.y());
-    const double  max_dist = 3.5;
-    std::ofstream outFile("/home/glab/bisection_log.txt", std::ios::app);
-    if (outFile.is_open())
-    {
-      outFile << "Original TEB pose : " << best.x() << ", "<< best.y() << " -> original val = "<< best_val << "\n";
-    }
-    else
-    {
-      std::cerr << "File not opened\n";
-    }
+    const double  max_dist = 0.35;
+    log << "T-1 TEB pose : " << p2.x() << ", "<< p2.y() << "\n";
+    log << "Original TEB pose : " << best.x() << ", "<< best.y() << " -> original val = "<< best_val << "\n";
+    log << "T+1 TEB pose : " << p3.x() << ", "<< p3.y() << "\n";
 
-     // 4) ±n 방향으로 1~3칸 스캔해서 가장 높은 값의 방향(sign)과 스텝(step)을 결정
-    int  best_sign = 0;   // +1 or -1 (0 = 변화 없음)
-    int  best_step = 0;   // 1,2,3
+    // 4) ±n 방향으로 1~3칸 스캔해서 가장 높은 값의 방향(sign)과 스텝(step)을 결정
+    int  best_sign = 0;   // +1 or -1 (0 = nothing change)
     double scan_val = best_val;
 
-    for (int step = 1; step <= 3; ++step) {
+    for (int step = 1; step <= 5; ++step) {
         for (int sign : {+1, -1}) {
             Eigen::Vector2d cand = best + sign * n * (info.resolution * step);
             double v = distanceFieldAt(cand.x(), cand.y());
 
             // max_dist 이상이면 즉시 리턴
             if (v >= max_dist) {
-                visualization_->visualizeMedialPoint(cand, v);
                 return { cand, v };
             }
             // 스캔 중 최고값 갱신
             if (v > scan_val) {
                 scan_val   = v;
                 best_sign  = sign;
-                best_step  = step;
             }
         }
     }
 
     // 5) 스캔에서 개선이 없으면 그대로 반환
     if (best_sign == 0) {
-        //visualization_->visualizeMedialPoint(best, best_val);
-        if (outFile.is_open())
-        {
-          outFile << "Fail to updated TEB pose : " << best.x() << ", "<< best.y() << " -> best val = " << best_val << "\n";
-        }
-        else
-        {
-          std::cerr << "File not opened\n";
-        }
+        visualization_->visualizeMedialPoint(best, best_val);
+        //std::cin.get();
+        log << "Fail to updated TEB pose : " << best.x() << ", "<< best.y() << " -> best val = " << best_val << "\n";
+
         return { best, best_val };
     }
 
-    // 6) 스캔 결과로 한 번 이동
-    best     = best + best_sign * n * (info.resolution * best_step);
+    // 6) move
+    best     = best + best_sign * n * info.resolution ;
     best_val = scan_val;
 
-    // 7) 선정된 방향으로 한 칸씩 계속 이동하며 local maxima 탐색
+    // 7) Searching for local maxima
     int iter = 0;
+    int prev_gx = int((best.x() - info.origin_x) / info.resolution);
+    int prev_gy = int((best.y() - info.origin_y) / info.resolution);
+
     while (++iter <= max_iterations) {
         Eigen::Vector2d cand = best + best_sign * n * info.resolution;
+        // grid index
+        int gx = int((cand.x() - info.origin_x) / info.resolution);
+        int gy = int((cand.y() - info.origin_y) / info.resolution);
+
+
+        if (gx == prev_gx && gy == prev_gy)
+        {
+          ROS_INFO("continue");
+          continue;
+        }
+
         double v = distanceFieldAt(cand.x(), cand.y());
 
         if (v >= max_dist) {
@@ -1849,18 +1812,13 @@ std::pair<Eigen::Vector2d, double> TebOptimalPlanner::findPerpMedialAxis(const E
         if (v > best_val) {
             best = cand;
             best_val = v;
+            visualization_ -> visualizeMedialPoint(best, best_val);
         } else {
-            break;  // 더 이상 개선 없음
+            break;
         }
     }
-    if (outFile.is_open())
-    {
-      outFile << "updated TEB pose : " << best.x() << ", "<< best.y() << " -> best val = " << best_val << "\n";
-    }
-    else
-    {
-      std::cerr << "File not opened\n";
-    }
+    log << "updated TEB pose : " << best.x() << ", "<< best.y() << " -> best val = " << best_val << "\n";
+
     visualization_ -> visualizeMedialPoint(best, best_val);
 
     return { best, best_val };
@@ -1938,18 +1896,11 @@ Eigen::Vector2d TebOptimalPlanner::getModifiedPosition(const Eigen::Vector2d pos
 
   float distance = distanceFieldAt(pose.x(), pose.y());
 
-  //ROS_INFO("distance : %f", distance);
-
   Eigen::Vector2d direction;
 
-//  if (distance <= 0.0)
-//    direction = (nearest - pose).normalized();
-//  else
-//    direction = (pose - nearest).normalized();
   direction = (pose - nearest).normalized();
 
   Eigen::Vector2d new_nearest = pose + (0.25 - distance + eps) * direction;
-  //ROS_INFO("visualize modified pose");
   visualization_->publishArrow(pose, new_nearest);
   return new_nearest;
 }
@@ -2076,9 +2027,8 @@ PoseSE2 TebOptimalPlanner::interpolatePose(const PoseSE2& A, const PoseSE2& B, d
 //bisection
 SegmentRefineResult TebOptimalPlanner::bisectSegmentLocal(const PoseSE2& p_start, const PoseSE2& p_end, double dt,
     base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
-    double inscribed_radius, double circumscribed_radius, bool is_root, int depth)
+    double inscribed_radius, double circumscribed_radius, bool is_root, int depth, std::ostream& log)
 {
-
   SegmentRefineResult result;
   result.poses = { p_start, p_end };
   result.dts   = { dt };
@@ -2096,7 +2046,7 @@ SegmentRefineResult TebOptimalPlanner::bisectSegmentLocal(const PoseSE2& p_start
   double d2 = distanceFieldAt(p_end.x(), p_end.y());
 
   double L_eu = euclideanDistance(p_start, p_end);
-
+  log << "depth : " << depth << "\n";
   // 3) covered region check using arc length (exact collision check)
   if (L - (d1 + d2) <= 0.0)
   {
@@ -2107,15 +2057,17 @@ SegmentRefineResult TebOptimalPlanner::bisectSegmentLocal(const PoseSE2& p_start
   PoseSE2 p_mid = interpolatePose(p_start, p_end, 0.5);
 
   // 5) mid collision → medial-ball
-  if (distanceFieldAt(p_mid.x(), p_mid.y()) < 0.25)
+  if (distanceFieldAt(p_mid.x(), p_mid.y()) < 0.20)
   {
-    auto [mp, r] = findPerpMedialAxis(Eigen::Vector2d(p_mid.x(), p_mid.y()), Eigen::Vector2d(p_start.x(), p_start.y()) , Eigen::Vector2d(p_end.x(), p_end.y()));
+    auto [mp, r] = findPerpMedialAxis(Eigen::Vector2d(p_mid.x(), p_mid.y()), Eigen::Vector2d(p_start.x(), p_start.y()) , Eigen::Vector2d(p_end.x(), p_end.y()), log);
+    //auto [mp, r] = findMedialAxisFromPenetration(Eigen::Vector2d(p_mid.x(), p_mid.y()), Eigen::Vector2d(p_start.x(), p_start.y()) , Eigen::Vector2d(p_end.x(), p_end.y()), log);
     //auto [mp, r] = findMedialBallCenter(Eigen::Vector2d(p_mid.x(), p_mid.y()), df, info);
     //auto mp = getModifiedPosition(Eigen::Vector2d(p_mid.x(), p_mid.y()));
+    //auto [mp, r] = findPenetration(Eigen::Vector2d(p_mid.x(), p_mid.y()), log);
     p_mid.x() = mp.x();
     p_mid.y() = mp.y();
   }
-  visualization_->visualizePoint({p_start.x(),p_start.y()}, {p_end.x(),p_end.y()}, {p_mid.x(),p_mid.y()});\
+  //visualization_->visualizePoint({p_start.x(),p_start.y()}, {p_end.x(),p_end.y()}, {p_mid.x(),p_mid.y()});
 
   double arc1 = computeArcLength(p_start,p_mid);
   double arc2 = computeArcLength(p_mid,p_end);
@@ -2126,8 +2078,8 @@ SegmentRefineResult TebOptimalPlanner::bisectSegmentLocal(const PoseSE2& p_start
       return result;
 
   // 6) Recursive Call (A→M), (M→B)
-  SegmentRefineResult left = bisectSegmentLocal(p_start, p_mid, mid_dt1, costmap_model, footprint_spec, inscribed_radius, circumscribed_radius, false, depth+1);
-  SegmentRefineResult right = bisectSegmentLocal(p_mid, p_end, mid_dt2, costmap_model,footprint_spec, inscribed_radius, circumscribed_radius, false, depth+1);
+  SegmentRefineResult left = bisectSegmentLocal(p_start, p_mid, mid_dt1, costmap_model, footprint_spec, inscribed_radius, circumscribed_radius, false, depth+1, log);
+  SegmentRefineResult right = bisectSegmentLocal(p_mid, p_end, mid_dt2, costmap_model,footprint_spec, inscribed_radius, circumscribed_radius, false, depth+1, log);
 
   // 7) Merging
   result.poses.clear();
@@ -2139,7 +2091,6 @@ SegmentRefineResult TebOptimalPlanner::bisectSegmentLocal(const PoseSE2& p_start
   if (left.poses.size() > 2)
   {
     result.poses.insert(result.poses.end(), left.poses.begin() + 1, left.poses.end() - 1);
-    //ROS_INFO("LEFT");
   }
 
   // mid point
@@ -2163,20 +2114,54 @@ SegmentRefineResult TebOptimalPlanner::bisectSegmentLocal(const PoseSE2& p_start
   for (size_t i = 0; i < result.poses.size(); ++i)
   {
     const auto& pose = result.poses[i];
-    //ROS_INFO("Pose[%zu] x: %.3f, y: %.3f, theta: %.3f", i, pose.x(), pose.y(), pose.theta());
   }
   for (size_t i = 0; i < result.dts.size(); ++i)
   {
     const auto& dt = result.dts[i];
-    //ROS_INFO("dt[%zu] %.3f", i, result.dts[i]);
   }
 
   return result;
 }
+void TebOptimalPlanner::dumpDistanceMap(const std::vector<float>& distance_field, const DistanceMapInfo& info)
+{
+
+    // 1) 타임스탬프 생성 (초 단위)
+    std::time_t now = std::time(nullptr);
+    // 예: 1712212345  같은 정수 문자열
+    std::string ts = std::to_string(now);
+
+    // 2) 파일명 조합
+    std::string filename = "/home/glab/distance_map" + ts + ".txt";
+
+    // 3) append 모드로 열기
+    std::ofstream outFile(filename, std::ios::app);
+
+    // 5) 포맷 세팅
+    outFile << std::fixed << std::setprecision(4);
+
+    // 6) 실제 데이터 덤프
+    for (int j = 0; j < info.map_height; ++j) {
+      for (int i = 0; i < info.map_width; ++i) {
+        int idx = j * info.map_width + i;
+        outFile << distance_field[idx];
+        if (i + 1 < info.map_width) outFile << ' ';
+      }
+      outFile << '\n';
+    }
+    outFile << '\n';
+
+    // 7) 닫기
+    outFile.close();
+}
+
 
 bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
     double inscribed_radius, double circumscribed_radius, int look_ahead_idx, double feasibility_check_lookahead_distance)
 {
+  const auto& info = *costmap_info_;
+  const auto& df   = *distance_field_;
+
+  //dumpDistanceMap(df, info);
 
   std::ofstream outFile("/home/glab/bisection_log.txt", std::ios::app);
   for (size_t idx = 0; idx < teb().sizePoses(); ++idx)
@@ -2185,7 +2170,6 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
     {
       outFile << "----- Initial TEB pose -----\n";
       outFile << "TEB pose idx : " << idx << " -> poses = " << teb().Pose(idx) << "\n";
-      //ROS_INFO("teb pose idx : %d, dt : %f", idx, teb().Pose(idx) );
     }
     else
     {
@@ -2198,15 +2182,12 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
     {
       outFile << "----- Initial TEB Time diff -----\n";
       outFile << "time diff idx : " << idx << " -> dt = " << teb().TimeDiff(idx) << "\n";
-      //ROS_INFO("time diff idx : %d, dt : %f", idx,teb().TimeDiff(idx) );
     }
     else
     {
       std::cerr << "File not opened\n";
     }
   }
-  const auto& info = *costmap_info_;
-  const auto& df   = *distance_field_;
   // 1) initial pose collision → correction
   for (int i = 1; i <= teb().sizePoses() - 2; ++i)
   {
@@ -2215,8 +2196,10 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
 
     if (c < 0.0){
       //auto mp = getModifiedPosition(Eigen::Vector2d(p.x(), p.y()));
-      auto [mp, r] = findPerpMedialAxis(Eigen::Vector2d(p.x(), p.y()), Eigen::Vector2d(teb().Pose(i-1).x(), teb().Pose(i-1).y()) , Eigen::Vector2d(p.x(), p.y()));
+      auto [mp, r] = findPerpMedialAxis(Eigen::Vector2d(p.x(), p.y()), Eigen::Vector2d(teb().Pose(i-1).x(), teb().Pose(i-1).y()) , Eigen::Vector2d(p.x(), p.y()), outFile);
+      //auto [mp, r] = findMedialAxisFromPenetration(Eigen::Vector2d(p.x(), p.y()), Eigen::Vector2d(teb().Pose(i-1).x(), teb().Pose(i-1).y()) , Eigen::Vector2d(p.x(), p.y()), outFile);
       //auto [mp, r] = findMedialBallCenter(Eigen::Vector2d(p.x(), p.y()), df, info);
+      //auto [mp, r] = findPenetration(Eigen::Vector2d(p.x(), p.y()), outFile);
       teb().Pose(i).x() = mp.x();
       teb().Pose(i).y() = mp.y();
     }
@@ -2245,7 +2228,7 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
     const PoseSE2& e = segmentPoses[k][1];
     double dt = segmentTimeDiffs[k][0];
 
-    SegmentRefineResult r = bisectSegmentLocal(s, e, dt, costmap_model, footprint_spec, inscribed_radius, circumscribed_radius, true, depth);
+    SegmentRefineResult r = bisectSegmentLocal(s, e, dt, costmap_model, footprint_spec, inscribed_radius, circumscribed_radius, true, depth, outFile);
     // r.poses: [s, mid..., e]
     if (r.poses.size() >= 2 && r.dts.size() == r.poses.size()-1)
     {
@@ -2258,8 +2241,8 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
   int offset = 0;
   for (size_t i = 0; i < segmentPoses.size(); ++i)
   {
-    const auto& P = segmentPoses[i];
-    const auto& T = segmentTimeDiffs[i];
+    auto& P = segmentPoses[i];
+    auto& T = segmentTimeDiffs[i];
     if (outFile.is_open()) {
       outFile << "----- Segment Poses and Dts -----\n";
       for (size_t k = 0; k < P.size(); ++k) {
@@ -2271,6 +2254,16 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
     } else {
       std::cerr << "Failed to open file for writing." << std::endl;
     }
+
+    if (P.size() >= 3) {
+      for (size_t j = 0; j < P.size() - 1; ++j)
+      {
+        double dx = P[j+1].x() - P[j].x();
+        double dy = P[j+1].y() - P[j].y();
+        P[j].theta() = std::atan2(dy, dx);
+      }
+    }
+
     if (P.size() < 2 || T.size() != P.size() - 1)
       continue;
 
@@ -2293,8 +2286,9 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
         std::fabs(normalizeTheta(next_start.theta() - current_end.theta())) < eps;
     }
     size_t limit = P.size() - 1;
-    if (!(has_next && next_is_adjacent))
-      limit = P.size() - 1;
+
+    teb().Pose(gidx) = P[0];
+    teb().TimeDiff(gidx) = T[0];
 
     for (size_t j = 1; j < limit; ++j)
     {
@@ -2304,18 +2298,6 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
       ++gidx;
     }
   }
-
-//  for (int i = 1; i < teb().sizePoses() - 1; ++i)
-//  {
-//    auto& curr_pose = teb().Pose(i);
-//    const auto& next_pose = teb().Pose(i + 1);
-//
-//    double dx = next_pose.x() - curr_pose.x();
-//    double dy = next_pose.y() - curr_pose.y();
-//
-//    double new_theta = std::atan2(dy, dx);
-//    curr_pose.theta() = new_theta;
-//  }
 
   for (size_t i = 0; i < teb().sizePoses(); ++i)
   {
@@ -2351,10 +2333,9 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
   {
     double dt = teb().TimeDiff(i);
     ref_timediffs_.push_back(dt);
-    hyst_timediffs_.push_back(0.3 * dt);
+    hyst_timediffs_.push_back(0.1 * dt);
   }
 
-  //reoptimizeTEB(cfg_->optim.no_inner_iterations, cfg_->optim.no_outer_iterations);
   return true;
 }
 

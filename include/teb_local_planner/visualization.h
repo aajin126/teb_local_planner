@@ -169,6 +169,7 @@ public:
                                   const std::vector<geometry_msgs::Point>& footprint);
 
   void visualizeIntermediatePoint(const Eigen::Vector2d pose, const std::string& ns = "IntermediatePoints");
+  void visualizetwoPoint(const Eigen::Vector2d pose1, const Eigen::Vector2d pose2, const std::string& ns = "Points");
   void visualizePoint(const Eigen::Vector2d pose1,const Eigen::Vector2d pose2,const Eigen::Vector2d pose3, const std::string& ns = "Points");
   void publishArrow(const Eigen::Vector2d& start, const Eigen::Vector2d& end, const std::string& ns = "arrow", double shaft_d = 0.02, double head_d  = 0.05, double head_l  = 0.05);
   void visualizeNarrGap(const std::vector<std::pair<Eigen::Vector2d, Eigen::Vector2d>>& narrow_gaps);

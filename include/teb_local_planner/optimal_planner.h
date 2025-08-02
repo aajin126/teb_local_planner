@@ -72,6 +72,7 @@
 #include <limits.h>
 #include <vector>
 #include <numeric>
+#include <ctime>
 
 namespace teb_local_planner
 {
@@ -548,11 +549,11 @@ public:
   void getFullTrajectory(std::vector<TrajectoryPointMsg>& trajectory) const;
 
   double computeArcLength(const PoseSE2& p1, const PoseSE2& p2);
-  std::pair<Eigen::Vector2d, double> findPerpMedialAxis(const Eigen::Vector2d& coll_pt, const Eigen::Vector2d& p2, const Eigen::Vector2d& p3, double max_iterations = 100);
+  std::pair<Eigen::Vector2d, double> findPerpMedialAxis(const Eigen::Vector2d& coll_pt, const Eigen::Vector2d& p2, const Eigen::Vector2d& p3, std::ostream& log, double max_iterations = 100);
 
   SegmentRefineResult bisectSegmentLocal(const PoseSE2& p_start, const PoseSE2& p_end, double dt,
     base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
-    double inscribed_radius, double circumscribed_radius, bool is_root, int depth);
+    double inscribed_radius, double circumscribed_radius, bool is_root, int depth, std::ostream& log);
   /**
    * @brief Check whether the planned trajectory is feasible or not.
    * 
@@ -576,12 +577,13 @@ public:
   const DistanceMapInfo& costmap_info);
   PoseSE2 interpolatePose(const PoseSE2& A, const PoseSE2& B, double frac);
   Eigen::Vector2d performMedialAxisClimb(const Eigen::Vector2d& start_point, const std::vector<float>& distance_field, unsigned int map_width, unsigned int map_height, double resolution, double origin_x, double origin_y);
-
+  std::pair<Eigen::Vector2d, double> findPenetration(const Eigen::Vector2d& coll_pt,std::ostream& log,double max_iterations= 100);
+  std::pair<Eigen::Vector2d, double> findMedialAxisFromPenetration(const Eigen::Vector2d& coll_pt, const Eigen::Vector2d& p2, const Eigen::Vector2d& p3, std::ostream& log, double max_iterations= 100);
   double distanceFieldAt(double wx, double wy) const;
   double euclideanDistance(const PoseSE2& p1, const PoseSE2& p2);
   Eigen::Vector2d getModifiedPosition(const Eigen::Vector2d pose);
   bool isSegmentInCollision(const PoseSE2& pose1, const PoseSE2& pose2,const std::vector<float>& distance_field, const DistanceMapInfo& costmap_info);
-protected:
+  void dumpDistanceMap(const std::vector<float>& distance_field, const DistanceMapInfo& costmap_info);
   
   /** @name Hyper-Graph creation and optimization */
   //@{
