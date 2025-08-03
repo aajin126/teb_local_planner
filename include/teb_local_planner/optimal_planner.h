@@ -577,14 +577,23 @@ public:
   const DistanceMapInfo& costmap_info);
   PoseSE2 interpolatePose(const PoseSE2& A, const PoseSE2& B, double frac);
   Eigen::Vector2d performMedialAxisClimb(const Eigen::Vector2d& start_point, const std::vector<float>& distance_field, unsigned int map_width, unsigned int map_height, double resolution, double origin_x, double origin_y);
-  std::pair<Eigen::Vector2d, double> findPenetration(const Eigen::Vector2d& coll_pt,std::ostream& log,double max_iterations= 100);
+  std::pair<Eigen::Vector2d, double> findPenetration(const Eigen::Vector2d& coll_pt, const Eigen::Vector2d& p2, const Eigen::Vector2d& p3,std::ostream& log,double max_iterations= 100);
   std::pair<Eigen::Vector2d, double> findMedialAxisFromPenetration(const Eigen::Vector2d& coll_pt, const Eigen::Vector2d& p2, const Eigen::Vector2d& p3, std::ostream& log, double max_iterations= 100);
   double distanceFieldAt(double wx, double wy) const;
   double euclideanDistance(const PoseSE2& p1, const PoseSE2& p2);
   Eigen::Vector2d getModifiedPosition(const Eigen::Vector2d pose);
   bool isSegmentInCollision(const PoseSE2& pose1, const PoseSE2& pose2,const std::vector<float>& distance_field, const DistanceMapInfo& costmap_info);
   void dumpDistanceMap(const std::vector<float>& distance_field, const DistanceMapInfo& costmap_info);
-  
+
+
+  double computeOri(const Eigen::Vector2d& from, const Eigen::Vector2d& to);
+  Eigen::Vector2d getBoundaryPointFromCollision(const Eigen::Vector2d& pt);
+  Eigen::Vector2d computePushDirection(const Eigen::Vector2d& from, const Eigen::Vector2d& to, double dist);
+  Eigen::Vector2d computePerpendicularDirection(const Eigen::Vector2d& p2, const Eigen::Vector2d& p3);
+  std::vector<Eigen::Vector2i> bresenhamLineWorld(const Eigen::Vector2d& from, const Eigen::Vector2d& to);
+  std::pair<int, double> climbLocalMax(const std::vector<Eigen::Vector2i>& line, double max_dist);
+  std::pair<Eigen::Vector2d, double> findModifidePose(const Eigen::Vector2d& coll_pt, const Eigen::Vector2d& p2, const Eigen::Vector2d& p3, std::ostream& log, double max_iterations= 100);
+
   /** @name Hyper-Graph creation and optimization */
   //@{
   

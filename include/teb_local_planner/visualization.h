@@ -169,9 +169,11 @@ public:
                                   const std::vector<geometry_msgs::Point>& footprint);
 
   void visualizeIntermediatePoint(const Eigen::Vector2d pose, const std::string& ns = "IntermediatePoints");
+  void visualizeLine(const Eigen::Vector2d& pt1, const Eigen::Vector2d& pt2, const std::string& ns = "Line");
   void visualizetwoPoint(const Eigen::Vector2d pose1, const Eigen::Vector2d pose2, const std::string& ns = "Points");
+  void visualizeEndPoints(const Eigen::Vector2d pose1, const Eigen::Vector2d pose2, const std::string& ns = "End Points");
   void visualizePoint(const Eigen::Vector2d pose1,const Eigen::Vector2d pose2,const Eigen::Vector2d pose3, const std::string& ns = "Points");
-  void publishArrow(const Eigen::Vector2d& start, const Eigen::Vector2d& end, const std::string& ns = "arrow", double shaft_d = 0.02, double head_d  = 0.05, double head_l  = 0.05);
+  void publishArrow(const Eigen::Vector2d& start, const Eigen::Vector2d& end, const std_msgs::ColorRGBA& color, const std::string& ns = "arrow", double shaft_d = 0.03, double head_d  = 0.05, double head_l  = 0.05);
   void visualizeNarrGap(const std::vector<std::pair<Eigen::Vector2d, Eigen::Vector2d>>& narrow_gaps);
   /**
    * @brief Publish obstacle positions to the ros topic \e ../../teb_markers

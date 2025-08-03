@@ -491,6 +491,39 @@ void TebVisualization::visualizeIntermediatePoint(const Eigen::Vector2d pose, co
   teb_marker_pub_.publish(marker);
 }
 
+void TebVisualization::visualizeLine(const Eigen::Vector2d& pt1, const Eigen::Vector2d& pt2, const std::string& ns)
+{
+  visualization_msgs::Marker line;
+  line.header.frame_id = "map";  // 필요한 TF frame 명시
+  line.header.stamp = ros::Time::now();
+  line.ns = ns;
+  line.type = visualization_msgs::Marker::LINE_STRIP;
+  line.action = visualization_msgs::Marker::ADD;
+
+  auto colorRGBA = [](float r, float g, float b, float a = 1.0f){
+    std_msgs::ColorRGBA c;
+    c.r = r; c.g = g; c.b = b; c.a = a;
+    return c;
+  };
+  std_msgs::ColorRGBA color  = colorRGBA(0.0f, 1.0f, .0f); // Green
+
+  line.scale.x = 0.03;  // 선 두께
+  line.color = color;
+
+  geometry_msgs::Point p;
+  p.x = pt1.x();
+  p.y = pt1.y();
+  p.z = 0.0;
+  line.points.push_back(p);
+
+  p.x = pt2.x();
+  p.y = pt2.y();
+  p.z = 0.0;
+  line.points.push_back(p);
+
+  marker_pub_.publish(line);
+}
+
 void TebVisualization::visualizetwoPoint(const Eigen::Vector2d pose1, const Eigen::Vector2d pose2, const std::string& ns)
 {
   if (printErrorWhenNotInitialized())
@@ -528,6 +561,60 @@ void TebVisualization::visualizetwoPoint(const Eigen::Vector2d pose1, const Eige
 
   std_msgs::ColorRGBA color1  = colorRGBA(0.0f, 0.0f, 1.0f); // blue
   std_msgs::ColorRGBA color2  = colorRGBA(1.0f, 0.0f, 0.0f); // red
+
+  marker.points.push_back(toPoint(pose1));
+  marker.colors.push_back(color1);
+
+  marker.points.push_back(toPoint(pose2));
+  marker.colors.push_back(color2);
+
+  // Check if the points list is empty
+  if (marker.points.empty()) {
+    ROS_WARN("Points list is empty for visualization marker. Skipping visualization.");
+    return;
+  }
+
+  // Publish the marker
+  point_marker_pub_.publish(marker);
+}
+
+void TebVisualization::visualizeEndPoints(const Eigen::Vector2d pose1, const Eigen::Vector2d pose2, const std::string& ns)
+{
+  if (printErrorWhenNotInitialized())
+    return;
+
+  // 공통 세팅
+  visualization_msgs::Marker marker;
+  marker.header.frame_id = cfg_->map_frame;
+  marker.header.stamp    = ros::Time::now();
+  marker.ns              = ns;
+  marker.id              = 0;
+  marker.type            = visualization_msgs::Marker::POINTS;
+  marker.action          = visualization_msgs::Marker::ADD;
+
+  marker.scale.x = 0.05;
+  marker.scale.y = 0.05;
+
+  // 점들 추가
+  auto toPoint = [](const Eigen::Vector2d& p){
+    geometry_msgs::Point pt;
+    pt.x = p.x();
+    pt.y = p.y();
+    pt.z = 0.0;
+    return pt;
+  };
+
+  marker.points.reserve(2);
+  marker.colors.reserve(2);
+
+  auto colorRGBA = [](float r, float g, float b, float a = 1.0f){
+    std_msgs::ColorRGBA c;
+    c.r = r; c.g = g; c.b = b; c.a = a;
+    return c;
+  };
+
+  std_msgs::ColorRGBA color1  = colorRGBA(0.0f, 1.0f, 0.0f); // blue
+  std_msgs::ColorRGBA color2  = colorRGBA(0.0f, 1.0f, 0.0f); // red
 
   marker.points.push_back(toPoint(pose1));
   marker.colors.push_back(color1);
@@ -604,7 +691,7 @@ void TebVisualization::visualizePoint(const Eigen::Vector2d pose1,const Eigen::V
   point_marker_pub_.publish(marker);
 }
 
-void TebVisualization::publishArrow(const Eigen::Vector2d& start, const Eigen::Vector2d& end, const std::string& ns, double shaft_d, double head_d, double head_l)
+void TebVisualization::publishArrow(const Eigen::Vector2d& start, const Eigen::Vector2d& end, const std_msgs::ColorRGBA& color, const std::string& ns, double shaft_d, double head_d, double head_l)
 {
   visualization_msgs::Marker m;
   m.header.frame_id = cfg_->map_frame; // map frame
@@ -625,10 +712,7 @@ void TebVisualization::publishArrow(const Eigen::Vector2d& start, const Eigen::V
   m.scale.y = head_d;
   m.scale.z = head_l;
 
-  m.color.a = 1.0;  // alpha (transparency)
-  m.color.r = 1.0;  // red component
-  m.color.g = 0.0;  // green component
-  m.color.b = 0.0;  // blue component
+  m.color = color;
 
   m.lifetime = ros::Duration(3.0); // forever
 
