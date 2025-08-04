@@ -471,6 +471,12 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
     message = "teb_local_planner trajectory is not feasible";
     return mbf_msgs::ExePathResult::NO_VALID_CMD;
   }
+  // Now visualize everything
+  ROS_INFO("visualization");
+  planner_->visualize();
+  visualization_->publishObstacles(obstacles_, costmap_->getResolution());
+  visualization_->publishCustomViaPoints(via_points_);
+  visualization_->publishGlobalPlan(global_plan_);
 
   // Get the velocity command for this sampling interval
   if (!planner_->getVelocityCommand(cmd_vel.twist.linear.x, cmd_vel.twist.linear.y, cmd_vel.twist.angular.z, cfg_.trajectory.control_look_ahead_poses))
@@ -515,13 +521,7 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
   
   // store last command (for recovery analysis etc.)
   last_cmd_ = cmd_vel.twist;
-  
-  // Now visualize everything
-  ROS_INFO("visualization");
-  planner_->visualize();
-  visualization_->publishObstacles(obstacles_, costmap_->getResolution());
-  visualization_->publishCustomViaPoints(via_points_);
-  visualization_->publishGlobalPlan(global_plan_);
+
   return mbf_msgs::ExePathResult::SUCCESS;
 }
 

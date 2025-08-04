@@ -691,6 +691,50 @@ void TebVisualization::visualizePoint(const Eigen::Vector2d pose1,const Eigen::V
   point_marker_pub_.publish(marker);
 }
 
+void TebVisualization::visualizeTebPoses(const std::vector<PoseSE2>& poses, const std_msgs::ColorRGBA& color, const std::string& ns)
+{
+  if (poses.size() < 2) return;
+
+  visualization_msgs::Marker delete_all;
+  delete_all.action = visualization_msgs::Marker::DELETEALL;
+  arrow_pub_.publish(delete_all);
+
+  for (size_t i = 0; i < poses.size() - 1; ++i)
+  {
+    const auto& pose = poses[i];
+    const auto& next = poses[i + 1];
+
+    visualization_msgs::Marker marker;
+    marker.header.frame_id = cfg_->map_frame;
+    marker.header.stamp = ros::Time::now();
+    marker.ns = ns;
+    marker.id = static_cast<int>(i);
+    marker.type = visualization_msgs::Marker::ARROW;
+    marker.action = visualization_msgs::Marker::ADD;
+
+    geometry_msgs::Point start, end;
+    start.x = pose.x();
+    start.y = pose.y();
+    start.z = 0.0;
+    end.x = next.x();
+    end.y = next.y();
+    end.z = 0.0;
+
+    marker.points.push_back(start);
+    marker.points.push_back(end);
+
+    marker.scale.x = 0.03;  // shaft
+    marker.scale.y = 0.06;  // head diameter
+    marker.scale.z = 0.1;   // head length
+
+    marker.color = color;
+    marker.lifetime = ros::Duration(0);  // 무제한 유지
+
+    arrow_pub_.publish(marker);
+  }
+}
+
+
 void TebVisualization::publishArrow(const Eigen::Vector2d& start, const Eigen::Vector2d& end, const std_msgs::ColorRGBA& color, const std::string& ns, double shaft_d, double head_d, double head_l)
 {
   visualization_msgs::Marker m;

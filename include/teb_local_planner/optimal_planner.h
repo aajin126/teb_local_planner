@@ -594,6 +594,8 @@ public:
   std::pair<int, double> climbLocalMax(const std::vector<Eigen::Vector2i>& line, double max_dist);
   std::pair<Eigen::Vector2d, double> findModifidePose(const Eigen::Vector2d& coll_pt, const Eigen::Vector2d& p2, const Eigen::Vector2d& p3, std::ostream& log, double max_iterations= 100);
 
+
+  bool violatesArcConstraint(const PoseSE2& sk, const PoseSE2& sk1);
   /** @name Hyper-Graph creation and optimization */
   //@{
   
