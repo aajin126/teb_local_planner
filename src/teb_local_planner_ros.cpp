@@ -1051,8 +1051,6 @@ void TebLocalPlannerROS::updateSignedDistanceField()
   costmap_info_.origin_y = costmap_->getOriginY();
   costmap_info_.costmap_data = costmap_->getCharMap();
 
-  ROS_INFO("resolution : %f", costmap_info_.resolution);
-
 //  std::ofstream fout("/home/glab/costmap_data.txt");
 //
 //  if (fout.is_open())
