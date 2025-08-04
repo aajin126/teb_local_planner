@@ -1681,7 +1681,7 @@ std::pair<Eigen::Vector2d, double> TebOptimalPlanner::findPerpMedialAxis(const E
     green.b = 0.0;
     green.a = 1.0;
     visualization_->publishArrow(coll_pt, best_pt, green);
-    std::cin.get();
+    //std::cin.get();
     visualization_->visualizeMedialPoint(best_pt, chosenRes);
    log << "findPerpMedialAxis → (" << best_pt.x() << ", " << best_pt.y()
        << "), dist=" << chosenRes << "\n";
@@ -1796,7 +1796,7 @@ std::pair<Eigen::Vector2d, double> TebOptimalPlanner::findModifidePose(const Eig
         auto minusLine = bresenhamLineWorld(coll_pt, pt_bwd);
 
         visualization_->visualizeLine({pt_bwd.x(),pt_bwd.y()}, {pt_fwd.x(),pt_fwd.y()});
-        std::cin.get();
+        //std::cin.get();
         auto pos = climbLocalMax(plusLine, max_dist);
         auto neg = climbLocalMax(minusLine, max_dist);
 
@@ -1845,7 +1845,7 @@ std::pair<Eigen::Vector2d, double> TebOptimalPlanner::findModifidePose(const Eig
         red.a = 1.0;
 
         visualization_->publishArrow(coll_pt, best_pt, red);
-        std::cin.get();
+        //std::cin.get();
 
         return {best_pt, chosenVal};
     }
@@ -1860,7 +1860,7 @@ std::pair<Eigen::Vector2d, double> TebOptimalPlanner::findModifidePose(const Eig
         auto result = climbLocalMax(line, max_dist);
 
         visualization_->visualizeLine({boundary.x(),boundary.y()}, {pt_fwd.x(),pt_fwd.y()});
-        std::cin.get();
+        //std::cin.get();
 
         Eigen::Vector2i bc = line[result.first];
         Eigen::Vector2d best_pt(info.origin_x + (bc.x() + 0.5) * info.resolution, info.origin_y + (bc.y() + 0.5) * info.resolution);
@@ -1883,7 +1883,7 @@ std::pair<Eigen::Vector2d, double> TebOptimalPlanner::findModifidePose(const Eig
         blue.b = 1.0;
         blue.a = 1.0;
         visualization_->publishArrow(coll_pt, best_pt, blue);
-        std::cin.get();
+        //std::cin.get();
 
         return {best_pt, result.second};
     }
@@ -2260,7 +2260,7 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
  }
 
  visualization_->visualizeTebPoses(pose_list, orange);
- std::cin.get();
+ //std::cin.get();
 
   //dumpDistanceMap(df, info);
   // 1) initial pose collision → correction
@@ -2294,7 +2294,7 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
     pose_list2.push_back(teb().Pose(i));
   }
   visualization_->visualizeTebPoses(pose_list2, green);
-  std::cin.get();
+  //std::cin.get();
 
   for (size_t idx = 0; idx < teb().sizePoses(); ++idx)
   {
@@ -2401,7 +2401,7 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
     pose_list1.push_back(teb().Pose(i));
   }
   visualization_->visualizeTebPoses(pose_list1, blue);
-  std::cin.get();
+  //std::cin.get();
 
   for (size_t i = 0; i < teb().sizePoses() - 1; ++i)
   {
@@ -2452,6 +2452,8 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
     ref_timediffs_.push_back(dt);
     hyst_timediffs_.push_back(0.1 * dt);
   }
+
+  adaptiveoptimizeTEB(cfg_->optim.no_inner_iterations, cfg_->optim.no_outer_iterations);
 
   return true;
 }
