@@ -142,7 +142,7 @@ void TebLocalPlannerROS::initialize(std::string name, tf2_ros::Buffer* tf, costm
 //    // init other variables
 //    tf_ = tf;
 //    costmap_ros_ = costmap_ros;
-//    costmap_ = costmap_ros_->getCostmap(); // locking should be done in MoveBase.\
+//    costmap_ = costmap_ros_->getCostmap(); // locking should be done in MoveBase.
     
     costmap_model_ = boost::make_shared<base_local_planner::CostmapModel>(*costmap_);
 

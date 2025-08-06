@@ -139,6 +139,7 @@ public:
 
   void publishGridSearchPath(const std::vector<geometry_msgs::Point>& grid_search_path);
   void visualizeSamples(const std::vector<geometry_msgs::Point>& samples);
+  void visualizeSafePoints(const std::vector<Eigen::Vector2d, Eigen::aligned_allocator<Eigen::Vector2d>>& safe_points);
   void visualizeMedialBall(const std::vector<std::pair<Eigen::Vector2d, double>>& medial_point_list_);
   void visualizeMedialPoint(const Eigen::Vector2d& center, double radius);
   void visualizeNarrowSpace(const geometry_msgs::Point& center, double radius);

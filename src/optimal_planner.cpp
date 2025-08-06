@@ -48,6 +48,7 @@
 #include <teb_local_planner/g2o_types/edge_obstacle.h>
 #include <teb_local_planner/g2o_types/edge_dynamic_obstacle.h>
 #include <teb_local_planner/g2o_types/edge_via_point.h>
+#include <teb_local_planner/g2o_types/edge_safe_point.h>
 #include <teb_local_planner/g2o_types/edge_prefer_rotdir.h>
 #include <teb_local_planner/g2o_types/edge_medial_attraction.h>
 
@@ -256,20 +257,20 @@ bool TebOptimalPlanner::adaptiveoptimizeTEB(int iterations_innerloop, int iterat
 
     if (cfg_->trajectory.teb_autosize)
     {
-//      std::ofstream outFile("/home/glab/bisection_log.txt", std::ios::app);
-//      if (outFile.is_open())
-//      {
-//        outFile << "ref_timediffs_ size: " << ref_timediffs_.size() << "\n";
-//        outFile << "hyst_timediffs_ size: " << hyst_timediffs_.size() << "\n";
-//      }
-//      else
-//      {
-//        std::cerr << "File not opened\n";
-//      }
+     std::ofstream outFile("/home/glab/bisection_log.txt", std::ios::app);
+     if (outFile.is_open())
+     {
+       outFile << "ref_timediffs_ size: " << ref_timediffs_.size() << "\n";
+       outFile << "hyst_timediffs_ size: " << hyst_timediffs_.size() << "\n";
+     }
+     else
+     {
+       std::cerr << "File not opened\n";
+     }
       teb_.adaptiveautoResize(ref_timediffs_, hyst_timediffs_, cfg_->trajectory.dt_ref, cfg_->trajectory.dt_hysteresis, cfg_->trajectory.min_samples, cfg_->trajectory.max_samples, fast_mode);
       //teb_.autoResize(cfg_->trajectory.dt_ref, cfg_->trajectory.dt_hysteresis, cfg_->trajectory.min_samples, cfg_->trajectory.max_samples, fast_mode);
     }
-    success = buildGraph(weight_multiplier);
+    success = adaptivebuildGraph(weight_multiplier);
     if (!success)
     {
         clearGraph();
@@ -324,8 +325,8 @@ bool TebOptimalPlanner::plan(const std::vector<geometry_msgs::PoseStamped>& init
         && (goal_.position() - teb_.BackPose().position()).norm() < cfg_->trajectory.force_reinit_new_goal_dist
         && fabs(g2o::normalize_theta(goal_.theta() - teb_.BackPose().theta())) < cfg_->trajectory.force_reinit_new_goal_angular) // actual warm start!
     { 
+      ROS_INFO("warm start");
       teb_.updateAndPruneTEB(start_, goal_, cfg_->trajectory.min_samples); // update TEB
-      return adaptiveoptimizeTEB(cfg_->optim.no_inner_iterations, cfg_->optim.no_outer_iterations);
     }
       
     else // goal too far away -> reinit
@@ -412,7 +413,56 @@ bool TebOptimalPlanner::buildGraph(double weight_multiplier)
 
   //AddEdgesMedialAttraction();
 
-  AddEdgesViaPoints();
+  //AddEdgesViaPoints();
+  //AddEdgesSafePoints();
+  
+  AddEdgesVelocity();
+  
+  AddEdgesAcceleration();
+
+  AddEdgesTimeOptimal();	
+
+  AddEdgesShortestPath();
+
+  
+  if (cfg_->robot.min_turning_radius == 0 || cfg_->optim.weight_kinematics_turning_radius == 0)
+    AddEdgesKinematicsDiffDrive(); // we have a differential drive robot
+  else
+    AddEdgesKinematicsCarlike(); // we have a carlike robot since the turning radius is bounded from below.
+
+  AddEdgesPreferRotDir();
+
+  if (cfg_->optim.weight_velocity_obstacle_ratio > 0)
+    AddEdgesVelocityObstacleRatio();
+    
+  return true;  
+}
+
+bool TebOptimalPlanner::adaptivebuildGraph(double weight_multiplier)
+{
+  if (!optimizer_->edges().empty() || !optimizer_->vertices().empty())
+  {
+    ROS_WARN("Cannot build graph, because it is not empty. Call graphClear()!");
+    return false;
+  }
+  optimizer_->setComputeBatchStatistics(cfg_->recovery.divergence_detection_enable);
+  
+  // add TEB vertices
+  AddTEBVertices();
+
+  // add Edges (local cost functions)
+  if (cfg_->obstacles.legacy_obstacle_association)
+    AddEdgesObstaclesLegacy(weight_multiplier);
+  else
+    AddEdgesObstacles(weight_multiplier);
+
+  if (cfg_->obstacles.include_dynamic_obstacles)
+    AddEdgesDynamicObstacles();
+
+  //AddEdgesMedialAttraction();
+
+  //AddEdgesViaPoints();
+  AddEdgesSafePoints();
   
   AddEdgesVelocity();
   
@@ -785,6 +835,54 @@ void TebOptimalPlanner::AddEdgesViaPoints()
     edge_viapoint->setInformation(information);
     edge_viapoint->setParameters(*cfg_, &(*vp_it));
     optimizer_->addEdge(edge_viapoint);
+  }
+}
+
+void TebOptimalPlanner::AddEdgesSafePoints()
+{
+  ROS_INFO("AddEgesSafePoints");
+  if (cfg_->optim.weight_safepoint==0 || safe_points_.empty() )
+    return; // if weight equals zero skip adding edges!
+
+  visualization_->visualizeSafePoints(safe_points_);
+  //std::cin.get();
+  int start_pose_idx = 0;
+
+  int n = teb_.sizePoses();
+  if (n<3) // we do not have any degrees of freedom for reaching safe-points
+    return;
+
+  for (SafePointContainer::const_iterator sp_it = safe_points_.begin(); sp_it != safe_points_.end(); ++sp_it)
+  {
+
+    int index = teb_.findClosestTrajectoryPose(*sp_it, NULL, start_pose_idx);
+    if (cfg_->trajectory.safe_points_ordered)
+      start_pose_idx = index+2; // skip a point to have a DOF inbetween for further safe-points
+
+    // check if point conicides with goal or is located behind it
+    if ( index > n-2 )
+      index = n-2; // set to a pose before the goal, since we can move it away!
+    // check if point coincides with start or is located before it
+    if ( index < 1)
+    {
+      if (cfg_->trajectory.safe_points_ordered)
+      {
+        index = 1; // try to connect the safe point with the second (and non-fixed) pose. It is likely that autoresize adds new poses inbetween later.
+      }
+      else
+      {
+        ROS_DEBUG("TebOptimalPlanner::AddEdgesSafePoints(): skipping a safe-point that is close or behind the current robot pose.");
+        continue; // skip safe points really close or behind the current robot pose
+      }
+    }
+    Eigen::Matrix<double,1,1> information;
+    information.fill(cfg_->optim.weight_safepoint);
+
+    EdgeSafePoint* edge_safepoint = new EdgeSafePoint;
+    edge_safepoint->setVertex(0,teb_.PoseVertex(index));
+    edge_safepoint->setInformation(information);
+    edge_safepoint->setParameters(*cfg_, &(*sp_it));
+    optimizer_->addEdge(edge_safepoint);
   }
 }
 
@@ -1165,8 +1263,8 @@ std::pair<Eigen::Vector2d, double> TebOptimalPlanner::findMedialBallCenter(
     blue.b = 1.0;
     blue.a = 1.0;
     //ROS_DEBUG("finishing perform climb");
-    visualization_->publishArrow(point, medial_center, blue);
-    visualization_ -> visualizeMedialPoint(medial_center, radius);
+    //visualization_->publishArrow(point, medial_center, blue);
+    //visualization_ -> visualizeMedialPoint(medial_center, radius);
     return { medial_center, radius };
 }
 
@@ -1303,11 +1401,11 @@ void TebOptimalPlanner::computeCurrentCost(double obst_cost_scale, double viapoi
      {
        cur_cost *= viapoint_cost_scale;
      }
-//    if (dynamic_cast<EdgeMedialAttraction*>(*it) != nullptr)
-//    {
-//      cur_cost *= obst_cost_scale;
-//      ROS_INFO("EdgeMedialAttraction");
-//    }
+     else if (dynamic_cast<EdgeSafePoint*>(*it) != nullptr)
+     {
+       cur_cost *= viapoint_cost_scale;
+     }
+
     else if (dynamic_cast<EdgeTimeOptimal*>(*it) != nullptr && alternative_time_cost)
     {
       continue; // skip these edges if alternative_time_cost is active
@@ -1534,7 +1632,7 @@ Eigen::Vector2d TebOptimalPlanner::getModifiedPosition(const Eigen::Vector2d pos
   blue.g = 0.0;
   blue.b = 1.0;
   blue.a = 1.0;
-  visualization_->publishArrow(pose, new_nearest, blue);
+  //visualization_->publishArrow(pose, new_nearest, blue);
   return new_nearest;
 }
 
@@ -1551,7 +1649,7 @@ std::pair<Eigen::Vector2d, double> TebOptimalPlanner::findPerpMedialAxis(const E
       return { coll_pt, v };
     }
     n.normalize();
-    const double max_dist   = 0.28;
+    const double max_dist   = 0.4;
 
     // 3) Bresenham helper unchanged
     auto bresenhamLine = [&](int x0, int y0, int x1, int y1){
@@ -1583,7 +1681,7 @@ std::pair<Eigen::Vector2d, double> TebOptimalPlanner::findPerpMedialAxis(const E
 
     // 4.4) Generate Bresenham lines in ± directions
     auto plusLine  = bresenhamLine(cx, cy, ex, ey);
-    visualization_->visualizeEndPoints(p2, p3);
+    //visualization_->visualizeEndPoints(p2, p3);
 
     int mx = cx - (ex - cx);
     int my = cy - (ey - cy);
@@ -1673,16 +1771,16 @@ std::pair<Eigen::Vector2d, double> TebOptimalPlanner::findPerpMedialAxis(const E
    log << "  World Coord: (" << best_pt.x() << ", " << best_pt.y() << ")\n";
    log << "  Distance: " << chosenRes << "\n";
 
-    visualization_->visualizeEndPoints(p2, p3);
-    visualization_->visualizetwoPoint({best_pt.x(),best_pt.y()}, {coll_pt.x(),coll_pt.y()});
+    //visualization_->visualizeEndPoints(p2, p3);
+    //visualization_->visualizetwoPoint({best_pt.x(),best_pt.y()}, {coll_pt.x(),coll_pt.y()});
     std_msgs::ColorRGBA green;
     green.r = 0.0;
     green.g = 1.0;
     green.b = 0.0;
     green.a = 1.0;
-    visualization_->publishArrow(coll_pt, best_pt, green);
+    //visualization_->publishArrow(coll_pt, best_pt, green);
     //std::cin.get();
-    visualization_->visualizeMedialPoint(best_pt, chosenRes);
+    //visualization_->visualizeMedialPoint(best_pt, chosenRes);
    log << "findPerpMedialAxis → (" << best_pt.x() << ", " << best_pt.y()
        << "), dist=" << chosenRes << "\n";
 
@@ -1746,31 +1844,34 @@ std::vector<Eigen::Vector2i> TebOptimalPlanner::bresenhamLineWorld(const Eigen::
 }
 
 // 5. Searching for local maxima
-std::pair<int, double> TebOptimalPlanner::climbLocalMax(const std::vector<Eigen::Vector2i>& line, double max_dist)
+std::pair<int, double> TebOptimalPlanner::climbLocalMax(const std::vector<Eigen::Vector2i>& line, double max_dist, double max_iterations)
 {
     const auto& info = *costmap_info_;
     const auto& df = *distance_field_;
-    int best_idx = 0;
-    double best_val = df[line[0].x() + line[0].y() * info.map_width] * info.resolution;
-    for (size_t i = 1; i < line.size(); ++i)
-    {
-        double val = df[line[i].x() + line[i].y() * info.map_width] * info.resolution;
-        if (val > best_val)
-        {
-            best_val = val;
-            best_idx = i;
-            if (val >= max_dist)
-                break;
-        }
-    }
-    return {best_idx, best_val};
+     int cur = 0;
+     double cur_val = df[line[cur].x() + line[cur].y() * info.map_width]*info.resolution;
+     for (int it = 0; it < max_iterations; ++it) {
+       int nxt = cur + 1;
+       if (nxt >= (int)line.size()) break;
+       double nxt_val = df[line[nxt].x() + line[nxt].y() * info.map_width]*info.resolution;
+       if (nxt_val >= max_dist) {
+         cur = nxt; cur_val = nxt_val;
+         break;
+       }
+       if (nxt_val > cur_val) {
+         cur = nxt; cur_val = nxt_val;
+       } else {
+         break;
+       }
+     }
+    return {cur, cur_val};
 }
 
 std::pair<Eigen::Vector2d, double> TebOptimalPlanner::findModifidePose(const Eigen::Vector2d& coll_pt, const Eigen::Vector2d& p2, const Eigen::Vector2d& p3, std::ostream& log, double max_iterations)
 {
     const auto& info = *costmap_info_;
     const auto& df = *distance_field_;
-    const double max_dist = 0.35;
+    const double max_dist = 0.28;
 
     ROS_INFO("findmodifiedpose");
 
@@ -1778,8 +1879,8 @@ std::pair<Eigen::Vector2d, double> TebOptimalPlanner::findModifidePose(const Eig
     double boundary_val = distanceFieldAt(boundary.x(), boundary.y());
     double coll_val = distanceFieldAt(coll_pt.x(), coll_pt.y());
 
-    visualization_->visualizetwoPoint({boundary.x(),boundary.y()}, {coll_pt.x(),coll_pt.y()});
-    visualization_->visualizeEndPoints(p2, p3);
+    //visualization_->visualizetwoPoint({boundary.x(),boundary.y()}, {coll_pt.x(),coll_pt.y()});
+    //visualization_->visualizeEndPoints(p2, p3);
 
     Eigen::Vector2d n;
     if (coll_val == 0.0)
@@ -1795,7 +1896,7 @@ std::pair<Eigen::Vector2d, double> TebOptimalPlanner::findModifidePose(const Eig
         auto plusLine = bresenhamLineWorld(coll_pt, pt_fwd);
         auto minusLine = bresenhamLineWorld(coll_pt, pt_bwd);
 
-        visualization_->visualizeLine({pt_bwd.x(),pt_bwd.y()}, {pt_fwd.x(),pt_fwd.y()});
+        //visualization_->visualizeLine({pt_bwd.x(),pt_bwd.y()}, {pt_fwd.x(),pt_fwd.y()});
         //std::cin.get();
         auto pos = climbLocalMax(plusLine, max_dist);
         auto neg = climbLocalMax(minusLine, max_dist);
@@ -1820,7 +1921,7 @@ std::pair<Eigen::Vector2d, double> TebOptimalPlanner::findModifidePose(const Eig
           log << "  idx " << i << ": (" << wx << ", " << wy << ") → dist = " << val << "\n";
         }
 
-        // Log all distance values along minusLine
+        //Log all distance values along minusLine
         log << "[Minus Line Distances]\n";
         for (size_t i = 0; i < minusLine.size(); ++i)
         {
@@ -1859,7 +1960,7 @@ std::pair<Eigen::Vector2d, double> TebOptimalPlanner::findModifidePose(const Eig
         auto line = bresenhamLineWorld(boundary, pt_fwd);
         auto result = climbLocalMax(line, max_dist);
 
-        visualization_->visualizeLine({boundary.x(),boundary.y()}, {pt_fwd.x(),pt_fwd.y()});
+        //visualization_->visualizeLine({boundary.x(),boundary.y()}, {pt_fwd.x(),pt_fwd.y()});
         //std::cin.get();
 
         Eigen::Vector2i bc = line[result.first];
@@ -2063,7 +2164,7 @@ SegmentRefineResult TebOptimalPlanner::bisectSegmentLocal(const PoseSE2& p_start
   // 1) arc length
   double L = computeArcLength(p_start, p_end);
 
-  if (L < 0.001)
+  if (L < 0.02)
     return result;
 
   // 2) obstacle distances
@@ -2086,8 +2187,8 @@ SegmentRefineResult TebOptimalPlanner::bisectSegmentLocal(const PoseSE2& p_start
 
   double arc1 = computeArcLength(p_start,p_mid);
   double arc2 = computeArcLength(p_mid,p_end);
-  double mid_dt1 = dt * (arc1 / L);
-  double mid_dt2 = dt * (arc2 / L);
+  double mid_dt1 = dt * 0.4 ;//dt * (arc1 / L);
+  double mid_dt2 = dt * 0.4 ;//dt * (arc2 / L);
 
   if(std::min(mid_dt1, mid_dt2) <= 0.08)
       return result;
@@ -2095,7 +2196,7 @@ SegmentRefineResult TebOptimalPlanner::bisectSegmentLocal(const PoseSE2& p_start
   //double c = costmap_model->footprintCost(p_mid.x(), p_mid.y(), p_mid.theta(), footprint_spec, inscribed_radius, circumscribed_radius);
   double dist = distanceFieldAt(p_mid.x(), p_mid.y());
   // 5) mid collision → medial-ball
-  if (dist < 0.25)
+  if (dist < 0.28)
   {
     auto [mp, r] = findModifidePose(Eigen::Vector2d(p_mid.x(), p_mid.y()), Eigen::Vector2d(p_start.x(), p_start.y()) , Eigen::Vector2d(p_end.x(), p_end.y()), log);
     //auto [mp, r] = findPerpMedialAxis(Eigen::Vector2d(p_mid.x(), p_mid.y()), Eigen::Vector2d(p_start.x(), p_start.y()) , Eigen::Vector2d(p_end.x(), p_end.y()), log);
@@ -2222,6 +2323,7 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
 {
   const auto& info = *costmap_info_;
   const auto& df   = *distance_field_;
+  safe_points_.clear();
   std::ofstream outFile("/home/glab/bisection_log.txt", std::ios::app);
   for (size_t idx = 0; idx < teb().sizePoses(); ++idx)
   {
@@ -2267,10 +2369,10 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
   for (int i = 1; i < teb().sizePoses()-1; ++i)
   {
     auto &p = teb().Pose(i);
-    //double c = costmap_model->footprintCost(p.x(), p.y(), p.theta(), footprint_spec, inscribed_radius, circumscribed_radius);
+    double c = costmap_model->footprintCost(p.x(), p.y(), p.theta(), footprint_spec, inscribed_radius, circumscribed_radius);
     double dist = distanceFieldAt(teb().Pose(i).x(), teb().Pose(i).y());
-    if (dist < 0.25){
-      visualization_->publishInfeasibleRobotPose(teb().Pose(i), *cfg_->robot_model, footprint_spec);
+    if (c <= -1.0){
+      //visualization_->publishInfeasibleRobotPose(teb().Pose(i), *cfg_->robot_model, footprint_spec);
       auto [mp, r] = findModifidePose(Eigen::Vector2d(p.x(), p.y()), Eigen::Vector2d(teb().Pose(i-1).x(), teb().Pose(i-1).y()) , Eigen::Vector2d(p.x(), p.y()), outFile);
       //auto [mp, r] = findPerpMedialAxis(Eigen::Vector2d(p.x(), p.y()), Eigen::Vector2d(teb().Pose(i-1).x(), teb().Pose(i-1).y()) , Eigen::Vector2d(p.x(), p.y()), outFile);
       //auto [mp, r] = findMedialBallCenter(Eigen::Vector2d(p.x(), p.y()), df, info);
@@ -2279,6 +2381,8 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
       teb().Pose(i).x() = mp.x();
       teb().Pose(i).y() = mp.y();
       teb().Pose(i-1).theta() = computeOri({teb().Pose(i-1).x(), teb().Pose(i-1).y()}, {teb().Pose(i).x(), teb().Pose(i).y()});
+
+      //safe_points_.emplace_back(mp);
     }
   }
 
@@ -2380,15 +2484,17 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
     {
       teb().insertPose(offset + gidx + 1, P[j]);
       teb().insertTimeDiff(offset + gidx + 1, T[j-1]);
+      safe_points_.emplace_back(Eigen::Vector2d(P[j].x(), P[j].y()));
       ++offset;
     }
     ++gidx;
 
   }
-  for (size_t i = 0; i < teb().sizePoses() - 2; ++i)
-  {
-    teb().Pose(i).theta() = computeOri({teb().Pose(i).x(), teb().Pose(i).y()}, {teb().Pose(i+1).x(), teb().Pose(i+1).y()});
-  } 
+
+  // for (size_t i = 0; i < teb().sizePoses() - 2; ++i)
+  // {
+  //   teb().Pose(i).theta() = computeOri({teb().Pose(i).x(), teb().Pose(i).y()}, {teb().Pose(i+1).x(), teb().Pose(i+1).y()});
+  // } 
 
   std_msgs::ColorRGBA blue;
   blue.r = 0.0;
@@ -2453,7 +2559,7 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
     hyst_timediffs_.push_back(0.1 * dt);
   }
 
-  adaptiveoptimizeTEB(cfg_->optim.no_inner_iterations, cfg_->optim.no_outer_iterations);
+  //adaptiveoptimizeTEB(cfg_->optim.no_inner_iterations, cfg_->optim.no_outer_iterations);
 
   return true;
 }

@@ -187,6 +187,42 @@ void TebVisualization::publishLocalPlanAndPoses(const TimedElasticBand& teb) con
     marker_pub_.publish(marker);
   }
 
+void TebVisualization::visualizeSafePoints(const std::vector< Eigen::Vector2d, Eigen::aligned_allocator<Eigen::Vector2d> >& safe_points)
+{
+  visualization_msgs::Marker marker;
+  marker.header.frame_id = "map";
+  marker.header.stamp    = ros::Time::now();
+  marker.ns              = "safe_points";
+  marker.type            = visualization_msgs::Marker::SPHERE_LIST;
+  marker.action          = visualization_msgs::Marker::ADD;
+
+  // 각 구체 크기
+  marker.scale.x = 0.07;
+  marker.scale.y = 0.07;
+  marker.scale.z = 0.07;
+
+  // 색상: 파랑
+  marker.color.a = 1.0;
+  marker.color.r = 0.0;
+  marker.color.g = 0.0;
+  marker.color.b = 1.0;
+
+  marker.lifetime = ros::Duration(0.0);
+
+  // 포인트 추가
+  for (const auto& pt : safe_points)
+  {
+    geometry_msgs::Point p;
+    p.x = pt.x();
+    p.y = pt.y();
+    p.z = 0.0;
+    marker.points.push_back(p);
+  }
+
+  marker_pub_.publish(marker);
+
+}
+
 void TebVisualization::visualizeMedialBall(const std::vector<std::pair<Eigen::Vector2d, double>>& medial_point_list_)
 {
   // 공통 속성 설정

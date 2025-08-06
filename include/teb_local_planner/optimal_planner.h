@@ -86,6 +86,7 @@ typedef g2o::LinearSolverCSparse<TEBBlockSolver::PoseMatrixType> TEBLinearSolver
 
 //! Typedef for a container storing via-points
 typedef std::vector< Eigen::Vector2d, Eigen::aligned_allocator<Eigen::Vector2d> > ViaPointContainer;
+typedef std::vector< Eigen::Vector2d, Eigen::aligned_allocator<Eigen::Vector2d> > SafePointContainer;
 
 struct DistanceMapInfo
 {
@@ -325,8 +326,24 @@ public:
    */
   const ViaPointContainer& getViaPoints() const {return *via_points_;}
 
+  /** @name Take safe-points into account */
   //@}
 
+
+    /**
+   * @brief Assign a new set of safe-points
+   * @param safe_points pointer to a safe_point container (can also be a nullptr)
+   * @details Any previously set container will be overwritten.
+   */
+  void setSafePoints(const SafePointContainer& safe_points) {safe_points_ = safe_points;}
+  
+  /**
+   * @brief Access the internal safe-point container.
+   * @return Const reference to the safe-point container
+   */
+  const SafePointContainer& getSafePoints() const {return safe_points_;}
+
+  //@}
 
   /** @name Take distance map into account */
   //@{
@@ -591,7 +608,7 @@ public:
   Eigen::Vector2d computePushDirection(const Eigen::Vector2d& from, const Eigen::Vector2d& to, double dist);
   Eigen::Vector2d computePerpendicularDirection(const Eigen::Vector2d& p2, const Eigen::Vector2d& p3);
   std::vector<Eigen::Vector2i> bresenhamLineWorld(const Eigen::Vector2d& from, const Eigen::Vector2d& to);
-  std::pair<int, double> climbLocalMax(const std::vector<Eigen::Vector2i>& line, double max_dist);
+  std::pair<int, double> climbLocalMax(const std::vector<Eigen::Vector2i>& line, double max_dist, double max_iterations = 100);
   std::pair<Eigen::Vector2d, double> findModifidePose(const Eigen::Vector2d& coll_pt, const Eigen::Vector2d& p2, const Eigen::Vector2d& p3, std::ostream& log, double max_iterations= 100);
 
 
@@ -612,6 +629,8 @@ public:
    * @return \c true, if the graph was created successfully, \c false otherwise.
    */
   bool buildGraph(double weight_multiplier=1.0);
+
+  bool adaptivebuildGraph(double weight_multiplier=1.0);
   
   /**
    * @brief Optimize the previously constructed hyper-graph to deform / optimize the TEB.
@@ -711,7 +730,7 @@ public:
    * @see optimizeGraph
    */
   void AddEdgesViaPoints();
-  
+  void AddEdgesSafePoints();
   /**
    * @brief Add all edges (local cost functions) related to keeping a distance from dynamic (moving) obstacles.
    * @warning experimental 
@@ -767,6 +786,7 @@ public:
   const TebConfig* cfg_; //!< Config class that stores and manages all related parameters
   ObstContainer* obstacles_; //!< Store obstacles that are relevant for planning
   const ViaPointContainer* via_points_; //!< Store via points for planning
+  SafePointContainer safe_points_;//!< Store safe points for planning
   std::vector<ObstContainer> obstacles_per_vertex_; //!< Store the obstacles associated with the n-1 initial vertices
   const DistanceMapInfo* costmap_info_;
   const std::vector<float>* distance_field_;

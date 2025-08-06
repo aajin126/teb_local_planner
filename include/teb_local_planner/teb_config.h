@@ -80,6 +80,7 @@ public:
     bool allow_init_with_backwards_motion; //!< If true, the underlying trajectories might be initialized with backwards motions in case the goal is behind the start within the local costmap (this is only recommended if the robot is equipped with rear sensors)
     double global_plan_viapoint_sep; //!< Min. separation between each two consecutive via-points extracted from the global plan (if negative: disabled)
     bool via_points_ordered; //!< If true, the planner adheres to the order of via-points in the storage container
+    bool safe_points_ordered;
     double max_global_plan_lookahead_dist; //!< Specify maximum length (cumulative Euclidean distances) of the subset of the global plan taken into account for optimization [if <=0: disabled; the length is also bounded by the local costmap size!]
     double global_plan_prune_distance; //!< Distance between robot and via_points of global plan which is used for pruning
     bool exact_arc_length; //!< If true, the planner uses the exact arc length in velocity, acceleration and turning rate computations [-> increased cpu time], otherwise the euclidean approximation is used.
@@ -173,6 +174,7 @@ public:
     double weight_dynamic_obstacle_inflation; //!< Optimization weight for the inflation penalty of dynamic obstacles (should be small)
     double weight_velocity_obstacle_ratio; //!< Optimization weight for satisfying a maximum allowed velocity with respect to the distance to a static obstacle
     double weight_viapoint; //!< Optimization weight for minimizing the distance to via-points
+    double weight_safepoint;
     double weight_prefer_rotdir; //!< Optimization weight for preferring a specific turning direction (-> currently only activated if an oscillation is detected, see 'oscillation_recovery'
     double weight_medialpoint;
 
@@ -261,6 +263,7 @@ public:
     trajectory.allow_init_with_backwards_motion = false;
     trajectory.global_plan_viapoint_sep = -1;
     trajectory.via_points_ordered = false;
+    trajectory.safe_points_ordered = false;
     trajectory.max_global_plan_lookahead_dist = 1;
     trajectory.global_plan_prune_distance = 1;
     trajectory.exact_arc_length = false;
@@ -341,6 +344,7 @@ public:
     optim.weight_dynamic_obstacle_inflation = 0.1;
     optim.weight_velocity_obstacle_ratio = 0;
     optim.weight_viapoint = 1;
+    optim.weight_safepoint = 1;
     optim.weight_medialpoint = 50;
     optim.weight_prefer_rotdir = 50;
 
