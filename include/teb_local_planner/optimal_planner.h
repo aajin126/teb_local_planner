@@ -568,7 +568,7 @@ public:
   double computeArcLength(const PoseSE2& p1, const PoseSE2& p2);
   std::pair<Eigen::Vector2d, double> findPerpMedialAxis(const Eigen::Vector2d& coll_pt, const Eigen::Vector2d& p2, const Eigen::Vector2d& p3, std::ostream& log, double max_iterations = 100);
 
-  SegmentRefineResult bisectSegmentLocal(const PoseSE2& p_start, const PoseSE2& p_end, double dt,
+  SegmentRefineResult bisectSegmentLocal(PoseSE2& p_start, PoseSE2& p_end, double dt,
     base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
     double inscribed_radius, double circumscribed_radius, bool is_root, int depth, std::ostream& log);
   /**
@@ -607,9 +607,10 @@ public:
   Eigen::Vector2d getBoundaryPointFromCollision(const Eigen::Vector2d& pt);
   Eigen::Vector2d computePushDirection(const Eigen::Vector2d& from, const Eigen::Vector2d& to, double dist);
   Eigen::Vector2d computePerpendicularDirection(const Eigen::Vector2d& p2, const Eigen::Vector2d& p3);
+  Eigen::Vector2d estimateNormal(const Eigen::Vector2d& pt);
   std::vector<Eigen::Vector2i> bresenhamLineWorld(const Eigen::Vector2d& from, const Eigen::Vector2d& to);
   std::pair<int, double> climbLocalMax(const std::vector<Eigen::Vector2i>& line, double max_dist, double max_iterations = 100);
-  std::pair<Eigen::Vector2d, double> findModifidePose(const Eigen::Vector2d& coll_pt, const Eigen::Vector2d& p2, const Eigen::Vector2d& p3, std::ostream& log, double max_iterations= 100);
+  std::pair<Eigen::Vector2d, double> findModifiedPose(const Eigen::Vector2d& coll_pt, const Eigen::Vector2d& p2, const Eigen::Vector2d& p3, std::ostream& log, double max_iterations= 100);
 
 
   bool violatesArcConstraint(const PoseSE2& sk, const PoseSE2& sk1);

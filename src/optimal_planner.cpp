@@ -1818,6 +1818,27 @@ Eigen::Vector2d TebOptimalPlanner::computePerpendicularDirection(const Eigen::Ve
     return n.normalized();
 }
 
+Eigen::Vector2d TebOptimalPlanner::estimateNormal(const Eigen::Vector2d& pt)
+{
+    const auto& info = *costmap_info_;
+    const auto& df = *distance_field_;
+
+    int gx = int((pt.x() - info.origin_x) / info.resolution);
+    int gy = int((pt.y() - info.origin_y) / info.resolution);
+
+    if (gx <= 0 || gy <= 0 || gx >= info.map_width - 1 || gy >= info.map_height - 1)
+        return Eigen::Vector2d::Zero();  // out of bounds
+
+    // central difference
+    double dx = (df[(gx+1) + gy * info.map_width] - df[(gx-1) + gy * info.map_width]) / (2.0 * info.resolution);
+    double dy = (df[gx + (gy+1) * info.map_width] - df[gx + (gy-1) * info.map_width]) / (2.0 * info.resolution);
+
+    Eigen::Vector2d grad(dx, dy);
+    if (grad.norm() < 1e-6) return Eigen::Vector2d::Zero();  // flat / error
+
+    return grad.normalized();  // boundary normal direction (pointing outward)
+}
+
 // 4. bresenham (world → grid)
 std::vector<Eigen::Vector2i> TebOptimalPlanner::bresenhamLineWorld(const Eigen::Vector2d& from, const Eigen::Vector2d& to)
 {
@@ -1867,11 +1888,140 @@ std::pair<int, double> TebOptimalPlanner::climbLocalMax(const std::vector<Eigen:
     return {cur, cur_val};
 }
 
-std::pair<Eigen::Vector2d, double> TebOptimalPlanner::findModifidePose(const Eigen::Vector2d& coll_pt, const Eigen::Vector2d& p2, const Eigen::Vector2d& p3, std::ostream& log, double max_iterations)
+// std::pair<Eigen::Vector2d, double> TebOptimalPlanner::findModifiedPose(const Eigen::Vector2d& coll_pt, const Eigen::Vector2d& p2, const Eigen::Vector2d& p3, std::ostream& log, double max_iterations)
+// {
+//     const auto& info = *costmap_info_;
+//     const auto& df = *distance_field_;
+//     const double max_dist = 0.28;
+
+//     ROS_INFO("findmodifiedpose");
+
+//     Eigen::Vector2d boundary = getBoundaryPointFromCollision(coll_pt);
+//     double boundary_val = distanceFieldAt(boundary.x(), boundary.y());
+//     double coll_val = distanceFieldAt(coll_pt.x(), coll_pt.y());
+
+//     log << "[Target Point]\n";
+//     log << "  World Coord: (" << coll_pt.x() << ", " << coll_pt.y() << ")\n";
+//     log << "  Distance: " << coll_val << "\n";
+
+//     visualization_->visualizetwoPoint({boundary.x(),boundary.y()}, {coll_pt.x(),coll_pt.y()});
+//     visualization_->visualizeEndPoints(p2, p3);
+
+//     Eigen::Vector2d n;
+//     if (coll_val == 0.0)
+//     {
+//         // case: Boundary value = 0
+//         n = computePerpendicularDirection(p2, p3);
+//         if (n.norm() == 0.0)
+//             return {coll_pt, coll_val};
+
+//         Eigen::Vector2d pt_fwd = coll_pt + n * max_dist;
+//         Eigen::Vector2d pt_bwd = coll_pt - n * max_dist;
+
+//         auto plusLine = bresenhamLineWorld(coll_pt, pt_fwd);
+//         auto minusLine = bresenhamLineWorld(coll_pt, pt_bwd);
+
+//         visualization_->visualizeLine({pt_bwd.x(),pt_bwd.y()}, {pt_fwd.x(),pt_fwd.y()});
+//         std::cin.get();
+//         auto pos = climbLocalMax(plusLine, max_dist);
+//         auto neg = climbLocalMax(minusLine, max_dist);
+
+//         const auto& chosenLine = (pos.second > neg.second) ? plusLine : minusLine;
+//         const auto& chosenVal  = (pos.second > neg.second) ? pos.second : neg.second;
+//         int chosenIdx = (pos.second > neg.second) ? pos.first : neg.first;
+
+//         Eigen::Vector2i bc = chosenLine[chosenIdx];
+//         Eigen::Vector2d best_pt(
+//             info.origin_x + (bc.x() + 0.5) * info.resolution,
+//             info.origin_y + (bc.y() + 0.5) * info.resolution
+//         );
+
+//         log << "[Plus Line Distances]\n";
+//         for (size_t i = 0; i < plusLine.size(); ++i)
+//         {
+//           const auto& cell = plusLine[i];
+//           double val = df[cell.x() + cell.y() * info.map_width] * info.resolution;
+//           double wx = info.origin_x + (cell.x() + 0.5) * info.resolution;
+//           double wy = info.origin_y + (cell.y() + 0.5) * info.resolution;
+//           log << "  idx " << i << ": (" << wx << ", " << wy << ") → dist = " << val << "\n";
+//         }
+
+//         //Log all distance values along minusLine
+//         log << "[Minus Line Distances]\n";
+//         for (size_t i = 0; i < minusLine.size(); ++i)
+//         {
+//           const auto& cell = minusLine[i];
+//           double val = df[cell.x() + cell.y() * info.map_width] * info.resolution;
+//           double wx = info.origin_x + (cell.x() + 0.5) * info.resolution;
+//           double wy = info.origin_y + (cell.y() + 0.5) * info.resolution;
+//           log << "  idx " << i << ": (" << wx << ", " << wy << ") → dist = " << val << "\n";
+//         }
+
+//         std::string chosenDir = (pos.second > neg.second) ? "PLUS" : "MINUS";
+//         log << "[Chosen Point]\n";
+//         log << "  Direction: " << chosenDir << "\n";
+//         log << "  Index: " << chosenIdx << "\n";
+//         log << "  World Coord: (" << best_pt.x() << ", " << best_pt.y() << ")\n";
+//         log << "  Distance: " << chosenVal << "\n";
+
+//         std_msgs::ColorRGBA red;
+//         red.r = 1.0;
+//         red.g = 0.0;
+//         red.b = 0.0;
+//         red.a = 1.0;
+
+//         visualization_->publishArrow(coll_pt, best_pt, red);
+//         //std::cin.get();
+
+//         return {best_pt, chosenVal};
+//     }
+//     else
+//     {
+//         // case: Boundary value != 0
+//         n = computePushDirection(coll_pt, boundary, max_dist);
+//         if (coll_val > 0.0) n = -n;
+
+//         Eigen::Vector2d pt_fwd = boundary + n * max_dist;
+//         auto line = bresenhamLineWorld(boundary, pt_fwd);
+//         auto result = climbLocalMax(line, max_dist);
+
+//         visualization_->visualizeLine({boundary.x(),boundary.y()}, {pt_fwd.x(),pt_fwd.y()});
+//         std::cin.get();
+
+//         Eigen::Vector2i bc = line[result.first];
+//         Eigen::Vector2d best_pt(info.origin_x + (bc.x() + 0.5) * info.resolution, info.origin_y + (bc.y() + 0.5) * info.resolution);
+
+//         log << "[Line Distances]\n";
+//         for (size_t i = 0; i < line.size(); ++i)
+//         {
+//           const auto& cell = line[i];
+//           double val = df[cell.x() + cell.y() * info.map_width] * info.resolution;
+//           double wx = info.origin_x + (cell.x() + 0.5) * info.resolution;
+//           double wy = info.origin_y + (cell.y() + 0.5) * info.resolution;
+//           log << "  idx " << i << ": (" << wx << ", " << wy << ") → dist = " << val << "\n";
+//         }
+//         log << "  World Coord: (" << best_pt.x() << ", " << best_pt.y() << ")\n";
+//         log << "  Chosen Distance: " << result.second << "\n";
+
+//         std_msgs::ColorRGBA blue;
+//         blue.r = 0.0;
+//         blue.g = 0.0;
+//         blue.b = 1.0;
+//         blue.a = 1.0;
+//         visualization_->publishArrow(coll_pt, best_pt, blue);
+//         std::cin.get();
+
+//         return {best_pt, result.second};
+//     }
+
+// }
+
+
+std::pair<Eigen::Vector2d, double> TebOptimalPlanner::findModifiedPose(const Eigen::Vector2d& coll_pt, const Eigen::Vector2d& p2, const Eigen::Vector2d& p3, std::ostream& log, double max_iterations)
 {
     const auto& info = *costmap_info_;
     const auto& df = *distance_field_;
-    const double max_dist = 0.28;
+    const double max_dist = 0.35;
 
     ROS_INFO("findmodifiedpose");
 
@@ -1879,115 +2029,59 @@ std::pair<Eigen::Vector2d, double> TebOptimalPlanner::findModifidePose(const Eig
     double boundary_val = distanceFieldAt(boundary.x(), boundary.y());
     double coll_val = distanceFieldAt(coll_pt.x(), coll_pt.y());
 
-    //visualization_->visualizetwoPoint({boundary.x(),boundary.y()}, {coll_pt.x(),coll_pt.y()});
+    log << "[Target Point]\n";
+    log << "  World Coord: (" << coll_pt.x() << ", " << coll_pt.y() << ")\n";
+    log << "  Distance: " << coll_val << "\n";
+
+    visualization_->visualizetwoPoint({boundary.x(),boundary.y()}, {coll_pt.x(),coll_pt.y()});
     //visualization_->visualizeEndPoints(p2, p3);
 
     Eigen::Vector2d n;
     if (coll_val == 0.0)
     {
         // case: Boundary value = 0
-        n = computePerpendicularDirection(p2, p3);
+        n = estimateNormal(coll_pt);
         if (n.norm() == 0.0)
             return {coll_pt, coll_val};
-
-        Eigen::Vector2d pt_fwd = coll_pt + n * max_dist;
-        Eigen::Vector2d pt_bwd = coll_pt - n * max_dist;
-
-        auto plusLine = bresenhamLineWorld(coll_pt, pt_fwd);
-        auto minusLine = bresenhamLineWorld(coll_pt, pt_bwd);
-
-        //visualization_->visualizeLine({pt_bwd.x(),pt_bwd.y()}, {pt_fwd.x(),pt_fwd.y()});
-        //std::cin.get();
-        auto pos = climbLocalMax(plusLine, max_dist);
-        auto neg = climbLocalMax(minusLine, max_dist);
-
-        const auto& chosenLine = (pos.second > neg.second) ? plusLine : minusLine;
-        const auto& chosenVal  = (pos.second > neg.second) ? pos.second : neg.second;
-        int chosenIdx = (pos.second > neg.second) ? pos.first : neg.first;
-
-        Eigen::Vector2i bc = chosenLine[chosenIdx];
-        Eigen::Vector2d best_pt(
-            info.origin_x + (bc.x() + 0.5) * info.resolution,
-            info.origin_y + (bc.y() + 0.5) * info.resolution
-        );
-
-        log << "[Plus Line Distances]\n";
-        for (size_t i = 0; i < plusLine.size(); ++i)
-        {
-          const auto& cell = plusLine[i];
-          double val = df[cell.x() + cell.y() * info.map_width] * info.resolution;
-          double wx = info.origin_x + (cell.x() + 0.5) * info.resolution;
-          double wy = info.origin_y + (cell.y() + 0.5) * info.resolution;
-          log << "  idx " << i << ": (" << wx << ", " << wy << ") → dist = " << val << "\n";
-        }
-
-        //Log all distance values along minusLine
-        log << "[Minus Line Distances]\n";
-        for (size_t i = 0; i < minusLine.size(); ++i)
-        {
-          const auto& cell = minusLine[i];
-          double val = df[cell.x() + cell.y() * info.map_width] * info.resolution;
-          double wx = info.origin_x + (cell.x() + 0.5) * info.resolution;
-          double wy = info.origin_y + (cell.y() + 0.5) * info.resolution;
-          log << "  idx " << i << ": (" << wx << ", " << wy << ") → dist = " << val << "\n";
-        }
-
-        std::string chosenDir = (pos.second > neg.second) ? "PLUS" : "MINUS";
-        log << "[Chosen Point]\n";
-        log << "  Direction: " << chosenDir << "\n";
-        log << "  Index: " << chosenIdx << "\n";
-        log << "  World Coord: (" << best_pt.x() << ", " << best_pt.y() << ")\n";
-        log << "  Distance: " << chosenVal << "\n";
-
-        std_msgs::ColorRGBA red;
-        red.r = 1.0;
-        red.g = 0.0;
-        red.b = 0.0;
-        red.a = 1.0;
-
-        visualization_->publishArrow(coll_pt, best_pt, red);
-        //std::cin.get();
-
-        return {best_pt, chosenVal};
     }
     else
     {
         // case: Boundary value != 0
         n = computePushDirection(coll_pt, boundary, max_dist);
         if (coll_val > 0.0) n = -n;
-
-        Eigen::Vector2d pt_fwd = boundary + n * max_dist;
-        auto line = bresenhamLineWorld(boundary, pt_fwd);
-        auto result = climbLocalMax(line, max_dist);
-
-        //visualization_->visualizeLine({boundary.x(),boundary.y()}, {pt_fwd.x(),pt_fwd.y()});
-        //std::cin.get();
-
-        Eigen::Vector2i bc = line[result.first];
-        Eigen::Vector2d best_pt(info.origin_x + (bc.x() + 0.5) * info.resolution, info.origin_y + (bc.y() + 0.5) * info.resolution);
-
-        log << "[Line Distances]\n";
-        for (size_t i = 0; i < line.size(); ++i)
-        {
-          const auto& cell = line[i];
-          double val = df[cell.x() + cell.y() * info.map_width] * info.resolution;
-          double wx = info.origin_x + (cell.x() + 0.5) * info.resolution;
-          double wy = info.origin_y + (cell.y() + 0.5) * info.resolution;
-          log << "  idx " << i << ": (" << wx << ", " << wy << ") → dist = " << val << "\n";
-        }
-        log << "  World Coord: (" << best_pt.x() << ", " << best_pt.y() << ")\n";
-        log << "  Chosen Distance: " << result.second << "\n";
-
-        std_msgs::ColorRGBA blue;
-        blue.r = 0.0;
-        blue.g = 0.0;
-        blue.b = 1.0;
-        blue.a = 1.0;
-        visualization_->publishArrow(coll_pt, best_pt, blue);
-        //std::cin.get();
-
-        return {best_pt, result.second};
     }
+
+    Eigen::Vector2d pt_fwd = boundary + n * max_dist;
+    auto line = bresenhamLineWorld(boundary, pt_fwd);
+    auto result = climbLocalMax(line, max_dist);
+
+    visualization_->visualizeLine({boundary.x(),boundary.y()}, {pt_fwd.x(),pt_fwd.y()});
+    //std::cin.get();
+
+    Eigen::Vector2i bc = line[result.first];
+    Eigen::Vector2d best_pt(info.origin_x + (bc.x() + 0.5) * info.resolution, info.origin_y + (bc.y() + 0.5) * info.resolution);
+
+    log << "[Line Distances]\n";
+    for (size_t i = 0; i < line.size(); ++i)
+    {
+      const auto& cell = line[i];
+      double val = df[cell.x() + cell.y() * info.map_width] * info.resolution;
+      double wx = info.origin_x + (cell.x() + 0.5) * info.resolution;
+      double wy = info.origin_y + (cell.y() + 0.5) * info.resolution;
+      log << "  idx " << i << ": (" << wx << ", " << wy << ") → dist = " << val << "\n";
+    }
+    log << "  World Coord: (" << best_pt.x() << ", " << best_pt.y() << ")\n";
+    log << "  Chosen Distance: " << result.second << "\n";
+
+    std_msgs::ColorRGBA blue;
+    blue.r = 0.0;
+    blue.g = 0.0;
+    blue.b = 1.0;
+    blue.a = 1.0;
+    visualization_->publishArrow(coll_pt, best_pt, blue);
+    //std::cin.get();
+
+    return {best_pt, result.second};
 
 }
 
@@ -2155,7 +2249,7 @@ PoseSE2 TebOptimalPlanner::interpolatePose(const PoseSE2& A, const PoseSE2& B, d
 //}
 
 //bisection
-SegmentRefineResult TebOptimalPlanner::bisectSegmentLocal(const PoseSE2& p_start, const PoseSE2& p_end, double dt, base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
+SegmentRefineResult TebOptimalPlanner::bisectSegmentLocal(PoseSE2& p_start, PoseSE2& p_end, double dt, base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
     double inscribed_radius, double circumscribed_radius, bool is_root, int depth, std::ostream& log)
 {
   SegmentRefineResult result;
@@ -2184,11 +2278,12 @@ SegmentRefineResult TebOptimalPlanner::bisectSegmentLocal(const PoseSE2& p_start
 
   // 4) compute mid pose
   PoseSE2 p_mid = interpolatePose(p_start, p_end, 0.5);
+  p_mid.theta() = computeOri({p_mid.x(), p_mid.y()}, {p_end.x(), p_end.y()});
 
   double arc1 = computeArcLength(p_start,p_mid);
   double arc2 = computeArcLength(p_mid,p_end);
-  double mid_dt1 = dt * 0.4 ;//dt * (arc1 / L);
-  double mid_dt2 = dt * 0.4 ;//dt * (arc2 / L);
+  double mid_dt1 = dt * (arc1 / L);//dt * 0.5 ;
+  double mid_dt2 = dt * (arc2 / L);//dt * 0.5 ;
 
   if(std::min(mid_dt1, mid_dt2) <= 0.08)
       return result;
@@ -2196,13 +2291,16 @@ SegmentRefineResult TebOptimalPlanner::bisectSegmentLocal(const PoseSE2& p_start
   //double c = costmap_model->footprintCost(p_mid.x(), p_mid.y(), p_mid.theta(), footprint_spec, inscribed_radius, circumscribed_radius);
   double dist = distanceFieldAt(p_mid.x(), p_mid.y());
   // 5) mid collision → medial-ball
-  if (dist < 0.28)
+  if (dist < 0.3)
   {
-    auto [mp, r] = findModifidePose(Eigen::Vector2d(p_mid.x(), p_mid.y()), Eigen::Vector2d(p_start.x(), p_start.y()) , Eigen::Vector2d(p_end.x(), p_end.y()), log);
+    auto [mp, r] = findModifiedPose(Eigen::Vector2d(p_mid.x(), p_mid.y()), Eigen::Vector2d(p_start.x(), p_start.y()) , Eigen::Vector2d(p_end.x(), p_end.y()), log);
     //auto [mp, r] = findPerpMedialAxis(Eigen::Vector2d(p_mid.x(), p_mid.y()), Eigen::Vector2d(p_start.x(), p_start.y()) , Eigen::Vector2d(p_end.x(), p_end.y()), log);
     //auto [mp, r] = findMedialBallCenter(Eigen::Vector2d(p_mid.x(), p_mid.y()), df, info);
     p_mid.x() = mp.x();
     p_mid.y() = mp.y();
+    p_start.theta() = computeOri({p_start.x(), p_start.y()}, {p_mid.x(), p_mid.y()});
+    p_mid.theta() = computeOri({p_mid.x(), p_mid.y()}, {p_end.x(), p_end.y()});
+
   }
   //visualization_->visualizePoint({p_start.x(),p_start.y()}, {p_end.x(),p_end.y()}, {p_mid.x(),p_mid.y()});
 
@@ -2373,14 +2471,17 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
     double dist = distanceFieldAt(teb().Pose(i).x(), teb().Pose(i).y());
     if (c <= -1.0){
       //visualization_->publishInfeasibleRobotPose(teb().Pose(i), *cfg_->robot_model, footprint_spec);
-      auto [mp, r] = findModifidePose(Eigen::Vector2d(p.x(), p.y()), Eigen::Vector2d(teb().Pose(i-1).x(), teb().Pose(i-1).y()) , Eigen::Vector2d(p.x(), p.y()), outFile);
+      auto [mp, r] = findModifiedPose(Eigen::Vector2d(p.x(), p.y()), Eigen::Vector2d(teb().Pose(i-1).x(), teb().Pose(i-1).y()) , Eigen::Vector2d(p.x(), p.y()), outFile);
       //auto [mp, r] = findPerpMedialAxis(Eigen::Vector2d(p.x(), p.y()), Eigen::Vector2d(teb().Pose(i-1).x(), teb().Pose(i-1).y()) , Eigen::Vector2d(p.x(), p.y()), outFile);
       //auto [mp, r] = findMedialBallCenter(Eigen::Vector2d(p.x(), p.y()), df, info);
 
       //Modify Pose
       teb().Pose(i).x() = mp.x();
       teb().Pose(i).y() = mp.y();
+
       teb().Pose(i-1).theta() = computeOri({teb().Pose(i-1).x(), teb().Pose(i-1).y()}, {teb().Pose(i).x(), teb().Pose(i).y()});
+      if (i != teb().sizePoses()-1)
+        teb().Pose(i).theta() = computeOri({teb().Pose(i).x(), teb().Pose(i).y()}, {teb().Pose(i+1).x(), teb().Pose(i+1).y()});
 
       //safe_points_.emplace_back(mp);
     }
@@ -2445,8 +2546,8 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
   // 4) refine each segment locally
   int depth = 0;
   for (size_t k : arc_order) {
-    const PoseSE2& s = segmentPoses[k][0];
-    const PoseSE2& e = segmentPoses[k][1];
+    PoseSE2& s = segmentPoses[k][0];
+    PoseSE2& e = segmentPoses[k][1];
     double dt = segmentTimeDiffs[k][0];
 
     SegmentRefineResult r = bisectSegmentLocal(s, e, dt, costmap_model, footprint_spec, inscribed_radius, circumscribed_radius, true, depth, outFile);
@@ -2490,11 +2591,6 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
     ++gidx;
 
   }
-
-  // for (size_t i = 0; i < teb().sizePoses() - 2; ++i)
-  // {
-  //   teb().Pose(i).theta() = computeOri({teb().Pose(i).x(), teb().Pose(i).y()}, {teb().Pose(i+1).x(), teb().Pose(i+1).y()});
-  // } 
 
   std_msgs::ColorRGBA blue;
   blue.r = 0.0;
