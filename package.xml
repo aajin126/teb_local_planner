@@ -27,6 +27,9 @@
   <build_depend>message_generation</build_depend>
   <build_depend>tf2_eigen</build_depend>
   <build_depend>tf2_geometry_msgs</build_depend>
+
+  <build_depend>ceres-solver</build_depend>
+  <exec_depend>ceres-solver</exec_depend>
   
   <build_export_depend>message_runtime</build_export_depend>
   <exec_depend>message_runtime</exec_depend>

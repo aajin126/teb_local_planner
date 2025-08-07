@@ -258,7 +258,6 @@ void TimedElasticBand::autoResize(double dt_ref, double dt_hysteresis, int min_s
           // (new behaviour)
           if (TimeDiff(i) > 2*dt_ref)
           {
-              ROS_INFO("autoresize : insert pose");
               double newtime = 0.5*TimeDiff(i);
 
               TimeDiff(i) = newtime;
@@ -272,7 +271,6 @@ void TimedElasticBand::autoResize(double dt_ref, double dt_hysteresis, int min_s
           {
               if (i < sizeTimeDiffs() - 1)
               {
-                  ROS_INFO("autoresize : pass dt");
                   timediffs().at(i+1)->dt()+= timediffs().at(i)->dt() - dt_ref;
               }
               timediffs().at(i)->dt() = dt_ref;
@@ -281,7 +279,6 @@ void TimedElasticBand::autoResize(double dt_ref, double dt_hysteresis, int min_s
       else if(TimeDiff(i) < dt_ref - dt_hysteresis && sizeTimeDiffs()>min_samples) // only remove samples if size is larger than min_samples.
       {
         //ROS_DEBUG("teb_local_planner: autoResize() deleting bandpoint i=%u, #TimeDiffs=%lu",i,sizeTimeDiffs());
-        ROS_INFO("autoresize : delete pose");
         if(i < ((int)sizeTimeDiffs()-1))
         {
           TimeDiff(i+1) = TimeDiff(i+1) + TimeDiff(i);

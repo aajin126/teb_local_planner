@@ -37,6 +37,7 @@ message(STATUS "${CMAKE_MODULE_PATH}")
 find_package(Boost REQUIRED COMPONENTS system thread graph)
 find_package(SUITESPARSE REQUIRED)
 find_package(G2O REQUIRED)
+find_package(Ceres REQUIRED)
 
 # Eigen3 FindScript Backward compatibility (ubuntu saucy)
 # Since FindEigen.cmake is deprecated starting from jade.
@@ -177,9 +178,11 @@ catkin_package(
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories( include /usr/include/pcl-1.10 )
+
 include_directories(
   ${EXTERNAL_INCLUDE_DIRS}
   ${catkin_INCLUDE_DIRS}
+  ${CERES_INCLUDE_DIRS}
 )
 
 link_directories(${PCL_LIBRARY_DIRS})
@@ -197,7 +200,6 @@ add_library(teb_local_planner
    src/homotopy_class_planner.cpp
    src/teb_local_planner_ros.cpp
    src/graph_search.cpp
-##   src/NPdetector.cpp
 )
 
 # Dynamic reconfigure: make sure configure headers are built before any node using them
@@ -224,6 +226,7 @@ target_link_libraries(test_optim_node
 )
 
 target_link_libraries(distance_map ${catkin_LIBRARIES})
+target_link_libraries(teb_local_planner ${catkin_LIBRARIES} ${CERES_LIBRARIES})
 # target_link_libraries(NPdetector ${catkin_LIBRARIES})
 
 #############

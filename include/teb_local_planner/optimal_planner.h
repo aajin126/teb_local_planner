@@ -73,6 +73,11 @@
 #include <vector>
 #include <numeric>
 #include <ctime>
+#include <ceres/ceres.h>
+#include <ceres/rotation.h>
+#include <Eigen/Core>
+#include <iostream>
+
 
 namespace teb_local_planner
 {
@@ -100,6 +105,8 @@ struct DistanceMapInfo
   DistanceMapInfo()
     : map_width(0), map_height(0), resolution(0), origin_x(0), origin_y(0), costmap_data(nullptr) {}
 };
+
+using Pose2D = Eigen::Vector2d; 
 
 struct SegmentRefineResult
 {
@@ -571,6 +578,9 @@ public:
   SegmentRefineResult bisectSegmentLocal(PoseSE2& p_start, PoseSE2& p_end, double dt,
     base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
     double inscribed_radius, double circumscribed_radius, bool is_root, int depth, std::ostream& log);
+
+  std::pair<double, double> estimateTheta(const Eigen::Vector2d& p1, const Eigen::Vector2d& p2, const Eigen::Vector2d& p3);
+
   /**
    * @brief Check whether the planned trajectory is feasible or not.
    * 
@@ -612,7 +622,7 @@ public:
   std::pair<int, double> climbLocalMax(const std::vector<Eigen::Vector2i>& line, double max_dist, double max_iterations = 100);
   std::pair<Eigen::Vector2d, double> findModifiedPose(const Eigen::Vector2d& coll_pt, const Eigen::Vector2d& p2, const Eigen::Vector2d& p3, std::ostream& log, double max_iterations= 100);
 
-
+  void optimizeOrientations(const std::vector<Pose2D>& positions, std::vector<double>& thetas);
   bool violatesArcConstraint(const PoseSE2& sk, const PoseSE2& sk1);
   /** @name Hyper-Graph creation and optimization */
   //@{
