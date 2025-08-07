@@ -1886,134 +1886,6 @@ std::pair<int, double> TebOptimalPlanner::climbLocalMax(const std::vector<Eigen:
     return {cur, cur_val};
 }
 
-// std::pair<Eigen::Vector2d, double> TebOptimalPlanner::findModifiedPose(const Eigen::Vector2d& coll_pt, const Eigen::Vector2d& p2, const Eigen::Vector2d& p3, std::ostream& log, double max_iterations)
-// {
-//     const auto& info = *costmap_info_;
-//     const auto& df = *distance_field_;
-//     const double max_dist = 0.28;
-
-//     ROS_INFO("findmodifiedpose");
-
-//     Eigen::Vector2d boundary = getBoundaryPointFromCollision(coll_pt);
-//     double boundary_val = distanceFieldAt(boundary.x(), boundary.y());
-//     double coll_val = distanceFieldAt(coll_pt.x(), coll_pt.y());
-
-//     log << "[Target Point]\n";
-//     log << "  World Coord: (" << coll_pt.x() << ", " << coll_pt.y() << ")\n";
-//     log << "  Distance: " << coll_val << "\n";
-
-//     visualization_->visualizetwoPoint({boundary.x(),boundary.y()}, {coll_pt.x(),coll_pt.y()});
-//     visualization_->visualizeEndPoints(p2, p3);
-
-//     Eigen::Vector2d n;
-//     if (coll_val == 0.0)
-//     {
-//         // case: Boundary value = 0
-//         n = computePerpendicularDirection(p2, p3);
-//         if (n.norm() == 0.0)
-//             return {coll_pt, coll_val};
-
-//         Eigen::Vector2d pt_fwd = coll_pt + n * max_dist;
-//         Eigen::Vector2d pt_bwd = coll_pt - n * max_dist;
-
-//         auto plusLine = bresenhamLineWorld(coll_pt, pt_fwd);
-//         auto minusLine = bresenhamLineWorld(coll_pt, pt_bwd);
-
-//         visualization_->visualizeLine({pt_bwd.x(),pt_bwd.y()}, {pt_fwd.x(),pt_fwd.y()});
-//         std::cin.get();
-//         auto pos = climbLocalMax(plusLine, max_dist);
-//         auto neg = climbLocalMax(minusLine, max_dist);
-
-//         const auto& chosenLine = (pos.second > neg.second) ? plusLine : minusLine;
-//         const auto& chosenVal  = (pos.second > neg.second) ? pos.second : neg.second;
-//         int chosenIdx = (pos.second > neg.second) ? pos.first : neg.first;
-
-//         Eigen::Vector2i bc = chosenLine[chosenIdx];
-//         Eigen::Vector2d best_pt(
-//             info.origin_x + (bc.x() + 0.5) * info.resolution,
-//             info.origin_y + (bc.y() + 0.5) * info.resolution
-//         );
-
-//         log << "[Plus Line Distances]\n";
-//         for (size_t i = 0; i < plusLine.size(); ++i)
-//         {
-//           const auto& cell = plusLine[i];
-//           double val = df[cell.x() + cell.y() * info.map_width] * info.resolution;
-//           double wx = info.origin_x + (cell.x() + 0.5) * info.resolution;
-//           double wy = info.origin_y + (cell.y() + 0.5) * info.resolution;
-//           log << "  idx " << i << ": (" << wx << ", " << wy << ") → dist = " << val << "\n";
-//         }
-
-//         //Log all distance values along minusLine
-//         log << "[Minus Line Distances]\n";
-//         for (size_t i = 0; i < minusLine.size(); ++i)
-//         {
-//           const auto& cell = minusLine[i];
-//           double val = df[cell.x() + cell.y() * info.map_width] * info.resolution;
-//           double wx = info.origin_x + (cell.x() + 0.5) * info.resolution;
-//           double wy = info.origin_y + (cell.y() + 0.5) * info.resolution;
-//           log << "  idx " << i << ": (" << wx << ", " << wy << ") → dist = " << val << "\n";
-//         }
-
-//         std::string chosenDir = (pos.second > neg.second) ? "PLUS" : "MINUS";
-//         log << "[Chosen Point]\n";
-//         log << "  Direction: " << chosenDir << "\n";
-//         log << "  Index: " << chosenIdx << "\n";
-//         log << "  World Coord: (" << best_pt.x() << ", " << best_pt.y() << ")\n";
-//         log << "  Distance: " << chosenVal << "\n";
-
-//         std_msgs::ColorRGBA red;
-//         red.r = 1.0;
-//         red.g = 0.0;
-//         red.b = 0.0;
-//         red.a = 1.0;
-
-//         visualization_->publishArrow(coll_pt, best_pt, red);
-//         //std::cin.get();
-
-//         return {best_pt, chosenVal};
-//     }
-//     else
-//     {
-//         // case: Boundary value != 0
-//         n = computePushDirection(coll_pt, boundary, max_dist);
-//         if (coll_val > 0.0) n = -n;
-
-//         Eigen::Vector2d pt_fwd = boundary + n * max_dist;
-//         auto line = bresenhamLineWorld(boundary, pt_fwd);
-//         auto result = climbLocalMax(line, max_dist);
-
-//         visualization_->visualizeLine({boundary.x(),boundary.y()}, {pt_fwd.x(),pt_fwd.y()});
-//         std::cin.get();
-
-//         Eigen::Vector2i bc = line[result.first];
-//         Eigen::Vector2d best_pt(info.origin_x + (bc.x() + 0.5) * info.resolution, info.origin_y + (bc.y() + 0.5) * info.resolution);
-
-//         log << "[Line Distances]\n";
-//         for (size_t i = 0; i < line.size(); ++i)
-//         {
-//           const auto& cell = line[i];
-//           double val = df[cell.x() + cell.y() * info.map_width] * info.resolution;
-//           double wx = info.origin_x + (cell.x() + 0.5) * info.resolution;
-//           double wy = info.origin_y + (cell.y() + 0.5) * info.resolution;
-//           log << "  idx " << i << ": (" << wx << ", " << wy << ") → dist = " << val << "\n";
-//         }
-//         log << "  World Coord: (" << best_pt.x() << ", " << best_pt.y() << ")\n";
-//         log << "  Chosen Distance: " << result.second << "\n";
-
-//         std_msgs::ColorRGBA blue;
-//         blue.r = 0.0;
-//         blue.g = 0.0;
-//         blue.b = 1.0;
-//         blue.a = 1.0;
-//         visualization_->publishArrow(coll_pt, best_pt, blue);
-//         std::cin.get();
-
-//         return {best_pt, result.second};
-//     }
-
-// }
-
 
 std::pair<Eigen::Vector2d, double> TebOptimalPlanner::findModifiedPose(const Eigen::Vector2d& coll_pt, const Eigen::Vector2d& p2, const Eigen::Vector2d& p3, std::ostream& log, double max_iterations)
 {
@@ -2822,12 +2694,19 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
     teb().Pose(offset + gidx) = P[0];
     teb().TimeDiff(offset + gidx) = T[0];
 
+    ROS_INFO("insert back");
+
     for (size_t j = 1; j < P.size()-1; ++j)
     {
       teb().insertPose(offset + gidx + 1, P[j]);
       teb().insertTimeDiff(offset + gidx + 1, T[j-1]);
-      safe_points_.emplace_back(Eigen::Vector2d(P[j].x(), P[j].y()));
-      ++offset;
+      double dist_prev = (Eigen::Vector2d(teb().Pose(offset + gidx + 1).x(), teb().Pose(offset + gidx + 1).y()) - Eigen::Vector2d(teb().Pose(offset + gidx).x(), teb().Pose(offset + gidx).y())).norm();
+      if (dist_prev > 0.05)
+      {
+        ROS_INFO("Compute orientation of inserted pose");
+        teb().Pose(offset + gidx + 1).theta() = computeOri({teb().Pose(offset + gidx).x(), teb().Pose(offset + gidx).y()}, {teb().Pose(offset + gidx + 1).x(), teb().Pose(offset + gidx + 1).y()});
+      }
+      ++offset; 
     }
     ++gidx;
 
@@ -2835,10 +2714,10 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
 
   //teb().Pose(0).theta() = computeOri({teb().Pose(0).x(), teb().Pose(0).y()}, {teb().Pose(1).x(), teb().Pose(1).y()});
 
-  for(int i = 1; i < teb().sizePoses(); ++i)
-  {
-    teb().Pose(i).theta() = computeOri({teb().Pose(i-1).x(), teb().Pose(i-1).y()}, {teb().Pose(i).x(), teb().Pose(i).y()});
-  }
+  // for(int i = 1; i < teb().sizePoses(); ++i)
+  // {
+  //   teb().Pose(i).theta() = computeOri({teb().Pose(i-1).x(), teb().Pose(i-1).y()}, {teb().Pose(i).x(), teb().Pose(i).y()});
+  // }
   
 
 
