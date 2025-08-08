@@ -647,83 +647,85 @@ int TimedElasticBand::findClosestTrajectoryPose(const Obstacle& obstacle, double
 }
 
 
-// void TimedElasticBand::updateAndPruneTEB(boost::optional<const PoseSE2&> new_start, boost::optional<const PoseSE2&> new_goal, int min_samples)
-// {
-//   // first and simple approach: change only start confs (and virtual start conf for inital velocity)
-//   // TEST if optimizer can handle this "hard" placement
-
-//   if (new_start && sizePoses()>0)
-//   {    
-//     // find nearest state (using l2-norm) in order to prune the trajectory
-//     // (remove already passed states)
-//     double dist_cache = (new_start->position()- Pose(0).position()).norm();
-//     double dist;
-//     int lookahead = std::min<int>( sizePoses()-min_samples, 10); // satisfy min_samples, otherwise max 10 samples
-
-//     int nearest_idx = 0;
-//     for (int i = 1; i<=lookahead; ++i)
-//     {
-//       dist = (new_start->position()- Pose(i).position()).norm();
-//       if (dist<dist_cache)
-//       {
-//         dist_cache = dist;
-//         nearest_idx = i;
-//       }
-//       else break;
-//     }
-    
-//     // prune trajectory at the beginning (and extrapolate sequences at the end if the horizon is fixed)
-//     if (nearest_idx>0)
-//     {
-//       // nearest_idx is equal to the number of samples to be removed (since it counts from 0 ;-) )
-//       // WARNING delete starting at pose 1, and overwrite the original pose(0) with new_start, since Pose(0) is fixed during optimization!
-//       deletePoses(1, nearest_idx);  // delete first states such that the closest state is the new first one
-//       deleteTimeDiffs(1, nearest_idx); // delete corresponding time differences
-//     }
-    
-//     // update start
-//     Pose(0) = *new_start;
-//   }
-  
-//   if (new_goal && sizePoses()>0)
-//   {
-//     BackPose() = *new_goal;
-//   }
-// };
-
 void TimedElasticBand::updateAndPruneTEB(boost::optional<const PoseSE2&> new_start, boost::optional<const PoseSE2&> new_goal, int min_samples)
 {
-  if (new_start && sizePoses() > 0)
-  {
-    double initial_dist = (new_start->position() - Pose(0).position()).norm();
-    double max_allowed_dist = initial_dist + 0.08; 
+  // first and simple approach: change only start confs (and virtual start conf for inital velocity)
+  // TEST if optimizer can handle this "hard" placement
 
-    int lookahead = std::min<int>(sizePoses() - min_samples, 5);
-
-    int prune_idx = 0;
-    for (int i = 1; i <= lookahead; ++i)
+  if (new_start && sizePoses()>0)
+  { 
+    ROS_INFO("sizePoses : %d", sizePoses());
+    // find nearest state (using l2-norm) in order to prune the trajectory
+    // (remove already passed states)
+    double dist_cache = (new_start->position()- Pose(0).position()).norm();
+    double dist;
+    int lookahead = std::min<int>( sizePoses()-min_samples, 10); // satisfy min_samples, otherwise max 10 samples
+    ROS_INFO("lookahead : %d", lookahead);
+    int nearest_idx = 0;
+    for (int i = 1; i<=lookahead; ++i)
     {
-      double dist = (new_start->position() - Pose(i).position()).norm();
-      if (dist <= max_allowed_dist)
+      ROS_INFO("lookahead %d", i);
+      dist = (new_start->position()- Pose(i).position()).norm();
+      if (dist<dist_cache)
       {
-        prune_idx = i;  // 더 뒤에 있는 인덱스로 갱신
+        dist_cache = dist;
+        nearest_idx = i;
       }
+      else break;
     }
-
-    if (prune_idx > 0)
+    
+    // prune trajectory at the beginning (and extrapolate sequences at the end if the horizon is fixed)
+    if (nearest_idx>0)
     {
-      deletePoses(1, prune_idx);
-      deleteTimeDiffs(1, prune_idx);
+      // nearest_idx is equal to the number of samples to be removed (since it counts from 0 ;-) )
+      // WARNING delete starting at pose 1, and overwrite the original pose(0) with new_start, since Pose(0) is fixed during optimization!
+      deletePoses(1, nearest_idx);  // delete first states such that the closest state is the new first one
+      deleteTimeDiffs(1, nearest_idx); // delete corresponding time differences
     }
-
+    
+    // update start
     Pose(0) = *new_start;
   }
-
-  if (new_goal && sizePoses() > 0)
+  
+  if (new_goal && sizePoses()>0)
   {
     BackPose() = *new_goal;
   }
-}
+};
+
+// void TimedElasticBand::updateAndPruneTEB(boost::optional<const PoseSE2&> new_start, boost::optional<const PoseSE2&> new_goal, int min_samples)
+// {
+//   if (new_start && sizePoses() > 0)
+//   {
+//     double initial_dist = (new_start->position() - Pose(0).position()).norm();
+//     double max_allowed_dist = initial_dist + 0.08; 
+
+//     int lookahead = std::min<int>(sizePoses() - min_samples, 5);
+
+//     int prune_idx = 0;
+//     for (int i = 1; i <= lookahead; ++i)
+//     {
+//       double dist = (new_start->position() - Pose(i).position()).norm();
+//       if (dist <= max_allowed_dist)
+//       {
+//         prune_idx = i;  // 더 뒤에 있는 인덱스로 갱신
+//       }
+//     }
+
+//     if (prune_idx > 0)
+//     {
+//       deletePoses(1, prune_idx);
+//       deleteTimeDiffs(1, prune_idx);
+//     }
+
+//     Pose(0) = *new_start;
+//   }
+
+//   if (new_goal && sizePoses() > 0)
+//   {
+//     BackPose() = *new_goal;
+//   }
+// }
 
 
 

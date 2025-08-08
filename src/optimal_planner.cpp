@@ -242,7 +242,6 @@ bool TebOptimalPlanner::adaptiveoptimizeTEB(int iterations_innerloop, int iterat
 
   bool success = false;
   optimized_ = false;
-  ROS_DEBUG("optimizeTEB");
   double weight_multiplier = 1.0;
 
   bool fast_mode = !cfg_->obstacles.include_dynamic_obstacles;
@@ -325,7 +324,6 @@ bool TebOptimalPlanner::plan(const std::vector<geometry_msgs::PoseStamped>& init
         && (goal_.position() - teb_.BackPose().position()).norm() < cfg_->trajectory.force_reinit_new_goal_dist
         && fabs(g2o::normalize_theta(goal_.theta() - teb_.BackPose().theta())) < cfg_->trajectory.force_reinit_new_goal_angular) // actual warm start!
     { 
-      ROS_INFO("warm start");
       teb_.updateAndPruneTEB(start_, goal_, cfg_->trajectory.min_samples); // update TEB
     }
       
@@ -415,9 +413,8 @@ bool TebOptimalPlanner::buildGraph(double weight_multiplier)
 
   //AddEdgesViaPoints();
   //AddEdgesSafePoints();
-  
   AddEdgesVelocity();
-  
+
   AddEdgesAcceleration();
 
   AddEdgesTimeOptimal();	
@@ -449,26 +446,6 @@ bool TebOptimalPlanner::adaptivebuildGraph(double weight_multiplier)
   
   // add TEB vertices
   AddTEBVertices();
-
-  // add Edges (local cost functions)
-  if (cfg_->obstacles.legacy_obstacle_association)
-    AddEdgesObstaclesLegacy(weight_multiplier);
-  else
-    AddEdgesObstacles(weight_multiplier);
-
-  if (cfg_->obstacles.include_dynamic_obstacles)
-    AddEdgesDynamicObstacles();
-
-  AddEdgesSafePoints();
-  
-  AddEdgesVelocity();
-  
-  AddEdgesAcceleration();
-
-  AddEdgesTimeOptimal();	
-
-  AddEdgesShortestPath();
-
   
   if (cfg_->robot.min_turning_radius == 0 || cfg_->optim.weight_kinematics_turning_radius == 0)
     AddEdgesKinematicsDiffDrive(); // we have a differential drive robot
@@ -539,7 +516,6 @@ void TebOptimalPlanner::clearGraph()
 void TebOptimalPlanner::AddTEBVertices()
 {
   // add vertices to graph
-  ROS_DEBUG("Add vertices");
   ROS_DEBUG("Add vertices : %d\n", teb_.sizePoses());
   ROS_DEBUG_COND(cfg_->optim.optimization_verbose, "Adding TEB vertices ...");
   unsigned int id_counter = 0; // used for vertices ids
@@ -837,7 +813,6 @@ void TebOptimalPlanner::AddEdgesViaPoints()
 
 void TebOptimalPlanner::AddEdgesSafePoints()
 {
-  ROS_INFO("AddEgesSafePoints");
   if (cfg_->optim.weight_safepoint==0 || safe_points_.empty() )
     return; // if weight equals zero skip adding edges!
 
@@ -1624,11 +1599,11 @@ Eigen::Vector2d TebOptimalPlanner::getModifiedPosition(const Eigen::Vector2d pos
   direction = (pose - nearest).normalized();
 
   Eigen::Vector2d new_nearest = pose + (0.25 - distance + eps) * direction;
-  std_msgs::ColorRGBA blue;
-  blue.r = 0.0;
-  blue.g = 0.0;
-  blue.b = 1.0;
-  blue.a = 1.0;
+  // std_msgs::ColorRGBA blue;
+  // blue.r = 0.0;
+  // blue.g = 0.0;
+  // blue.b = 1.0;
+  // blue.a = 1.0;
   //visualization_->publishArrow(pose, new_nearest, blue);
   return new_nearest;
 }
@@ -1683,10 +1658,7 @@ std::pair<Eigen::Vector2d, double> TebOptimalPlanner::findPerpMedialAxis(const E
     int mx = cx - (ex - cx);
     int my = cy - (ey - cy);
     auto minusLine = bresenhamLine(cx, cy, mx, my);
-    Eigen::Vector2d minus_pt(
-      info.origin_x + (mx + 0.5) * info.resolution,
-      info.origin_y + (my + 0.5) * info.resolution
-    );
+    Eigen::Vector2d minus_pt(info.origin_x + (mx + 0.5) * info.resolution, info.origin_y + (my + 0.5) * info.resolution);
     //visualization_->visualizeLine({minus_pt.x(),minus_pt.y()}, {end_pt.x(),end_pt.y()});
 
     // 5) Perform 1D hill-climbing along the line in both directions
@@ -1739,47 +1711,47 @@ std::pair<Eigen::Vector2d, double> TebOptimalPlanner::findPerpMedialAxis(const E
     Eigen::Vector2i bc = chosenLine[chosenIdx];
     Eigen::Vector2d best_pt( info.origin_x + (bc.x() + 0.5) * info.resolution, info.origin_y + (bc.y() + 0.5) * info.resolution);
 
-   log << "[Plus Line Distances]\n";
-   for (size_t i = 0; i < plusLine.size(); ++i)
-   {
-     const auto& cell = plusLine[i];
-     double val = df[cell.x() + cell.y() * info.map_width] * info.resolution;
-     double wx = info.origin_x + (cell.x() + 0.5) * info.resolution;
-     double wy = info.origin_y + (cell.y() + 0.5) * info.resolution;
-     log << "  idx " << i << ": (" << wx << ", " << wy << ") → dist = " << val << "\n";
-   }
+  //  log << "[Plus Line Distances]\n";
+  //  for (size_t i = 0; i < plusLine.size(); ++i)
+  //  {
+  //    const auto& cell = plusLine[i];
+  //    double val = df[cell.x() + cell.y() * info.map_width] * info.resolution;
+  //    double wx = info.origin_x + (cell.x() + 0.5) * info.resolution;
+  //    double wy = info.origin_y + (cell.y() + 0.5) * info.resolution;
+  //    log << "  idx " << i << ": (" << wx << ", " << wy << ") → dist = " << val << "\n";
+  //  }
 
    // Log all distance values along minusLine
-   log << "[Minus Line Distances]\n";
-   for (size_t i = 0; i < minusLine.size(); ++i)
-   {
-     const auto& cell = minusLine[i];
-     double val = df[cell.x() + cell.y() * info.map_width] * info.resolution;
-     double wx = info.origin_x + (cell.x() + 0.5) * info.resolution;
-     double wy = info.origin_y + (cell.y() + 0.5) * info.resolution;
-     log << "  idx " << i << ": (" << wx << ", " << wy << ") → dist = " << val << "\n";
-   }
+  //  log << "[Minus Line Distances]\n";
+  //  for (size_t i = 0; i < minusLine.size(); ++i)
+  //  {
+  //    const auto& cell = minusLine[i];
+  //    double val = df[cell.x() + cell.y() * info.map_width] * info.resolution;
+  //    double wx = info.origin_x + (cell.x() + 0.5) * info.resolution;
+  //    double wy = info.origin_y + (cell.y() + 0.5) * info.resolution;
+  //    log << "  idx " << i << ": (" << wx << ", " << wy << ") → dist = " << val << "\n";
+  //  }
 
    // Log the chosen result
-   std::string chosenDir = (pos.second > neg.second) ? "PLUS" : "MINUS";
-   log << "[Chosen Point]\n";
-   log << "  Direction: " << chosenDir << "\n";
-   log << "  Index: " << chosenIdx << "\n";
-   log << "  World Coord: (" << best_pt.x() << ", " << best_pt.y() << ")\n";
-   log << "  Distance: " << chosenRes << "\n";
+  //  std::string chosenDir = (pos.second > neg.second) ? "PLUS" : "MINUS";
+  //  log << "[Chosen Point]\n";
+  //  log << "  Direction: " << chosenDir << "\n";
+  //  log << "  Index: " << chosenIdx << "\n";
+  //  log << "  World Coord: (" << best_pt.x() << ", " << best_pt.y() << ")\n";
+  //  log << "  Distance: " << chosenRes << "\n";
 
     //visualization_->visualizeEndPoints(p2, p3);
     //visualization_->visualizetwoPoint({best_pt.x(),best_pt.y()}, {coll_pt.x(),coll_pt.y()});
-    std_msgs::ColorRGBA green;
-    green.r = 0.0;
-    green.g = 1.0;
-    green.b = 0.0;
-    green.a = 1.0;
+    // std_msgs::ColorRGBA green;
+    // green.r = 0.0;
+    // green.g = 1.0;
+    // green.b = 0.0;
+    // green.a = 1.0;
     //visualization_->publishArrow(coll_pt, best_pt, green);
     //std::cin.get();
     //visualization_->visualizeMedialPoint(best_pt, chosenRes);
-   log << "findPerpMedialAxis → (" << best_pt.x() << ", " << best_pt.y()
-       << "), dist=" << chosenRes << "\n";
+  //  log << "findPerpMedialAxis → (" << best_pt.x() << ", " << best_pt.y()
+  //      << "), dist=" << chosenRes << "\n";
 
     return { best_pt, chosenRes };
 }
@@ -1893,8 +1865,6 @@ std::pair<Eigen::Vector2d, double> TebOptimalPlanner::findModifiedPose(const Eig
     const auto& df = *distance_field_;
     const double max_dist = 0.28;
 
-    ROS_INFO("findmodifiedpose");
-
     Eigen::Vector2d boundary = getBoundaryPointFromCollision(coll_pt);
     double boundary_val = distanceFieldAt(boundary.x(), boundary.y());
     double coll_val = distanceFieldAt(coll_pt.x(), coll_pt.y());
@@ -1914,7 +1884,7 @@ std::pair<Eigen::Vector2d, double> TebOptimalPlanner::findModifiedPose(const Eig
         if (n.norm() == 0.0)
             return {coll_pt, coll_val};
     }
-    else if (coll_val < 0.35)
+    else if (coll_val < 0.30)
     {
         // case: Boundary value != 0
         n = computePushDirection(coll_pt, boundary, max_dist);
@@ -2170,10 +2140,6 @@ SegmentRefineResult TebOptimalPlanner::bisectSegmentLocal(PoseSE2& p_start, Pose
     p_mid.y() = mp.y();
 
   }
-  // auto [theta1, theta3] = estimateTheta({p_start.x(), p_start.y()}, {p_mid.x(), p_mid.y()},{p_end.x(), p_end.y()});
-  // p_start.theta() = theta1;
-  // p_end.theta() = theta3;
-
   //visualization_->visualizePoint({p_start.x(),p_start.y()}, {p_end.x(),p_end.y()}, {p_mid.x(),p_mid.y()});
 
   // 6) Recursive Call (A→M), (M→B)
@@ -2275,249 +2241,6 @@ void TebOptimalPlanner::dumpDistanceMap(const std::vector<float>& distance_field
     outFile.close();
 }
 
-std::pair<double, double> TebOptimalPlanner::estimateTheta(const Eigen::Vector2d& p1, const Eigen::Vector2d& p2, const Eigen::Vector2d& p3)
-{
-    // 1. 중점 계산
-    Eigen::Vector2d mid1 = 0.5 * (p1 + p2);
-    Eigen::Vector2d mid2 = 0.5 * (p2 + p3);
-
-    // 2. 방향 벡터
-    Eigen::Vector2d dir1 = p2 - p1;
-    Eigen::Vector2d dir2 = p3 - p2;
-
-    // 3. 수직 벡터 (법선 방향)
-    Eigen::Vector2d perp1(-dir1.y(), dir1.x());
-    Eigen::Vector2d perp2(-dir2.y(), dir2.x());
-
-    // 4. 교점 계산 (원 중심)
-    Eigen::Matrix2d A;
-    A << perp1.x(), -perp2.x(),
-         perp1.y(), -perp2.y();
-    Eigen::Vector2d b = mid2 - mid1;
-
-    Eigen::Vector2d t = A.colPivHouseholderQr().solve(b);
-    Eigen::Vector2d center = mid1 + t(0) * perp1;
-
-    // 5. 접선 벡터 at p1, p3
-    Eigen::Vector2d r1 = p1 - center;
-    Eigen::Vector2d r3 = p3 - center;
-
-    Eigen::Vector2d t1(-r1.y(), r1.x());  // tangent at p1 (시계 방향 기준)
-    Eigen::Vector2d t3(-r3.y(), r3.x());  // tangent at p3
-
-    // 방향 보정: t가 다음 점 방향을 향하도록
-    if ((p2 - p1).dot(t1) < 0) t1 = -t1;
-    if ((p2 - p3).dot(t3) < 0) t3 = -t3;
-
-    // 6. θ 추정
-    double theta1 = std::atan2(t1.y(), t1.x());
-    double theta3 = std::atan2(t3.y(), t3.x());
-
-    return {theta1, theta3};
-}
-
-//------------------------------
-// Residual for arc constraint
-//------------------------------
-// struct SmoothArcConstraintCost
-// {
-//   SmoothArcConstraintCost(const Eigen::Vector2d& pi, const Eigen::Vector2d& pi1)
-//     : p_i(pi), p_i1(pi1) {}
-
-//   template <typename T>
-//   bool operator()(const T* const theta_i, const T* const theta_i1, T* residual) const
-//   {
-//     // heading vector sum
-//     Eigen::Matrix<T, 3, 1> g_i, g_i1;
-//     g_i << cos(theta_i[0]), sin(theta_i[0]), T(0.0);
-//     g_i1 << cos(theta_i1[0]), sin(theta_i1[0]), T(0.0);
-//     Eigen::Matrix<T, 3, 1> g_sum = g_i + g_i1;
-
-//     // direction vector between p_i -> p_i1
-//     Eigen::Matrix<T, 3, 1> d;
-//     d << T(p_i1.x() - p_i.x()), T(p_i1.y() - p_i.y()), T(0.0);
-
-//     // residual = cross product (should be zero vector)
-//     Eigen::Matrix<T, 3, 1> cross_prod = g_sum.cross(d);
-
-//     residual[0] = cross_prod[0];
-//     residual[1] = cross_prod[1];
-//     residual[2] = cross_prod[2];
-
-//     return true;
-//   }
-
-//   const Eigen::Vector2d p_i;
-//   const Eigen::Vector2d p_i1;
-// };
-
-// //------------------------------
-// // Main optimization function
-// //------------------------------
-// void TebOptimalPlanner::optimizeOrientations(const std::vector<Eigen::Vector2d>& positions, std::vector<double>& thetas)
-// {
-//   const int N = positions.size();
-//   if (N < 2) return;
-
-//   thetas.resize(N);
-
-//   for (int i = 0; i < N - 1; ++i)
-//   {
-//     Eigen::Vector2d diff = positions[i+1] - positions[i];
-//     thetas[i] = std::atan2(diff.y(), diff.x());
-//   }
-//   thetas[N-1] = thetas[N-2];  // 마지막은 앞값과 동일하게 초기화
-
-//   ceres::Problem problem;
-
-//   for (int i = 0; i < N - 1; ++i)
-//   {
-//     ceres::CostFunction* cost_function =
-//       new ceres::AutoDiffCostFunction<SmoothArcConstraintCost, 3, 1, 1>(
-//         new SmoothArcConstraintCost(positions[i], positions[i+1]));
-
-//     problem.AddResidualBlock(cost_function, nullptr, &thetas[i], &thetas[i+1]);
-//   }
-
-//   // [선택사항] 시작 또는 끝 orientation 고정
-//   // problem.SetParameterBlockConstant(&thetas.front());
-//   // problem.SetParameterBlockConstant(&thetas.back());
-
-//   ceres::Solver::Options options;
-//   options.linear_solver_type = ceres::DENSE_QR;
-//   options.minimizer_progress_to_stdout = true;
-
-//   ceres::Solver::Summary summary;
-//   ceres::Solve(options, &problem, &summary);
-
-//   std::cout << summary.BriefReport() << std::endl;
-// } 
-
-//------------------------------
-// Arc constraint residual (cross product)
-//------------------------------
-struct SmoothArcConstraintCost
-{
-  SmoothArcConstraintCost(const Eigen::Vector2d& pi, const Eigen::Vector2d& pi1)
-    : p_i(pi), p_i1(pi1) {}
-
-  template <typename T>
-  bool operator()(const T* const theta_i, const T* const theta_i1, T* residual) const
-  {
-    // heading vector sum
-    Eigen::Matrix<T, 3, 1> g_i, g_i1;
-    g_i << cos(theta_i[0]), sin(theta_i[0]), T(0.0);
-    g_i1 << cos(theta_i1[0]), sin(theta_i1[0]), T(0.0);
-    Eigen::Matrix<T, 3, 1> g_sum = g_i + g_i1;
-
-    // direction vector between p_i -> p_i1
-    Eigen::Matrix<T, 3, 1> d;
-    d << T(p_i1.x() - p_i.x()), T(p_i1.y() - p_i.y()), T(0.0);
-
-    // residual = cross product (should be zero vector)
-    Eigen::Matrix<T, 3, 1> cross_prod = g_sum.cross(d);
-
-    residual[0] = cross_prod[0];
-    residual[1] = cross_prod[1];
-    residual[2] = cross_prod[2];
-
-    return true;
-  }
-
-  const Eigen::Vector2d p_i;
-  const Eigen::Vector2d p_i1;
-};
-
-//------------------------------
-// Heading alignment residual (dot product)
-//------------------------------
-struct ForwardHeadingConstraintCost
-{
-  ForwardHeadingConstraintCost(const Eigen::Vector2d& pi, const Eigen::Vector2d& pi1)
-    : p_i(pi), p_i1(pi1) {}
-
-  template <typename T>
-  bool operator()(const T* const theta_i, T* residual) const
-  {
-    // Direction vector
-    T dx = T(p_i1.x() - p_i.x());
-    T dy = T(p_i1.y() - p_i.y());
-
-    // Normalize direction vector
-    T norm = sqrt(dx * dx + dy * dy) + T(1e-6);
-    dx /= norm;
-    dy /= norm;
-
-    // Heading vector
-    T cos_theta = cos(theta_i[0]);
-    T sin_theta = sin(theta_i[0]);
-
-    // Residual: 1 - dot product (cos of angle between heading and direction)
-    T dot = dx * cos_theta + dy * sin_theta;
-    residual[0] = T(1.0) - dot;
-
-    return true;
-  }
-
-  const Eigen::Vector2d p_i;
-  const Eigen::Vector2d p_i1;
-};
-
-//------------------------------
-// Main optimization function
-//------------------------------
-void TebOptimalPlanner::optimizeOrientations(const std::vector<Eigen::Vector2d>& positions, std::vector<double>& thetas)
-{
-  const int N = positions.size();
-  if (N < 2) return;
-
-  thetas.resize(N);
-
-  // Initialize orientation based on position differences
-  for (int i = 0; i < N - 1; ++i)
-  {
-    Eigen::Vector2d diff = positions[i + 1] - positions[i];
-    thetas[i] = std::atan2(diff.y(), diff.x());
-  }
-  thetas[N - 1] = thetas[N - 2];  // Copy last orientation
-
-  ceres::Problem problem;
-
-  for (int i = 0; i < N - 1; ++i)
-  {
-    // Arc constraint
-    ceres::CostFunction* arc_cost =
-      new ceres::AutoDiffCostFunction<SmoothArcConstraintCost, 3, 1, 1>(
-        new SmoothArcConstraintCost(positions[i], positions[i + 1]));
-
-    problem.AddResidualBlock(arc_cost, nullptr, &thetas[i], &thetas[i + 1]);
-
-    // Heading alignment constraint
-    ceres::CostFunction* heading_cost =
-      new ceres::AutoDiffCostFunction<ForwardHeadingConstraintCost, 1, 1>(
-        new ForwardHeadingConstraintCost(positions[i], positions[i + 1]));
-
-    double heading_weight = 1.0;
-    problem.AddResidualBlock(heading_cost,
-      new ceres::ScaledLoss(nullptr, heading_weight, ceres::TAKE_OWNERSHIP),
-      &thetas[i]);
-  }
-
-  // Optionally fix final pose orientation
-  // problem.SetParameterBlockConstant(&thetas.front());
-  problem.SetParameterBlockConstant(&thetas.back());
-
-  ceres::Solver::Options options;
-  options.linear_solver_type = ceres::DENSE_QR;
-  options.minimizer_progress_to_stdout = true;
-
-  ceres::Solver::Summary summary;
-  ceres::Solve(options, &problem, &summary);
-
-  std::cout << summary.BriefReport() << std::endl;
-}
-
-
 bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
     double inscribed_radius, double circumscribed_radius, int look_ahead_idx, double feasibility_check_lookahead_distance)
 {
@@ -2549,21 +2272,20 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
       std::cerr << "File not opened\n";
     }
   }
- std::vector<PoseSE2> pose_list;
- std_msgs::ColorRGBA orange;
- orange.r = 1.0;
- orange.g = 0.5;
- orange.b = 0.0;
- orange.a = 1.0;
+  //  std::vector<PoseSE2> pose_list;
+  //  std_msgs::ColorRGBA orange;
+  //  orange.r = 1.0;
+  //  orange.g = 0.5;
+  //  orange.b = 0.0;
+  //  orange.a = 1.0;
 
- for (int i = 0; i < teb().sizePoses(); ++i)
- {
-   pose_list.push_back(teb().Pose(i));
- }
-
- visualization_->visualizeTebPoses(pose_list, orange);
- //std::cin.get();
- const double min_distance_threshold = 0.05;
+  //  for (int i = 0; i < teb().sizePoses(); ++i)
+  //  {
+  //    pose_list.push_back(teb().Pose(i));
+  //  }
+  // visualization_->visualizeTebPoses(pose_list, orange);
+  // std::cin.get();
+  const double min_distance_threshold = 0.05;
   //dumpDistanceMap(df, info);
   // 1) initial pose collision → correction
   for (int i = 1; i < teb().sizePoses()-1;)
@@ -2583,36 +2305,40 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
 
       teb().Pose(i).theta() = computeOri({teb().Pose(i-1).x(), teb().Pose(i-1).y()}, {teb().Pose(i).x(), teb().Pose(i).y()});
 
-
-      // 앞뒤 pose 거리 계산
-      double dist_prev = (mp - Eigen::Vector2d(teb().Pose(i - 1).x(), teb().Pose(i - 1).y())).norm();
-      double dist_next = (mp - Eigen::Vector2d(teb().Pose(i + 1).x(), teb().Pose(i + 1).y())).norm();
-
-      // 너무 가까우면 삭제
-      if (dist_prev < min_distance_threshold || dist_next < min_distance_threshold)
+      if (i < teb().sizePoses()- 1)
       {
-        teb().deletePose(i);
-        continue;  // 삭제했으므로 index 유지
+        // 앞뒤 pose 거리 계산
+        double dist_prev = (mp - Eigen::Vector2d(teb().Pose(i - 1).x(), teb().Pose(i - 1).y())).norm();
+        double dist_next = (mp - Eigen::Vector2d(teb().Pose(i + 1).x(), teb().Pose(i + 1).y())).norm();
+
+        // 너무 가까우면 삭제
+        if (dist_prev < min_distance_threshold || dist_next < min_distance_threshold)
+        {
+          teb().deleteTimeDiff(i-1);
+          teb().deletePose(i);
+          outFile << "----- Delete pose -----\n";
+          continue;  // 삭제했으므로 index 유지
+        }
       }
-      
+ 
       //safe_points_.emplace_back(mp);
     }
     ++i;
   }
 
-  std::vector<PoseSE2> pose_list2;
-  std_msgs::ColorRGBA green;
-  green.r = 0.0;
-  green.g = 1.0;
-  green.b = 0.5;
-  green.a = 1.0;
+    // std::vector<PoseSE2> pose_list2;
+    // std_msgs::ColorRGBA green;
+    // green.r = 0.0;
+    // green.g = 1.0;
+    // green.b = 0.5;
+    // green.a = 1.0;
 
-  for (int i = 0; i < teb().sizePoses(); ++i)
-  {
-    pose_list2.push_back(teb().Pose(i));
-  }
-  visualization_->visualizeTebPoses(pose_list2, green);
-  //std::cin.get();
+    // for (int i = 0; i < teb().sizePoses(); ++i)
+    // {
+    //   pose_list2.push_back(teb().Pose(i));
+    // }
+    // visualization_->visualizeTebPoses(pose_list2, green);
+    //std::cin.get();
 
   for (size_t idx = 0; idx < teb().sizePoses(); ++idx)
   {
@@ -2638,7 +2364,6 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
       std::cerr << "File not opened\n";
     }
   }
-
 
   // 2) build per-segment local vectors
   size_t M = teb().sizePoses()>0 ? teb().sizePoses()-1 : 0;
@@ -2694,51 +2419,44 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
     teb().Pose(offset + gidx) = P[0];
     teb().TimeDiff(offset + gidx) = T[0];
 
-    ROS_INFO("insert back");
-
     for (size_t j = 1; j < P.size()-1; ++j)
     {
       teb().insertPose(offset + gidx + 1, P[j]);
       teb().insertTimeDiff(offset + gidx + 1, T[j-1]);
-      double dist_prev = (Eigen::Vector2d(teb().Pose(offset + gidx + 1).x(), teb().Pose(offset + gidx + 1).y()) - Eigen::Vector2d(teb().Pose(offset + gidx).x(), teb().Pose(offset + gidx).y())).norm();
-      if (dist_prev > 0.05)
-      {
-        ROS_INFO("Compute orientation of inserted pose");
-        teb().Pose(offset + gidx + 1).theta() = computeOri({teb().Pose(offset + gidx).x(), teb().Pose(offset + gidx).y()}, {teb().Pose(offset + gidx + 1).x(), teb().Pose(offset + gidx + 1).y()});
-      }
       ++offset; 
     }
     ++gidx;
 
   }
 
-  //teb().Pose(0).theta() = computeOri({teb().Pose(0).x(), teb().Pose(0).y()}, {teb().Pose(1).x(), teb().Pose(1).y()});
-
-  // for(int i = 1; i < teb().sizePoses(); ++i)
+  // for(int i = 0; i < teb().sizePoses() - 1; ++i)
   // {
-  //   teb().Pose(i).theta() = computeOri({teb().Pose(i-1).x(), teb().Pose(i-1).y()}, {teb().Pose(i).x(), teb().Pose(i).y()});
-  // }
-  
-
-
-  // std::vector<Eigen::Vector2d> positions;
-  // std::vector<double> thetas;
-
-  // for (int i = 0; i < teb_.sizePoses(); ++i)
-  // {
-  //     const auto& pose = teb_.Pose(i);
-  //     positions.emplace_back(pose.x(), pose.y());
+  //     double dist_prev = (Eigen::Vector2d(teb().Pose(i + 1).x(), teb().Pose(i + 1).y()) - Eigen::Vector2d(teb().Pose(i).x(), teb().Pose(i).y())).norm();
+  //     if (dist_prev > 0.05)
+  //     {
+  //       teb().Pose(i+1).theta() = computeOri({teb().Pose(i).x(), teb().Pose(i).y()}, {teb().Pose(i + 1).x(), teb().Pose(i + 1).y()});
+  //     }
   // }
 
-  // // 2. Orientation 최적화
+for (int i = 1; i + 1 < teb().sizePoses(); ++i)
+{
+    // 이전/다음 포즈
+    const auto& prev = teb().Pose(i - 1);
+    const auto& next = teb().Pose(i + 1);
 
-  // optimizeOrientations(positions, thetas);
+    // chord vector
+    double dx = next.x() - prev.x();
+    double dy = next.y() - prev.y();
 
-  // // 3. theta 결과를 teb_에 다시 적용
-  // for (int i = 0; i < teb_.sizePoses(); ++i)
-  // {
-  //     teb_.Pose(i).theta() = thetas[i];
-  // }
+    // 너무 짧은 구간은 skip (optional)
+    double d = std::hypot(dx, dy);
+    if (d < 0.05) 
+      continue;
+
+    // atan2로 orientation 설정
+    teb().Pose(i).theta() = std::atan2(dy, dx);
+}
+
 
   std_msgs::ColorRGBA blue;
   blue.r = 0.0;
@@ -2791,8 +2509,6 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
     hyst_timediffs_.push_back(0.1 * dt);
   }
 
-  //adaptiveoptimizeTEB(cfg_->optim.no_inner_iterations, cfg_->optim.no_outer_iterations);
-  
   return true;
 }
 
