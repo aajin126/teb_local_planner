@@ -1874,7 +1874,8 @@ std::pair<Eigen::Vector2d, double> TebOptimalPlanner::findModifiedPose(const Eig
     log << "  Distance: " << coll_val << "\n";
 
     visualization_->visualizetwoPoint({boundary.x(),boundary.y()}, {coll_pt.x(),coll_pt.y()});
-    //visualization_->visualizeEndPoints(p2, p3);
+    visualization_->visualizeEndPoints(p2, p3);
+    //std::cin.get();
 
     Eigen::Vector2d n;
     if (coll_val == 0.0)
@@ -1981,227 +1982,6 @@ PoseSE2 TebOptimalPlanner::interpolatePose(const PoseSE2& A, const PoseSE2& B, d
   return out;
 }
 
-//non-covered bisetion
-//SegmentRefineResult TebOptimalPlanner::bisectSegmentLocal(const PoseSE2& p_start, const PoseSE2& p_end, double dt,
-//    base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
-//    double inscribed_radius, double circumscribed_radius, bool is_root, int depth)
-//{
-//
-//  SegmentRefineResult result;
-//  result.poses = { p_start, p_end };
-//  result.dts   = { dt };
-//
-//  // 1) arc length
-//  double L = computeArcLength(p_start, p_end);
-//  if (L < 0.001)
-//    return result;
-//
-//  // 2) obstacle distances
-//  const auto& info = *costmap_info_;
-//  const auto& df   = *distance_field_;
-//
-//  double d1 = distanceFieldAt(p_start.x(), p_start.y());
-//  double d2 = distanceFieldAt(p_end.x(), p_end.y());
-//
-//  double L_eu = euclideanDistance(p_start, p_end);
-//
-//  // 3) covered region check using arc length (exact collision check)
-//  if (L - (d1 + d2) <= 0.0)
-//  {
-//    return result;
-//  }
-//  ROS_INFO("depth :%d", depth);
-//
-//  // 4) compute fractions using euclidean distance
-//  double f_start = d1 / L_eu;
-//  double f_end   = 1.0 - d2 / L_eu;
-//  double f_mid   = 0.5 * (f_start + f_end);
-//
-//  // 5) interpolation
-//  auto interp = [&](const PoseSE2& A, const PoseSE2& B, double frac){
-//    PoseSE2 out;
-//    out.x() = A.x() + frac * (B.x() - A.x());
-//    out.y() = A.y() + frac * (B.y() - A.y());
-//    out.theta() = normalizeTheta(A.theta() + frac * normalizeTheta(B.theta() - A.theta()));
-//    return out;
-//  };
-//
-//  PoseSE2 A = interp(p_start, p_end, f_start);
-//  PoseSE2 M = interp(p_start, p_end, f_mid);
-//  PoseSE2 B = interp(p_start, p_end, f_end);
-//
-//  ROS_INFO("distance of A : %f distance of M : %f distance of B : %f", distanceFieldAt(A.x(), A.y()), distanceFieldAt(M.x(), M.y()), distanceFieldAt(B.x(), B.y()));
-//  ROS_INFO("start position x :%f, y: %f  mid position x :%f, y: %f end position x :%f, y: %f ", A.x(), A.y(), M.x(), M.y(), B.x(), B.y());
-//
-//  // 6) mid collision → medial-ball
-//  if (distanceFieldAt(M.x(), M.y()) < 0.2)
-//  {
-//    auto mp = getModifiedPosition(Eigen::Vector2d(M.x(), M.y()));
-//    M.x() = mp.x();
-//    M.y() = mp.y();
-//    ROS_INFO("new mid position x :%f, y: %f ",M.x(), M.y());
-//    ROS_INFO("new distance : %f", distanceFieldAt(M.x(), M.y()));
-//  }
-//
-//  // 7) time split
-//  double span = f_end - f_start;
-//
-//  if (span <= 1e-3)
-//    return result;
-//
-//  double dt1 = dt * ((f_mid - f_start) / span);
-//  double dt2 = dt - dt1;
-//
-//  // 8) Recursive Call (A→M), (M→B)
-//  SegmentRefineResult left = bisectSegmentLocal(A, M, dt1, costmap_model, footprint_spec, inscribed_radius, circumscribed_radius, false, depth+1);
-//  SegmentRefineResult right = bisectSegmentLocal(M, B, dt2, costmap_model,footprint_spec, inscribed_radius, circumscribed_radius, false, depth+1);
-//
-//  // 9) Merging
-//  if (left.poses.size() == 3)
-//  {
-//    result.poses.insert(result.poses.begin() + 1, left.poses[1]);
-//    // @ToDo adjust timing as needed
-//  }
-//
-//  // insert M at middle (after left.poses[1] if exists, else after start)
-//  {
-//    int insert_idx = (result.poses.size() == 2) ? 1 : 2;
-//    result.poses.insert(result.poses.begin() + insert_idx, M);
-//    // @ToDo adjust timing as needed
-//  }
-//
-//  // insert right.poses[1] before end
-//  if (right.poses.size() == 3)
-//  {
-//    result.poses.insert(result.poses.end() - 1, right.poses[1]);
-//    // @ToDo adjust timing as needed
-//  }
-//
-//  // @ToDo adjust timing as needed
-//
-//
-//  for (size_t i = 0; i < result.poses.size(); ++i)
-//  {
-//    const auto& pose = result.poses[i];
-//    ROS_INFO("Pose[%zu] → x: %.3f, y: %.3f, theta: %.3f", i, pose.x(), pose.y(), pose.theta());
-//  }
-//  return result;
-//}
-
-//bisection
-SegmentRefineResult TebOptimalPlanner::bisectSegmentLocal(PoseSE2& p_start, PoseSE2& p_end, double dt, base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
-    double inscribed_radius, double circumscribed_radius, bool is_root, int depth, std::ostream& log)
-{
-  SegmentRefineResult result;
-  result.poses = { p_start, p_end };
-  result.dts   = { dt };
-  // 1) arc length
-  double L = computeArcLength(p_start, p_end);
-
-  if (L < 0.02)
-    return result;
-
-  // 2) obstacle distances
-  const auto& info = *costmap_info_;
-  const auto& df   = *distance_field_;
-
-  double d1 = distanceFieldAt(p_start.x(), p_start.y());
-  double d2 = distanceFieldAt(p_end.x(), p_end.y());
-
-  double L_eu = euclideanDistance(p_start, p_end);
-  //log << "depth : " << depth << "\n";
-  // 3) covered region check using arc length (exact collision check)
-  if (L - (d1 + d2) <= 0.0)
-  {
-    return result;
-  }
-
-  // 4) compute mid pose
-  PoseSE2 p_mid = interpolatePose(p_start, p_end, 0.5);
-  //p_mid.theta() = computeOri({p_mid.x(), p_mid.y()}, {p_end.x(), p_end.y()});
-
-  double arc1 = computeArcLength(p_start,p_mid);
-  double arc2 = computeArcLength(p_mid,p_end);
-  double mid_dt1 = dt * 0.5 ;//dt * (arc1 / L);
-  double mid_dt2 = dt * 0.5 ;//dt * (arc2 / L);
-
-  if(std::min(mid_dt1, mid_dt2) <= 0.05)
-      return result;
-
-  //double c = costmap_model->footprintCost(p_mid.x(), p_mid.y(), p_mid.theta(), footprint_spec, inscribed_radius, circumscribed_radius);
-  double dist = distanceFieldAt(p_mid.x(), p_mid.y());
-  // 5) mid collision → medial-ball
-  if (dist < 0.3)
-  {
-    auto [mp, r] = findModifiedPose(Eigen::Vector2d(p_mid.x(), p_mid.y()), Eigen::Vector2d(p_start.x(), p_start.y()) , Eigen::Vector2d(p_end.x(), p_end.y()), log);
-    //auto [mp, r] = findPerpMedialAxis(Eigen::Vector2d(p_mid.x(), p_mid.y()), Eigen::Vector2d(p_start.x(), p_start.y()) , Eigen::Vector2d(p_end.x(), p_end.y()), log);
-    //auto [mp, r] = findMedialBallCenter(Eigen::Vector2d(p_mid.x(), p_mid.y()), df, info);
-    p_mid.x() = mp.x();
-    p_mid.y() = mp.y();
-
-  }
-  //visualization_->visualizePoint({p_start.x(),p_start.y()}, {p_end.x(),p_end.y()}, {p_mid.x(),p_mid.y()});
-
-  // 6) Recursive Call (A→M), (M→B)
-  SegmentRefineResult left = bisectSegmentLocal(p_start, p_mid, mid_dt1, costmap_model, footprint_spec, inscribed_radius, circumscribed_radius, false, depth+1, log);
-  SegmentRefineResult right = bisectSegmentLocal(p_mid, p_end, mid_dt2, costmap_model,footprint_spec, inscribed_radius, circumscribed_radius, false, depth+1, log);
-
-  // 7) Merging
-  result.poses.clear();
-  result.dts.clear();
-
-  // start point
-  result.poses.push_back(p_start);
-  //log << "Left Result" << "\n";
-  if (left.poses.size() > 2)
-  {
-    result.poses.insert(result.poses.end(), left.poses.begin() + 1, left.poses.end() - 1);
-  }
-//  for (size_t i = 0; i < left.poses.size(); ++i)
-//  {
-//    const auto& p = left.poses[i];
-//    log << "Left idx " << i << ": x = " << p.x() << ", y = " << p.y() << ", theta = " << p.theta() << "\n";
-//  }
-
-  // mid point
-  result.poses.push_back(p_mid);
-  //log << "Mid " << ": x = " << p_mid.x() << ", y = " << p_mid.y() << ", theta = " << p_mid.theta() << "\n";
-  result.dts.insert(result.dts.end(), left.dts.begin(), left.dts.end());
-
-  // insert right.poses[1] before end
-  if (right.poses.size() > 2)
-  {
-    result.poses.insert(result.poses.end(), right.poses.begin() + 1, right.poses.end() - 1);
-    //ROS_INFO("RIGHT");
-  }
-  //log << "Right Result" << "\n";
-//  for (size_t i = 0; i < right.poses.size(); ++i)
-//  {
-//    const auto& p = right.poses[i];
-//    log << "Right idx " << i << ": x = " << p.x() << ", y = " << p.y() << ", theta = " << p.theta() << "\n";
-//  }
-  result.dts.insert(result.dts.end(), right.dts.begin(), right.dts.end());
-
-  // end point
-  result.poses.push_back(p_end);
-  //log << "Total Result" << "\n";
-//  for (size_t i = 0; i < result.poses.size(); ++i)
-//  {
-//    const auto& p = result.poses[i];
-//    log << "Total idx " << i << ": x = " << p.x() << ", y = " << p.y() << ", theta = " << p.theta() << "\n";
-//  }
-  for (size_t i = 0; i < result.poses.size(); ++i)
-  {
-    const auto& pose = result.poses[i];
-  }
-  for (size_t i = 0; i < result.dts.size(); ++i)
-  {
-    const auto& dt = result.dts[i];
-  }
-
-  return result;
-}
-
 double TebOptimalPlanner::computeOri(const Eigen::Vector2d& from, const Eigen::Vector2d& to)
 {
     double dx = to.x() - from.x();
@@ -2212,21 +1992,16 @@ double TebOptimalPlanner::computeOri(const Eigen::Vector2d& from, const Eigen::V
 void TebOptimalPlanner::dumpDistanceMap(const std::vector<float>& distance_field, const DistanceMapInfo& info)
 {
 
-    // 1) 타임스탬프 생성 (초 단위)
     std::time_t now = std::time(nullptr);
-    // 예: 1712212345  같은 정수 문자열
+
     std::string ts = std::to_string(now);
 
-    // 2) 파일명 조합
     std::string filename = "/home/glab/distance_map" + ts + ".txt";
 
-    // 3) append 모드로 열기
     std::ofstream outFile(filename, std::ios::app);
 
-    // 5) 포맷 세팅
     outFile << std::fixed << std::setprecision(4);
 
-    // 6) 실제 데이터 덤프
     for (int j = 0; j < info.map_height; ++j) {
       for (int i = 0; i < info.map_width; ++i) {
         int idx = j * info.map_width + i;
@@ -2237,9 +2012,20 @@ void TebOptimalPlanner::dumpDistanceMap(const std::vector<float>& distance_field
     }
     outFile << '\n';
 
-    // 7) 닫기
     outFile.close();
 }
+
+struct Segment {
+  int idx;       // segment start index in TEB
+  double length; // arc length between idx and idx+1
+};
+
+struct SegmentCompare {
+  bool operator()(Segment const& a, Segment const& b) const {
+    return a.length < b.length;  // max-heap: longest segment first
+  }
+};
+
 
 bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
     double inscribed_radius, double circumscribed_radius, int look_ahead_idx, double feasibility_check_lookahead_distance)
@@ -2293,7 +2079,7 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
     auto &p = teb().Pose(i);
     double c = costmap_model->footprintCost(p.x(), p.y(), p.theta(), footprint_spec, inscribed_radius, circumscribed_radius);
     double dist = distanceFieldAt(teb().Pose(i).x(), teb().Pose(i).y());
-    if (c <= -1.0){
+    if (dist < 0.27){
       //visualization_->publishInfeasibleRobotPose(teb().Pose(i), *cfg_->robot_model, footprint_spec);
       auto [mp, r] = findModifiedPose(Eigen::Vector2d(p.x(), p.y()), Eigen::Vector2d(teb().Pose(i-1).x(), teb().Pose(i-1).y()) , Eigen::Vector2d(p.x(), p.y()), outFile);
       //auto [mp, r] = findPerpMedialAxis(Eigen::Vector2d(p.x(), p.y()), Eigen::Vector2d(teb().Pose(i-1).x(), teb().Pose(i-1).y()) , Eigen::Vector2d(p.x(), p.y()), outFile);
@@ -2317,7 +2103,7 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
           teb().deleteTimeDiff(i-1);
           teb().deletePose(i);
           outFile << "----- Delete pose -----\n";
-          continue;  // 삭제했으므로 index 유지
+          continue;  
         }
       }
  
@@ -2326,18 +2112,18 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
     ++i;
   }
 
-    // std::vector<PoseSE2> pose_list2;
-    // std_msgs::ColorRGBA green;
-    // green.r = 0.0;
-    // green.g = 1.0;
-    // green.b = 0.5;
-    // green.a = 1.0;
+    std::vector<PoseSE2> pose_list2;
+    std_msgs::ColorRGBA green;
+    green.r = 0.0;
+    green.g = 1.0;
+    green.b = 0.5;
+    green.a = 1.0;
 
-    // for (int i = 0; i < teb().sizePoses(); ++i)
-    // {
-    //   pose_list2.push_back(teb().Pose(i));
-    // }
-    // visualization_->visualizeTebPoses(pose_list2, green);
+    for (int i = 0; i < teb().sizePoses(); ++i)
+    {
+      pose_list2.push_back(teb().Pose(i));
+    }
+    visualization_->visualizeTebPoses(pose_list2, green);
     //std::cin.get();
 
   for (size_t idx = 0; idx < teb().sizePoses(); ++idx)
@@ -2365,69 +2151,69 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
     }
   }
 
-  // 2) build per-segment local vectors
-  size_t M = teb().sizePoses()>0 ? teb().sizePoses()-1 : 0;
-  std::vector<std::vector<PoseSE2>> segmentPoses(M);
-  std::vector<std::vector<double>>  segmentTimeDiffs(M);
-  std::vector<double> segLengths(M, 0.0);
-  for (size_t i=0; i<M; ++i) {
-    segmentPoses[i]     = { teb().Pose(i), teb().Pose(i+1) };
-    segmentTimeDiffs[i] = { teb().TimeDiff(i) };
-    segLengths[i] = computeArcLength(segmentPoses[i][0], segmentPoses[i][1]);
-  }
+  // // 2) build per-segment local vectors
+  // size_t M = teb().sizePoses()>0 ? teb().sizePoses()-1 : 0;
+  // std::vector<std::vector<PoseSE2>> segmentPoses(M);
+  // std::vector<std::vector<double>>  segmentTimeDiffs(M);
+  // std::vector<double> segLengths(M, 0.0);
+  // for (size_t i=0; i<M; ++i) {
+  //   segmentPoses[i]     = { teb().Pose(i), teb().Pose(i+1) };
+  //   segmentTimeDiffs[i] = { teb().TimeDiff(i) };
+  //   segLengths[i] = computeArcLength(segmentPoses[i][0], segmentPoses[i][1]);
+  // }
 
-  // 3) sort by descending arc‐length
-  std::vector<size_t> arc_order(M);
-  std::iota(arc_order.begin(), arc_order.end(), 0);
-  std::sort(arc_order.begin(), arc_order.end(), [&](size_t a, size_t b){return segLengths[a] > segLengths[b];});
+  // // 3) sort by descending arc‐length
+  // std::vector<size_t> arc_order(M);
+  // std::iota(arc_order.begin(), arc_order.end(), 0);
+  // std::sort(arc_order.begin(), arc_order.end(), [&](size_t a, size_t b){return segLengths[a] > segLengths[b];});
 
-  // 4) refine each segment locally
-  int depth = 0;
-  for (size_t k : arc_order) {
-    PoseSE2& s = segmentPoses[k][0];
-    PoseSE2& e = segmentPoses[k][1];
-    double dt = segmentTimeDiffs[k][0];
+  // // 4) refine each segment locally
+  // int depth = 0;
+  // for (size_t k : arc_order) {
+  //   PoseSE2& s = segmentPoses[k][0];
+  //   PoseSE2& e = segmentPoses[k][1];
+  //   double dt = segmentTimeDiffs[k][0];
 
-    SegmentRefineResult r = bisectSegmentLocal(s, e, dt, costmap_model, footprint_spec, inscribed_radius, circumscribed_radius, true, depth, outFile);
-    // r.poses: [s, mid..., e]
-    if (r.poses.size() >= 2 && r.dts.size() == r.poses.size()-1)
-    {
-      segmentPoses[k]     = std::move(r.poses);
-      segmentTimeDiffs[k] = std::move(r.dts);
-    }
-  }
+  //   SegmentRefineResult r = bisectSegmentLocal(s, e, dt, costmap_model, footprint_spec, inscribed_radius, circumscribed_radius, true, depth, outFile);
+  //   // r.poses: [s, mid..., e]
+  //   if (r.poses.size() >= 2 && r.dts.size() == r.poses.size()-1)
+  //   {
+  //     segmentPoses[k]     = std::move(r.poses);
+  //     segmentTimeDiffs[k] = std::move(r.dts);
+  //   }
+  // }
 
-  // 5) apply all insertions back into teb()
-  int offset = 0;
-  int gidx = 0;
-  for (size_t i = 0; i < segmentPoses.size(); ++i)
-  {
-    auto& P = segmentPoses[i];
-    auto& T = segmentTimeDiffs[i];
-    if (outFile.is_open()) {
-      outFile << "----- Segment Poses and Dts -----\n";
-      for (size_t k = 0; k < P.size(); ++k) {
-        outFile << "  seg " << i << "pose" << k << ": "<< P[k].x()<< P[k].y() << P[k].theta() <<"\n";
-      }
-      for (size_t k = 0; k < T.size(); ++k) {
-        outFile <<"  seg " << i << "dt" << k << ": "<< T[k] <<"\n";
-      }
-    } else {
-      std::cerr << "Failed to open file for writing." << std::endl;
-    }
+  // // 5) apply all insertions back into teb()
+  // int offset = 0;
+  // int gidx = 0;
+  // for (size_t i = 0; i < segmentPoses.size(); ++i)
+  // {
+  //   auto& P = segmentPoses[i];
+  //   auto& T = segmentTimeDiffs[i];
+  //   if (outFile.is_open()) {
+  //     outFile << "----- Segment Poses and Dts -----\n";
+  //     for (size_t k = 0; k < P.size(); ++k) {
+  //       outFile << "  seg " << i << "pose" << k << ": "<< P[k].x()<< P[k].y() << P[k].theta() <<"\n";
+  //     }
+  //     for (size_t k = 0; k < T.size(); ++k) {
+  //       outFile <<"  seg " << i << "dt" << k << ": "<< T[k] <<"\n";
+  //     }
+  //   } else {
+  //     std::cerr << "Failed to open file for writing." << std::endl;
+  //   }
 
-    teb().Pose(offset + gidx) = P[0];
-    teb().TimeDiff(offset + gidx) = T[0];
+  //   teb().Pose(offset + gidx) = P[0];
+  //   teb().TimeDiff(offset + gidx) = T[0];
 
-    for (size_t j = 1; j < P.size()-1; ++j)
-    {
-      teb().insertPose(offset + gidx + 1, P[j]);
-      teb().insertTimeDiff(offset + gidx + 1, T[j-1]);
-      ++offset; 
-    }
-    ++gidx;
+  //   for (size_t j = 1; j < P.size()-1; ++j)
+  //   {
+  //     teb().insertPose(offset + gidx + 1, P[j]);
+  //     teb().insertTimeDiff(offset + gidx + 1, T[j-1]);
+  //     ++offset; 
+  //   }
+  //   ++gidx;
 
-  }
+  // }
 
   // for(int i = 0; i < teb().sizePoses() - 1; ++i)
   // {
@@ -2438,25 +2224,108 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
   //     }
   // }
 
-for (int i = 1; i + 1 < teb().sizePoses(); ++i)
-{
-    // 이전/다음 포즈
-    const auto& prev = teb().Pose(i - 1);
-    const auto& next = teb().Pose(i + 1);
+  const double min_length = 0.05;
+  const double min_dist_thresh = 0.3;
 
-    // chord vector
-    double dx = next.x() - prev.x();
-    double dy = next.y() - prev.y();
+  // Initialize priority queue with all segments
+  std::priority_queue<Segment, std::vector<Segment>, SegmentCompare> pq;
+  int N = teb().sizePoses();
+  for (int i = 0; i < N - 1; ++i) {
+    PoseSE2 start = teb().Pose(i);
+    PoseSE2 end   = teb().Pose(i + 1);
+    double L = computeArcLength(start, end);
+    pq.push({i, L});
+  }
 
-    // 너무 짧은 구간은 skip (optional)
-    double d = std::hypot(dx, dy);
-    if (d < 0.05) 
+  // Process until all segments are handled
+  while (!pq.empty()) {
+    ROS_INFO("teb pose size : %d", teb().sizePoses());
+    ROS_INFO("time diff size : %d", teb().sizeTimeDiffs());
+    Segment seg = pq.top();
+    pq.pop();
+
+    // If segment too short, skip
+    if (seg.length < min_length)
       continue;
 
-    // atan2로 orientation 설정
-    teb().Pose(i).theta() = std::atan2(dy, dx);
-}
+    // Dynamically fetch start/end poses and time diff
+    PoseSE2 start = teb().Pose(seg.idx);
+    PoseSE2 end   = teb().Pose(seg.idx + 1);
+    double dt     = teb().TimeDiff(seg.idx);
 
+    // Obstacle distances
+    double d1 = distanceFieldAt(start.x(), start.y());
+    double d2 = distanceFieldAt(end.x(),   end.y());
+
+    // Collision check
+    if (seg.length - (d1 + d2) > 0.0) {
+      // Compute midpoint
+      PoseSE2 pm = interpolatePose(start, end, 0.5);
+
+      // 3.a) Detect Degenerate split 
+      const double eps2 = 0.03; 
+      double dxs = pm.x() - start.x();
+      double dys = pm.y() - start.y();
+      double dxe = pm.x() - end.x();
+      double dye = pm.y() - end.y();
+
+      if (dxs*dxs + dys*dys < eps2 ||  // pm ≃ start
+          dxe*dxe + dye*dye < eps2) {  // pm ≃ end
+        continue;
+      }
+
+      if (distanceFieldAt(pm.x(), pm.y()) < min_dist_thresh) {
+        auto [mp, r] = findModifiedPose( Eigen::Vector2d(pm.x(), pm.y()), Eigen::Vector2d(start.x(), start.y()), Eigen::Vector2d(end.x(), end.y()), outFile);
+        pm.x() = mp.x();
+        pm.y() = mp.y();
+      }
+      pm.theta() = computeOri({start.x(), start.y()}, {pm.x(), pm.y()});
+
+      // Half the time diff for the two new sub-segments
+      double dt_mid = dt * 0.5;
+
+      // Insert new pose and time diff into TEB
+      teb().TimeDiff(seg.idx) = dt_mid;
+      teb().insertPose(seg.idx + 1, pm);
+      teb().insertTimeDiff(seg.idx + 1, dt_mid);
+
+      for (size_t idx = 0; idx < teb().sizePoses(); ++idx)
+      {
+        if (outFile.is_open())
+        {
+          outFile << "----- CCD TEB pose -----\n";
+          outFile << "Start TEB pose idx : " << idx << " -> poses = " << teb().Pose(idx) << "\n";
+          outFile << "End TEB pose idx : " << idx + 1 << " -> poses = " << teb().Pose(idx) << "\n";
+        }
+        else
+        {
+          std::cerr << "File not opened\n";
+        }
+      }
+
+      // Adjust indices of the rest of the queue
+      std::vector<Segment> temp;
+      while (!pq.empty()) {
+        Segment s = pq.top(); pq.pop();
+        if (s.idx > seg.idx) ++s.idx;
+        temp.push_back(s);
+      }
+      for (auto &s : temp) 
+      {
+        pq.push(s);
+      }
+
+      // Compute lengths of new sub-segments
+      double L_left  = computeArcLength(start, pm);
+      double L_right = computeArcLength(pm, end);
+
+      // Push new segments into priority queue
+      pq.push({seg.idx, L_left});
+      pq.push({seg.idx + 1, L_right});
+        
+    }
+    // else: no collision → segment is safe and dropped
+  }
 
   std_msgs::ColorRGBA blue;
   blue.r = 0.0;

@@ -78,6 +78,10 @@
 #include <Eigen/Core>
 #include <iostream>
 
+#include <queue>
+#include <utility>
+#include <functional>
+#include <optional>
 
 namespace teb_local_planner
 {
