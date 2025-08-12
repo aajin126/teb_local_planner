@@ -2267,6 +2267,19 @@ inline double TebOptimalPlanner::findThetaMidNH(const PoseSE2& Pi, const PoseSE2
 
 }
 
+inline Eigen::Vector2d TebOptimalPlanner::nvec(double th){ return {-std::sin(th), std::cos(th)}; }
+
+inline bool TebOptimalPlanner::nhSatisfied(const PoseSE2& P, const PoseSE2& Q, double eps_deg)
+{
+  Eigen::Vector2d d(Q.x()-P.x(), Q.y()-P.y());
+  if (d.squaredNorm() < 1e-12) return true;       // 같은 점이면 OK
+  Eigen::Vector2d s = nvec(P.theta()) + nvec(Q.theta());
+  double cross = std::fabs(s.x()*d.y() - s.y()*d.x());
+  double dot   = std::fabs(s.x()*d.x() + s.y()*d.y());
+  double gap   = std::atan2(cross, std::max(1e-12, dot));  // 각도 오차(rad)
+  return gap <= eps_deg * M_PI / 180.0;
+}
+
 bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec, 
                                               double inscribed_radius, double circumscribed_radius, int look_ahead_idx, double feasibility_check_lookahead_distance)
 {
@@ -2503,78 +2516,80 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
       {
         teb().Pose(seg.idx).theta() = teb().Pose(seg.idx).theta();
 
-        PoseSE2 P0 = teb().Pose(0);   // start
-        PoseSE2 P1 = teb().Pose(1);   // 방금 넣은 pm
-        PoseSE2 P2 = teb().Pose(2);   // 원래 end
+        if (!nhSatisfied(teb().Pose(0), teb().Pose(1)))
+        {
+          PoseSE2 P0 = teb().Pose(0);   // start
+          PoseSE2 P1 = teb().Pose(1);   // 방금 넣은 pm
+          PoseSE2 P2 = teb().Pose(2);   // 원래 end
 
-        PoseSE2 mid0 = interpolatePose(P0, P1, 0.5);
+          PoseSE2 mid0 = interpolatePose(P0, P1, 0.5);
 
-        auto [mp, r, index] = findModifiedPose( Eigen::Vector2d(mid0.x(), mid0.y()), Eigen::Vector2d(P0.x(), P0.y()), Eigen::Vector2d(P1.x(), P1.y()), outFile);
-        
-        if (index >= 0) { 
-          auto it = std::find(idx_hist.begin(), idx_hist.end(), index);
-          if (it != idx_hist.end()) {
-              break;
+          auto [mp, r, index] = findModifiedPose( Eigen::Vector2d(mid0.x(), mid0.y()), Eigen::Vector2d(P0.x(), P0.y()), Eigen::Vector2d(P1.x(), P1.y()), outFile);
+          
+          if (index >= 0) { 
+            auto it = std::find(idx_hist.begin(), idx_hist.end(), index);
+            if (it != idx_hist.end()) {
+                break;
+            }
+
+            idx_hist.push_back(index);
+            if (idx_hist.size() > 64) idx_hist.pop_front();
+
+            mid0.x() = mp.x();
+            mid0.y() = mp.y();
+          }
+          
+          double dt01  = teb().TimeDiff(0);
+          double L01   = computeArcLength(P0, P1);
+          double L0a   = computeArcLength(P0, mid0);
+          double L0b   = computeArcLength(mid0, P1);
+          double w0a   = L0a / L01;
+          double w0b   = L0b / L01;
+
+          teb().TimeDiff(0) = dt01 * w0a;         // 0→mid0
+          teb().insertPose(1, mid0);              // mid0이 새 index 1
+          teb().insertTimeDiff(1, dt01 * w0b);    // mid0→pm (pm은 index 2로 밀림)
+
+          teb().Pose(1).theta() = findThetaMidNH(teb().Pose(1), teb().Pose(2));  // mid0 vs pm
+          teb().Pose(2).theta() = findThetaMidNH(teb().Pose(2), teb().Pose(3));  // pm vs end (있을 때)
+
+
+          // Adjust indices of the rest of the queue
+          std::vector<Segment> temp;
+          while (!pq.empty()) {
+            Segment s = pq.top(); pq.pop();
+            if (s.idx > seg.idx) s.idx += 2;
+            temp.push_back(s);
+          }
+          for (auto &s : temp) 
+          {
+            pq.push(s);
           }
 
-          idx_hist.push_back(index);
-          if (idx_hist.size() > 64) idx_hist.pop_front();
+          std_msgs::ColorRGBA red;
+          red.r = 1.0;
+          red.g = 0.0;
+          red.b = 0.0;
+          red.a = 1.0;
+          std::vector<PoseSE2> pose_list4;
 
-          mid0.x() = mp.x();
-          mid0.y() = mp.y();
+          for (int i = 0; i < teb().sizePoses(); ++i)
+          {
+            pose_list4.push_back(teb().Pose(i));
+          }
+          visualization_->visualizeTebPoses(pose_list4, red);
+          //std::cin.get();
+
+
+          double L0 = computeArcLength(teb().Pose(0), teb().Pose(1));
+          double L1 = computeArcLength(teb().Pose(1), teb().Pose(2));
+          double L2 = computeArcLength(teb().Pose(2), teb().Pose(3));
+          if (std::isfinite(L0)) pq.push({0, L0});
+          if (std::isfinite(L1)) pq.push({1, L1});
+          if (std::isfinite(L2)) pq.push({2, L2});
+
+          continue;
         }
-        
-        double dt01  = teb().TimeDiff(0);
-        double L01   = computeArcLength(P0, P1);
-        double L0a   = computeArcLength(P0, mid0);
-        double L0b   = computeArcLength(mid0, P1);
-        double w0a   = L0a / L01;
-        double w0b   = L0b / L01;
-
-        teb().TimeDiff(0) = dt01 * w0a;         // 0→mid0
-        teb().insertPose(1, mid0);              // mid0이 새 index 1
-        teb().insertTimeDiff(1, dt01 * w0b);    // mid0→pm (pm은 index 2로 밀림)
-
-        teb().Pose(1).theta() = findThetaMidNH(teb().Pose(1), teb().Pose(2));  // mid0 vs pm
-        teb().Pose(2).theta() = findThetaMidNH(teb().Pose(2), teb().Pose(3));  // pm vs end (있을 때)
-
-
-        // Adjust indices of the rest of the queue
-        std::vector<Segment> temp;
-        while (!pq.empty()) {
-          Segment s = pq.top(); pq.pop();
-          if (s.idx > seg.idx) s.idx += 2;
-          temp.push_back(s);
-        }
-        for (auto &s : temp) 
-        {
-          pq.push(s);
-        }
-
-        std_msgs::ColorRGBA red;
-        red.r = 1.0;
-        red.g = 0.0;
-        red.b = 0.0;
-        red.a = 1.0;
-        std::vector<PoseSE2> pose_list4;
-
-        for (int i = 0; i < teb().sizePoses(); ++i)
-        {
-          pose_list4.push_back(teb().Pose(i));
-        }
-        visualization_->visualizeTebPoses(pose_list4, red);
-        //std::cin.get();
-
-
-        double L0 = computeArcLength(teb().Pose(0), teb().Pose(1));
-        double L1 = computeArcLength(teb().Pose(1), teb().Pose(2));
-        double L2 = computeArcLength(teb().Pose(2), teb().Pose(3));
-        if (std::isfinite(L0)) pq.push({0, L0});
-        if (std::isfinite(L1)) pq.push({1, L1});
-        if (std::isfinite(L2)) pq.push({2, L2});
-
-        continue;
-
       }
         
       else
