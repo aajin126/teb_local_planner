@@ -250,16 +250,6 @@ bool TebOptimalPlanner::adaptiveoptimizeTEB(int iterations_innerloop, int iterat
   {
     if (cfg_->trajectory.teb_autosize)
     {
-     std::ofstream outFile("/home/glab/bisection_log.txt", std::ios::app);
-     if (outFile.is_open())
-     {
-       outFile << "ref_timediffs_ size: " << ref_timediffs_.size() << "\n";
-       outFile << "hyst_timediffs_ size: " << hyst_timediffs_.size() << "\n";
-     }
-     else
-     {
-       std::cerr << "File not opened\n";
-     }
       teb_.adaptiveautoResize(ref_timediffs_, hyst_timediffs_, cfg_->trajectory.dt_ref, cfg_->trajectory.dt_hysteresis, cfg_->trajectory.min_samples, cfg_->trajectory.max_samples, fast_mode);
       //teb_.autoResize(cfg_->trajectory.dt_ref, cfg_->trajectory.dt_hysteresis, cfg_->trajectory.min_samples, cfg_->trajectory.max_samples, fast_mode);
     }
@@ -1868,9 +1858,9 @@ std::tuple<Eigen::Vector2d, double, double> TebOptimalPlanner::findModifiedPose(
     double coll_val = distanceFieldAt(coll_pt.x(), coll_pt.y());
     double coll_idx = distanceFieldAtGrid(coll_pt.x(), coll_pt.y());
 
-    log << "[Target Point]\n";
-    log << "  World Coord: (" << coll_pt.x() << ", " << coll_pt.y() << ")\n";
-    log << "  Distance: " << coll_val << "\n";
+    // log << "[Target Point]\n";
+    // log << "  World Coord: (" << coll_pt.x() << ", " << coll_pt.y() << ")\n";
+    // log << "  Distance: " << coll_val << "\n";
 
     visualization_->visualizetwoPoint({boundary.x(),boundary.y()}, {coll_pt.x(),coll_pt.y()});
     visualization_->visualizeEndPoints(p2, p3);
@@ -1902,17 +1892,17 @@ std::tuple<Eigen::Vector2d, double, double> TebOptimalPlanner::findModifiedPose(
     Eigen::Vector2d best_pt(info.origin_x + (bc.x() + 0.5) * info.resolution, info.origin_y + (bc.y() + 0.5) * info.resolution);
     double best_idx = distanceFieldAtGrid(best_pt.x(), best_pt.y());
 
-    log << "[Line Distances]\n";
-    for (size_t i = 0; i < line.size(); ++i)
-    {
-      const auto& cell = line[i];
-      double val = df[cell.x() + cell.y() * info.map_width] * info.resolution;
-      double wx = info.origin_x + (cell.x() + 0.5) * info.resolution;
-      double wy = info.origin_y + (cell.y() + 0.5) * info.resolution;
-      log << "  idx " << i << ": (" << wx << ", " << wy << ") → dist = " << val << "\n";
-    }
-    log << "  World Coord: (" << best_pt.x() << ", " << best_pt.y() << ")\n";
-    log << "  Chosen Distance: " << result.second << "\n";
+    // log << "[Line Distances]\n";
+    // for (size_t i = 0; i < line.size(); ++i)
+    // {
+    //   const auto& cell = line[i];
+    //   double val = df[cell.x() + cell.y() * info.map_width] * info.resolution;
+    //   double wx = info.origin_x + (cell.x() + 0.5) * info.resolution;
+    //   double wy = info.origin_y + (cell.y() + 0.5) * info.resolution;
+    //   log << "  idx " << i << ": (" << wx << ", " << wy << ") → dist = " << val << "\n";
+    // }
+    // log << "  World Coord: (" << best_pt.x() << ", " << best_pt.y() << ")\n";
+    // log << "  Chosen Distance: " << result.second << "\n";
 
     std_msgs::ColorRGBA blue;
     blue.r = 0.0;
@@ -2287,43 +2277,43 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
   const auto& df   = *distance_field_;
   safe_points_.clear();
   std::ofstream outFile("/home/glab/bisection_log.txt", std::ios::app);
-  for (size_t idx = 0; idx < teb().sizePoses(); ++idx)
-  {
-    if (outFile.is_open())
-    {
-      outFile << "----- Initial TEB pose -----\n";
-      outFile << "TEB pose idx : " << idx << " -> poses = " << teb().Pose(idx) << "\n";
-    }
-    else
-    {
-      std::cerr << "File not opened\n";
-    }
-  }
-  for (size_t idx = 0; idx <teb().sizePoses()-1 ; ++idx)
-  {
-    if (outFile.is_open())
-    {
-      outFile << "----- Initial TEB Time diff -----\n";
-      outFile << "time diff idx : " << idx << " -> dt = " << teb().TimeDiff(idx) << "\n";
-    }
-    else
-    {
-      std::cerr << "File not opened\n";
-    }
-  }
+  // for (size_t idx = 0; idx < teb().sizePoses(); ++idx)
+  // {
+  //   if (outFile.is_open())
+  //   {
+  //     outFile << "----- Initial TEB pose -----\n";
+  //     outFile << "TEB pose idx : " << idx << " -> poses = " << teb().Pose(idx) << "\n";
+  //   }
+  //   else
+  //   {
+  //     std::cerr << "File not opened\n";
+  //   }
+  // }
+  // for (size_t idx = 0; idx <teb().sizePoses()-1 ; ++idx)
+  // {
+  //   if (outFile.is_open())
+  //   {
+  //     outFile << "----- Initial TEB Time diff -----\n";
+  //     outFile << "time diff idx : " << idx << " -> dt = " << teb().TimeDiff(idx) << "\n";
+  //   }
+  //   else
+  //   {
+  //     std::cerr << "File not opened\n";
+  //   }
+  // }
 
-   std::vector<PoseSE2> pose_list;
-   std_msgs::ColorRGBA orange;
-   orange.r = 1.0;
-   orange.g = 0.5;
-   orange.b = 0.0;
-   orange.a = 1.0;
+  //  std::vector<PoseSE2> pose_list;
+  //  std_msgs::ColorRGBA orange;
+  //  orange.r = 1.0;
+  //  orange.g = 0.5;
+  //  orange.b = 0.0;
+  //  orange.a = 1.0;
 
-   for (int i = 0; i < teb().sizePoses(); ++i)
-   {
-     pose_list.push_back(teb().Pose(i));
-   }
-  visualization_->visualizeTebPoses(pose_list, orange);
+  //  for (int i = 0; i < teb().sizePoses(); ++i)
+  //  {
+  //    pose_list.push_back(teb().Pose(i));
+  //  }
+  // visualization_->visualizeTebPoses(pose_list, orange);
   //std::cin.get();
 
   const double min_distance_threshold = 0.05;
@@ -2384,44 +2374,44 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
     ++i;
   }
 
-  std::vector<PoseSE2> pose_list2;
-  std_msgs::ColorRGBA green;
-  green.r = 0.0;
-  green.g = 1.0;
-  green.b = 0.5;
-  green.a = 1.0;
+  // std::vector<PoseSE2> pose_list2;
+  // std_msgs::ColorRGBA green;
+  // green.r = 0.0;
+  // green.g = 1.0;
+  // green.b = 0.5;
+  // green.a = 1.0;
 
-  for (int i = 0; i < teb().sizePoses(); ++i)
-  {
-    pose_list2.push_back(teb().Pose(i));
-  }
-  visualization_->visualizeTebPoses(pose_list2, green);
+  // for (int i = 0; i < teb().sizePoses(); ++i)
+  // {
+  //   pose_list2.push_back(teb().Pose(i));
+  // }
+  // visualization_->visualizeTebPoses(pose_list2, green);
   //std::cin.get();
 
-  for (size_t idx = 0; idx < teb().sizePoses(); ++idx)
-  {
-    if (outFile.is_open())
-    {
-      outFile << "----- Modified TEB pose -----\n";
-      outFile << "TEB pose idx : " << idx << " -> poses = " << teb().Pose(idx) << "\n";
-    }
-    else
-    {
-      std::cerr << "File not opened\n";
-    }
-  }
-  for (size_t idx = 0; idx <teb().sizePoses()-1 ; ++idx)
-  {
-    if (outFile.is_open())
-    {
-      outFile << "----- Modified TEB Time diff -----\n";
-      outFile << "time diff idx : " << idx << " -> dt = " << teb().TimeDiff(idx) << "\n";
-    }
-    else
-    {
-      std::cerr << "File not opened\n";
-    }
-  }
+  // for (size_t idx = 0; idx < teb().sizePoses(); ++idx)
+  // {
+  //   if (outFile.is_open())
+  //   {
+  //     outFile << "----- Modified TEB pose -----\n";
+  //     outFile << "TEB pose idx : " << idx << " -> poses = " << teb().Pose(idx) << "\n";
+  //   }
+  //   else
+  //   {
+  //     std::cerr << "File not opened\n";
+  //   }
+  // }
+  // for (size_t idx = 0; idx <teb().sizePoses()-1 ; ++idx)
+  // {
+  //   if (outFile.is_open())
+  //   {
+  //     outFile << "----- Modified TEB Time diff -----\n";
+  //     outFile << "time diff idx : " << idx << " -> dt = " << teb().TimeDiff(idx) << "\n";
+  //   }
+  //   else
+  //   {
+  //     std::cerr << "File not opened\n";
+  //   }
+  // }
 
   const double min_length = 0.05;
   const double min_dist_thresh = 0.3;
@@ -2516,97 +2506,111 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
       {
         teb().Pose(seg.idx).theta() = teb().Pose(seg.idx).theta();
 
-        if (!nhSatisfied(teb().Pose(0), teb().Pose(1)))
-        {
-          PoseSE2 P0 = teb().Pose(0);   // start
-          PoseSE2 P1 = teb().Pose(1);   // 방금 넣은 pm
-          PoseSE2 P2 = teb().Pose(2);   // 원래 end
+        // if (!nhSatisfied(teb().Pose(0), teb().Pose(1)))
+        // {
+        //   PoseSE2 P0 = teb().Pose(0);   // start
+        //   PoseSE2 P1 = teb().Pose(1);   // 방금 넣은 pm
+        //   PoseSE2 P2 = teb().Pose(2);   // 원래 end
 
-          PoseSE2 mid0 = interpolatePose(P0, P1, 0.5);
+        //   PoseSE2 mid0 = interpolatePose(P0, P1, 0.5);
 
-          auto [mp, r, index] = findModifiedPose( Eigen::Vector2d(mid0.x(), mid0.y()), Eigen::Vector2d(P0.x(), P0.y()), Eigen::Vector2d(P1.x(), P1.y()), outFile);
+        //   if ((distanceFieldAt(mid0.x(), mid0.y()) < min_dist_thresh))
+        //   {
+        //     auto [mp, r, index] = findModifiedPose( Eigen::Vector2d(mid0.x(), mid0.y()), Eigen::Vector2d(P0.x(), P0.y()), Eigen::Vector2d(P1.x(), P1.y()), outFile);
+            
+        //     if (index >= 0) { 
+        //       auto it = std::find(idx_hist.begin(), idx_hist.end(), index);
+        //       if (it != idx_hist.end()) {
+        //           break;
+        //       }
+
+        //       idx_hist.push_back(index);
+        //       if (idx_hist.size() > 64) idx_hist.pop_front();
+
+        //       mid0.x() = mp.x();
+        //       mid0.y() = mp.y();
+        //     }
+        //   }
           
-          if (index >= 0) { 
-            auto it = std::find(idx_hist.begin(), idx_hist.end(), index);
-            if (it != idx_hist.end()) {
-                break;
-            }
+        //   double dt01  = teb().TimeDiff(0);
+        //   double L01   = computeArcLength(P0, P1);
+        //   double L0a   = computeArcLength(P0, mid0);
+        //   double L0b   = computeArcLength(mid0, P1);
+        //   double w0a   = L0a / L01;
+        //   double w0b   = L0b / L01;
 
-            idx_hist.push_back(index);
-            if (idx_hist.size() > 64) idx_hist.pop_front();
+        //   teb().TimeDiff(0) = dt01 * w0a;         // 0→mid0
+        //   teb().insertPose(1, mid0);              // mid0이 새 index 1
+        //   teb().insertTimeDiff(1, dt01 * w0b);    // mid0→pm (pm은 index 2로 밀림)
 
-            mid0.x() = mp.x();
-            mid0.y() = mp.y();
-          }
-          
-          double dt01  = teb().TimeDiff(0);
-          double L01   = computeArcLength(P0, P1);
-          double L0a   = computeArcLength(P0, mid0);
-          double L0b   = computeArcLength(mid0, P1);
-          double w0a   = L0a / L01;
-          double w0b   = L0b / L01;
+        //   teb().Pose(1).theta() = findThetaMidNH(teb().Pose(1), teb().Pose(2));  // mid0 vs pm
+        //   teb().Pose(2).theta() = findThetaMidNH(teb().Pose(2), teb().Pose(3));  // pm vs end (있을 때)
 
-          teb().TimeDiff(0) = dt01 * w0a;         // 0→mid0
-          teb().insertPose(1, mid0);              // mid0이 새 index 1
-          teb().insertTimeDiff(1, dt01 * w0b);    // mid0→pm (pm은 index 2로 밀림)
-
-          teb().Pose(1).theta() = findThetaMidNH(teb().Pose(1), teb().Pose(2));  // mid0 vs pm
-          teb().Pose(2).theta() = findThetaMidNH(teb().Pose(2), teb().Pose(3));  // pm vs end (있을 때)
+        //   auto need_dt = [&](int a){
+        //   const PoseSE2& A = teb().Pose(a), &B = teb().Pose(a+1);
+        //   double phi = std::atan2(B.y()-A.y(), B.x()-A.x());
+        //   double dth = std::fabs(normalizeTheta(phi - A.theta()));
+        //   double tR  = minTime_for_rot(dth, cfg_->robot.max_vel_theta, cfg_->robot.acc_lim_theta);
+        //   return tR;
+        //   };
+        //   teb().TimeDiff(0) = std::max(teb().TimeDiff(0), need_dt(0)); // 0→1
+        //   if (teb().sizeTimeDiffs() > 1)
+        //     teb().TimeDiff(1) = std::max(teb().TimeDiff(1), need_dt(1)); // 1→2
 
 
-          // Adjust indices of the rest of the queue
-          std::vector<Segment> temp;
-          while (!pq.empty()) {
-            Segment s = pq.top(); pq.pop();
-            if (s.idx > seg.idx) s.idx += 2;
-            temp.push_back(s);
-          }
-          for (auto &s : temp) 
-          {
-            pq.push(s);
-          }
+        //   // Adjust indices of the rest of the queue
+        //   std::vector<Segment> temp;
+        //   while (!pq.empty()) {
+        //     Segment s = pq.top(); pq.pop();
+        //     if (s.idx > seg.idx) s.idx += 2;
+        //     temp.push_back(s);
+        //   }
+        //   for (auto &s : temp) 
+        //   {
+        //     pq.push(s);
+        //   }
 
-          std_msgs::ColorRGBA red;
-          red.r = 1.0;
-          red.g = 0.0;
-          red.b = 0.0;
-          red.a = 1.0;
-          std::vector<PoseSE2> pose_list4;
+        //   std_msgs::ColorRGBA red;
+        //   red.r = 1.0;
+        //   red.g = 0.0;
+        //   red.b = 0.0;
+        //   red.a = 1.0;
+        //   std::vector<PoseSE2> pose_list4;
 
-          for (int i = 0; i < teb().sizePoses(); ++i)
-          {
-            pose_list4.push_back(teb().Pose(i));
-          }
-          visualization_->visualizeTebPoses(pose_list4, red);
-          //std::cin.get();
+        //   for (int i = 0; i < teb().sizePoses(); ++i)
+        //   {
+        //     pose_list4.push_back(teb().Pose(i));
+        //   }
+        //   visualization_->visualizeTebPoses(pose_list4, red);
+        //   //std::cin.get();
 
 
-          double L0 = computeArcLength(teb().Pose(0), teb().Pose(1));
-          double L1 = computeArcLength(teb().Pose(1), teb().Pose(2));
-          double L2 = computeArcLength(teb().Pose(2), teb().Pose(3));
-          if (std::isfinite(L0)) pq.push({0, L0});
-          if (std::isfinite(L1)) pq.push({1, L1});
-          if (std::isfinite(L2)) pq.push({2, L2});
+        //   double L0 = computeArcLength(teb().Pose(0), teb().Pose(1));
+        //   double L1 = computeArcLength(teb().Pose(1), teb().Pose(2));
+        //   double L2 = computeArcLength(teb().Pose(2), teb().Pose(3));
+        //   if (std::isfinite(L0)) pq.push({0, L0});
+        //   if (std::isfinite(L1)) pq.push({1, L1});
+        //   if (std::isfinite(L2)) pq.push({2, L2});
 
-          continue;
-        }
+        //   continue;
+        // }
       }
         
       else
         teb().Pose(seg.idx).theta() = findThetaMidNH(teb().Pose(seg.idx - 1), teb().Pose(seg.idx));
 
-      for (size_t idx = 0; idx < teb().sizePoses(); ++idx)
-      {
-        if (outFile.is_open())
-        {
-          outFile << "----- CCD TEB pose -----\n";
-          outFile << " TEB pose idx : " << idx << " -> poses = " << teb().Pose(idx) << "\n";
-        }
-        else
-        {
-          std::cerr << "File not opened\n";
-        }
-      }            
+      // for (size_t idx = 0; idx < teb().sizePoses(); ++idx)
+      // {
+      //   if (outFile.is_open())
+      //   {
+      //     outFile << "----- CCD TEB pose -----\n";
+      //     outFile << " TEB pose idx : " << idx << " -> poses = " << teb().Pose(idx) << "\n";
+      //   }
+      //   else
+      //   {
+      //     std::cerr << "File not opened\n";
+      //   }
+      // }            
 
       double dtheta1 = std::fabs(normalizeTheta(teb().Pose(seg.idx + 1).theta() - teb().Pose(seg.idx).theta()));
       double min_time2;
@@ -2644,17 +2648,17 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
         pq.push(s);
       }
 
-      std_msgs::ColorRGBA red;
-      red.r = 1.0;
-      red.g = 0.0;
-      red.b = 0.0;
-      red.a = 1.0;
-      std::vector<PoseSE2> pose_list4;
-      for (int i = 0; i < teb().sizePoses(); ++i)
-      {
-        pose_list4.push_back(teb().Pose(i));
-      }
-      visualization_->visualizeTebPoses(pose_list4, red);
+      // std_msgs::ColorRGBA red;
+      // red.r = 1.0;
+      // red.g = 0.0;
+      // red.b = 0.0;
+      // red.a = 1.0;
+      // std::vector<PoseSE2> pose_list4;
+      // for (int i = 0; i < teb().sizePoses(); ++i)
+      // {
+      //   pose_list4.push_back(teb().Pose(i));
+      // }
+      // visualization_->visualizeTebPoses(pose_list4, red);
       //std::cin.get();
 
       // Compute lengths of new sub-segments
@@ -2695,45 +2699,45 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
   // }
 
 
-  std_msgs::ColorRGBA blue;
-  blue.r = 0.0;
-  blue.g = 0.0;
-  blue.b = 1.0;
-  blue.a = 1.0;
-  std::vector<PoseSE2> pose_list1;
-  for (int i = 0; i < teb().sizePoses(); ++i)
-  {
-    pose_list1.push_back(teb().Pose(i));
-  }
-  visualization_->visualizeTebPoses(pose_list1, blue);
+  // std_msgs::ColorRGBA blue;
+  // blue.r = 0.0;
+  // blue.g = 0.0;
+  // blue.b = 1.0;
+  // blue.a = 1.0;
+  // std::vector<PoseSE2> pose_list1;
+  // for (int i = 0; i < teb().sizePoses(); ++i)
+  // {
+  //   pose_list1.push_back(teb().Pose(i));
+  // }
+  // visualization_->visualizeTebPoses(pose_list1, blue);
   //std::cin.get();
 
-  for (size_t i = 0; i < teb().sizePoses(); ++i)
-  {
-    if (outFile.is_open())
-    {
-      outFile << "----- Final TEB pose -----\n";
-      outFile << "TEB pose idx : " << i << " -> poses = " << teb().Pose(i) << "\n";
-    }
-    else
-    {
-      std::cerr << "File not opened\n";
-      break;
-    }
-  }
+  // for (size_t i = 0; i < teb().sizePoses(); ++i)
+  // {
+  //   if (outFile.is_open())
+  //   {
+  //     outFile << "----- Final TEB pose -----\n";
+  //     outFile << "TEB pose idx : " << i << " -> poses = " << teb().Pose(i) << "\n";
+  //   }
+  //   else
+  //   {
+  //     std::cerr << "File not opened\n";
+  //     break;
+  //   }
+  // }
 
-  for (size_t i = 0; i < teb().sizePoses()-1; ++i)
-  {
-    if (outFile.is_open())
-    {
-      outFile << "----- Final TEB Time diff -----\n";
-      outFile << "time diff idx : " << i << " -> dt = " << teb().TimeDiff(i) << "\n";
-    }
-    else
-    {
-      std::cerr << "File not opened\n";
-    }
-  }
+  // for (size_t i = 0; i < teb().sizePoses()-1; ++i)
+  // {
+  //   if (outFile.is_open())
+  //   {
+  //     outFile << "----- Final TEB Time diff -----\n";
+  //     outFile << "time diff idx : " << i << " -> dt = " << teb().TimeDiff(i) << "\n";
+  //   }
+  //   else
+  //   {
+  //     std::cerr << "File not opened\n";
+  //   }
+  // }
 
   // 6) Update ref_timediffs_ and hyst_timediffs_ based on final TEB
   ref_timediffs_.clear();
