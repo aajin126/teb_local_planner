@@ -654,17 +654,14 @@ void TimedElasticBand::updateAndPruneTEB(boost::optional<const PoseSE2&> new_sta
 
   if (new_start && sizePoses()>0)
   { 
-    ROS_INFO("sizePoses : %d", sizePoses());
     // find nearest state (using l2-norm) in order to prune the trajectory
     // (remove already passed states)
     double dist_cache = (new_start->position()- Pose(0).position()).norm();
     double dist;
     int lookahead = std::min<int>( sizePoses()-min_samples, 10); // satisfy min_samples, otherwise max 10 samples
-    ROS_INFO("lookahead : %d", lookahead);
     int nearest_idx = 0;
     for (int i = 1; i<=lookahead; ++i)
     {
-      ROS_INFO("lookahead %d", i);
       dist = (new_start->position()- Pose(i).position()).norm();
       if (dist<dist_cache)
       {

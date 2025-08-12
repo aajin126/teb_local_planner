@@ -598,8 +598,7 @@ public:
    * @return \c true, if the robot footprint along the first part of the trajectory intersects with 
    *         any obstacle in the costmap, \c false otherwise.
    */
-  virtual bool isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec, double inscribed_radius = 0.0,
-          double circumscribed_radius=0.0, int look_ahead_idx=-1, double feasibility_check_lookahead_distance=-1.0);
+  virtual bool isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec, double inscribed_radius = 0.0, double circumscribed_radius=0.0, int look_ahead_idx=-1, double feasibility_check_lookahead_distance=-1.0);
   
   //@}
   std::pair<Eigen::Vector2d, double> findMedialBallCenter(
@@ -611,20 +610,28 @@ public:
   std::pair<Eigen::Vector2d, double> findPenetration(const Eigen::Vector2d& coll_pt, const Eigen::Vector2d& p2, const Eigen::Vector2d& p3,std::ostream& log,double max_iterations= 100);
   std::pair<Eigen::Vector2d, double> findMedialAxisFromPenetration(const Eigen::Vector2d& coll_pt, const Eigen::Vector2d& p2, const Eigen::Vector2d& p3, std::ostream& log, double max_iterations= 100);
   double distanceFieldAt(double wx, double wy) const;
+  double distanceFieldAtGrid(double wx, double wy) const;
   double euclideanDistance(const PoseSE2& p1, const PoseSE2& p2);
   Eigen::Vector2d getModifiedPosition(const Eigen::Vector2d pose);
   bool isSegmentInCollision(const PoseSE2& pose1, const PoseSE2& pose2,const std::vector<float>& distance_field, const DistanceMapInfo& costmap_info);
   void dumpDistanceMap(const std::vector<float>& distance_field, const DistanceMapInfo& costmap_info);
-
-
+  inline bool isRotating(const PoseSE2& s, const PoseSE2& e, double trans_eps = 0.05, double yaw_thresh = M_PI/12.0);
+  inline bool isBackward(const PoseSE2& s, const PoseSE2& e, double margin_cos = 0.0);
+  inline double computeHeading(const PoseSE2& Pm, const PoseSE2& Pi, const PoseSE2&Pp);
+  inline double wrapAngle(double a);
   double computeOri(const Eigen::Vector2d& from, const Eigen::Vector2d& to);
+  inline double maxRotAngle_in_dt(double dt, double w_max, double alpha);
+  inline double maxLinDist_in_dt(double dt, double v_max, double a_max);
+  inline double minTime_for_lin(double L, double v_max, double a_max);
+  inline double minTime_for_rot(double dtheta, double w_max, double alpha);
+
   Eigen::Vector2d getBoundaryPointFromCollision(const Eigen::Vector2d& pt);
   Eigen::Vector2d computePushDirection(const Eigen::Vector2d& from, const Eigen::Vector2d& to, double dist);
   Eigen::Vector2d computePerpendicularDirection(const Eigen::Vector2d& p2, const Eigen::Vector2d& p3);
   Eigen::Vector2d estimateNormal(const Eigen::Vector2d& pt);
   std::vector<Eigen::Vector2i> bresenhamLineWorld(const Eigen::Vector2d& from, const Eigen::Vector2d& to);
   std::pair<int, double> climbLocalMax(const std::vector<Eigen::Vector2i>& line, double max_dist, double max_iterations = 100);
-  std::pair<Eigen::Vector2d, double> findModifiedPose(const Eigen::Vector2d& coll_pt, const Eigen::Vector2d& p2, const Eigen::Vector2d& p3, std::ostream& log, double max_iterations= 100);
+  std::tuple<Eigen::Vector2d, double, double> findModifiedPose(const Eigen::Vector2d& coll_pt, const Eigen::Vector2d& p2, const Eigen::Vector2d& p3, std::ostream& log, double max_iterations= 100);
 
   void optimizeOrientations(const std::vector<Pose2D>& positions, std::vector<double>& thetas);
   bool violatesArcConstraint(const PoseSE2& sk, const PoseSE2& sk1);

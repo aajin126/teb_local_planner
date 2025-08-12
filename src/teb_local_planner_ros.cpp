@@ -1354,6 +1354,8 @@ void TebLocalPlannerROS::saturateVelocity(double& vx, double& vy, double& omega,
     vx *= max_vel_trans_ratio;
     vy *= max_vel_trans_ratio;
   }
+
+  ROS_INFO("Saturate Vel :x : %lf, theta : %lf", vx, omega);
 }
      
      
