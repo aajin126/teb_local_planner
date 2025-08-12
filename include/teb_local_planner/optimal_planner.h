@@ -624,6 +624,7 @@ public:
   inline double maxLinDist_in_dt(double dt, double v_max, double a_max);
   inline double minTime_for_lin(double L, double v_max, double a_max);
   inline double minTime_for_rot(double dtheta, double w_max, double alpha);
+  inline double findThetaMidNH(const PoseSE2& Pi, const PoseSE2& Pj, double clamp_deg = 30.0);
 
   Eigen::Vector2d getBoundaryPointFromCollision(const Eigen::Vector2d& pt);
   Eigen::Vector2d computePushDirection(const Eigen::Vector2d& from, const Eigen::Vector2d& to, double dist);

@@ -2242,7 +2242,30 @@ inline double TebOptimalPlanner::minTime_for_rot(double dtheta, double w_max, do
   }
 }
 
+inline double TebOptimalPlanner::findThetaMidNH(const PoseSE2& Pi, const PoseSE2& Pj, double clamp_deg)
+{
+  const double dx = Pj.x() - Pi.x();
+  const double dy = Pj.y() - Pi.y();
+  if (dx*dx + dy*dy < 1e-12) return Pi.theta();
 
+  const double phi  = std::atan2(dy, dx);                         // 세그 방향
+  double theta_nh   = wrapAngle(2.0*phi - Pj.theta() + M_PI);          // NH 정확해
+  double fwd_cos    = std::cos(theta_nh - phi);                   // 전진(+)/후진(-)
+
+  // 후진 금지면 전진 탄젠트로 클램프(soft NH)
+  if (fwd_cos < 0.0) {
+    // φ 주변으로 끌어오되, 현재 θ_i에서 과도 점프는 제한
+    double d = wrapAngle(phi - Pi.theta());
+    double dmax = clamp_deg * M_PI/180.0;
+    return wrapAngle(Pi.theta() + g2o::clamp(d, -dmax, dmax));
+  }
+
+  // 허용(또는 이미 전진)일 땐 NH해를 점프 제한과 함께 적용
+  double d = wrapAngle(theta_nh - Pi.theta());
+  double dmax = clamp_deg * M_PI/180.0;
+  return wrapAngle(Pi.theta() + g2o::clamp(d, -dmax, dmax));
+
+}
 
 bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec, 
                                               double inscribed_radius, double circumscribed_radius, int look_ahead_idx, double feasibility_check_lookahead_distance)
@@ -2301,7 +2324,7 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
     auto &p = teb().Pose(i);
     double c = costmap_model->footprintCost(p.x(), p.y(), p.theta(), footprint_spec, inscribed_radius, circumscribed_radius);
     double dist = distanceFieldAt(teb().Pose(i).x(), teb().Pose(i).y());
-    if (c <= -1){
+    if (c == -1){
       visualization_->publishInfeasibleRobotPose(teb().Pose(i), *cfg_->robot_model, footprint_spec);
       auto [mp, r, index] = findModifiedPose(Eigen::Vector2d(p.x(), p.y()), Eigen::Vector2d(teb().Pose(i-1).x(), teb().Pose(i-1).y()) , Eigen::Vector2d(p.x(), p.y()), outFile);
 
@@ -2320,14 +2343,16 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
         bool rotation = (dtheta_prev > min_theta_threshold || dtheta_next > min_theta_threshold);
         bool close = (dist_prev < min_distance_threshold || dist_next < min_distance_threshold);
         
-        if(isRotating(teb().Pose(i-1), teb().Pose(i)) || isBackward(teb().Pose(i-1), teb().Pose(i)))
+        //if(isRotating(teb().Pose(i-1), teb().Pose(i)) || isBackward(teb().Pose(i-1), teb().Pose(i)))
         // {
         //   teb().deleteTimeDiff(i-1);
         //   teb().deletePose(i);
         //   outFile << "----- Delete pose -----\n";
         //   continue; 
         // }
-          teb().Pose(i).theta() = computeHeading(teb().Pose(i - 1), teb().Pose(i), teb().Pose(i + 1));
+        teb().Pose(i).theta() = findThetaMidNH(teb().Pose(i-1), teb().Pose(i));
+        //computeHeading(teb().Pose(i - 1), teb().Pose(i), teb().Pose(i + 1));
+        
         //computeOri(Eigen::Vector2d(teb().Pose(i-1).x(), teb().Pose(i-1).y()), Eigen::Vector2d(teb().Pose(i).x(), teb().Pose(i).y()));
 
         if (i == 1)
@@ -2336,7 +2361,8 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
         }
         else
         {
-          teb().Pose(i-1).theta() = computeHeading(teb().Pose(i-2), teb().Pose(i-1), teb().Pose(i));
+          //teb().Pose(i-1).theta() = computeHeading(teb().Pose(i-2), teb().Pose(i-1), teb().Pose(i));
+          teb().Pose(i-1).theta() = findThetaMidNH(teb().Pose(i-2), teb().Pose(i-1));
         }
         
       }
@@ -2438,7 +2464,7 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
     // double L_max      = maxLinDist_in_dt(dt, cfg_->robot.max_vel_x, cfg_->robot.acc_lim_x);
 
     // Collision check
-    if (seg.length - (d1 + d2) > 0.0) 
+    if (seg.length + 0.03 - (d1 + d2) > 0.0) 
     {
       // Compute midpoint
       PoseSE2 pm = interpolatePose(start, end, 0.5);
@@ -2470,12 +2496,90 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
       teb().insertPose(seg.idx + 1, pm);
       teb().insertTimeDiff(seg.idx + 1, dt2_mid);
 
-      teb().Pose(seg.idx + 1).theta() = computeHeading(teb().Pose(seg.idx), teb().Pose(seg.idx + 1), teb().Pose(seg.idx + 2));
-        
+      teb().Pose(seg.idx + 1).theta() = findThetaMidNH(teb().Pose(seg.idx), teb().Pose(seg.idx + 1));
+      teb().Pose(seg.idx + 2).theta() = findThetaMidNH(teb().Pose(seg.idx+1), teb().Pose(seg.idx + 2));
+
       if (seg.idx == 0)
+      {
         teb().Pose(seg.idx).theta() = teb().Pose(seg.idx).theta();
+
+        PoseSE2 P0 = teb().Pose(0);   // start
+        PoseSE2 P1 = teb().Pose(1);   // 방금 넣은 pm
+        PoseSE2 P2 = teb().Pose(2);   // 원래 end
+
+        PoseSE2 mid0 = interpolatePose(P0, P1, 0.5);
+
+        auto [mp, r, index] = findModifiedPose( Eigen::Vector2d(mid0.x(), mid0.y()), Eigen::Vector2d(P0.x(), P0.y()), Eigen::Vector2d(P1.x(), P1.y()), outFile);
+        
+        if (index >= 0) { 
+          auto it = std::find(idx_hist.begin(), idx_hist.end(), index);
+          if (it != idx_hist.end()) {
+              break;
+          }
+
+          idx_hist.push_back(index);
+          if (idx_hist.size() > 64) idx_hist.pop_front();
+
+          mid0.x() = mp.x();
+          mid0.y() = mp.y();
+        }
+        
+        double dt01  = teb().TimeDiff(0);
+        double L01   = computeArcLength(P0, P1);
+        double L0a   = computeArcLength(P0, mid0);
+        double L0b   = computeArcLength(mid0, P1);
+        double w0a   = L0a / L01;
+        double w0b   = L0b / L01;
+
+        teb().TimeDiff(0) = dt01 * w0a;         // 0→mid0
+        teb().insertPose(1, mid0);              // mid0이 새 index 1
+        teb().insertTimeDiff(1, dt01 * w0b);    // mid0→pm (pm은 index 2로 밀림)
+
+        teb().Pose(1).theta() = findThetaMidNH(teb().Pose(1), teb().Pose(2));  // mid0 vs pm
+        teb().Pose(2).theta() = findThetaMidNH(teb().Pose(2), teb().Pose(3));  // pm vs end (있을 때)
+
+
+        // Adjust indices of the rest of the queue
+        std::vector<Segment> temp;
+        while (!pq.empty()) {
+          Segment s = pq.top(); pq.pop();
+          if (s.idx > seg.idx) s.idx += 2;
+          temp.push_back(s);
+        }
+        for (auto &s : temp) 
+        {
+          pq.push(s);
+        }
+
+        std_msgs::ColorRGBA red;
+        red.r = 1.0;
+        red.g = 0.0;
+        red.b = 0.0;
+        red.a = 1.0;
+        std::vector<PoseSE2> pose_list4;
+
+        for (int i = 0; i < teb().sizePoses(); ++i)
+        {
+          pose_list4.push_back(teb().Pose(i));
+        }
+        visualization_->visualizeTebPoses(pose_list4, red);
+        //std::cin.get();
+
+
+        double L0 = computeArcLength(teb().Pose(0), teb().Pose(1));
+        double L1 = computeArcLength(teb().Pose(1), teb().Pose(2));
+        double L2 = computeArcLength(teb().Pose(2), teb().Pose(3));
+        if (std::isfinite(L0)) pq.push({0, L0});
+        if (std::isfinite(L1)) pq.push({1, L1});
+        if (std::isfinite(L2)) pq.push({2, L2});
+
+        continue;
+
+      }
+        
       else
-        teb().Pose(seg.idx).theta() = computeHeading(teb().Pose(seg.idx - 1), teb().Pose(seg.idx), teb().Pose(seg.idx + 1));
+        teb().Pose(seg.idx).theta() = findThetaMidNH(teb().Pose(seg.idx - 1), teb().Pose(seg.idx));
+
       for (size_t idx = 0; idx < teb().sizePoses(); ++idx)
       {
         if (outFile.is_open())
@@ -2489,29 +2593,29 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
         }
       }            
 
-      // double dtheta1 = std::fabs(normalizeTheta(teb().Pose(seg.idx + 1).theta() - teb().Pose(seg.idx).theta()));
-      // double min_time2;
-      // if (seg.idx + 2 < teb().sizePoses())
-      // {
-      //   double dtheta2 = std::fabs(normalizeTheta(teb().Pose(seg.idx + 2).theta() - teb().Pose(seg.idx + 1).theta()));
-      //   min_time2 = minTime_for_rot(dtheta2, cfg_->robot.max_vel_theta, cfg_->robot.acc_lim_theta);
-      // } 
-      // else
-      // {
-      //   min_time2 = -1.0;
-      // }
+      double dtheta1 = std::fabs(normalizeTheta(teb().Pose(seg.idx + 1).theta() - teb().Pose(seg.idx).theta()));
+      double min_time2;
+      if (seg.idx + 2 < teb().sizePoses())
+      {
+        double dtheta2 = std::fabs(normalizeTheta(teb().Pose(seg.idx + 2).theta() - teb().Pose(seg.idx + 1).theta()));
+        min_time2 = minTime_for_rot(dtheta2, cfg_->robot.max_vel_theta, cfg_->robot.acc_lim_theta);
+      } 
+      else
+      {
+        min_time2 = -1.0;
+      }
 
-      // double min_time1 = minTime_for_rot(dtheta1, cfg_->robot.max_vel_theta, cfg_->robot.acc_lim_theta);
+      double min_time1 = minTime_for_rot(dtheta1, cfg_->robot.max_vel_theta, cfg_->robot.acc_lim_theta);
       
-      // if (min_time1 > teb().TimeDiff(seg.idx))
-      // {
-      //   teb().TimeDiff(seg.idx) = min_time1;
-      // }
+      if (min_time1 > teb().TimeDiff(seg.idx))
+      {
+        teb().TimeDiff(seg.idx) = min_time1;
+      }
 
-      // if (min_time2 > teb().TimeDiff(seg.idx+1))
-      // {
-      //   teb().TimeDiff(seg.idx + 1) = min_time2;
-      // }
+      if (min_time2 > teb().TimeDiff(seg.idx+1))
+      {
+        teb().TimeDiff(seg.idx + 1) = min_time2;
+      }
 
       // Adjust indices of the rest of the queue
       std::vector<Segment> temp;
@@ -2542,7 +2646,7 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
       double L_left  = computeArcLength(start, pm);
       double L_right = computeArcLength(pm, end);
 
-      if (std::isfinite(L_left) && std::isfinite(L_right) && L_left  >= min_length && L_right >= min_length)
+      if (std::isfinite(L_left) && std::isfinite(L_right))
       {
         // Push new segments into priority queue
         pq.push({seg.idx, L_left});
@@ -2555,23 +2659,25 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
 
     }
 
+
+
     // else: no collision → segment is safe and dropped
   }
 
-  for(int i = 0; i+1 < teb().sizePoses(); i++)
-  {
-    PoseSE2 inter_pose = interpolatePose(teb().Pose(i), teb().Pose(i+1), 0.5);
-    double dt = teb().TimeDiff(i);
-    double inter_theta = computeOri(Eigen::Vector2d(teb().Pose(i).x(), teb().Pose(i).y()), Eigen::Vector2d(teb().Pose(i+1).x(), teb().Pose(i+1).y()));
-    if((teb().Pose(i).theta() - inter_theta) > M_PI/36 && (teb().Pose(i).theta() - teb().Pose(i+1).theta() > M_PI/36))
-    {
-      inter_pose.theta() = inter_theta;
-      teb().insertPose(i+1, inter_pose);
-      teb().insertTimeDiff(i+1, dt / 2);
-      teb().TimeDiff(i) = dt / 2;
-      i += 1;
-    }
-  }
+  // for(int i = 0; i+1 < teb().sizePoses(); i++)
+  // {
+  //   PoseSE2 inter_pose = interpolatePose(teb().Pose(i), teb().Pose(i+1), 0.5);
+  //   double dt = teb().TimeDiff(i);
+  //   double inter_theta = computeOri(Eigen::Vector2d(teb().Pose(i).x(), teb().Pose(i).y()), Eigen::Vector2d(teb().Pose(i+1).x(), teb().Pose(i+1).y()));
+  //   if((teb().Pose(i).theta() - inter_theta) > M_PI/36 && (teb().Pose(i).theta() - teb().Pose(i+1).theta() > M_PI/36))
+  //   {
+  //     inter_pose.theta() = inter_theta;
+  //     teb().insertPose(i+1, inter_pose);
+  //     teb().insertTimeDiff(i+1, dt / 2);
+  //     teb().TimeDiff(i) = dt / 2;
+  //     i += 1;
+  //   }
+  // }
 
 
   std_msgs::ColorRGBA blue;
