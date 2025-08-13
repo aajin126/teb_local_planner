@@ -509,6 +509,7 @@ private:
   int depth = 0;
   int max_depth = 10;
   std::string log_filename_; 
+  ros::NodeHandle private_nh_;
 
   // flags
   bool initialized_; //!< Keeps track about the correct initialization of this class

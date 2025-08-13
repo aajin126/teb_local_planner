@@ -203,6 +203,11 @@ void TebLocalPlannerROS::initialize(std::string name, tf2_ros::Buffer* tf, costm
     nh_move_base.param("controller_frequency", controller_frequency, controller_frequency);
     failure_detector_.setBufferLength(std::round(cfg_.recovery.oscillation_filter_duration*controller_frequency));
 
+    private_nh_ = ros::NodeHandle("~/" + name);
+
+    // 초기값 한 번 읽어두기 (없어도 됨)
+    private_nh_.getParam("log_filename", log_filename_);
+    
     // set initialized flag
     initialized_ = true;
 
@@ -247,20 +252,17 @@ bool TebLocalPlannerROS::computeVelocityCommands(geometry_msgs::Twist& cmd_vel)
   // 경과 시간 계산 (마이크로초 단위)
   auto duration = std::chrono::duration<double, std::milli>(end - start).count();
 
-  ros::NodeHandle nh_log("~/");
-  nh_log.getParam("log_filename", log_filename_);
+  private_nh_.getParam("log_filename", log_filename_);
 
-  // 파일에 저장
   if (!log_filename_.empty()) {
     std::ofstream outFile(log_filename_, std::ios::app);
-    if (outFile.is_open()) {
-      outFile << "Execution time: " << duration << " ms" << std::endl;
+    if (outFile) {
+      outFile << "Execution time: " << duration << " ms\n";
     } else {
       ROS_WARN_STREAM("Failed to open log file: " << log_filename_);
     }
   }
 
-  
   // 콘솔 출력
   //ROS_INFO("Execution time: %f ms \n", duration);
   cmd_vel = cmd_vel_stamped.twist;
