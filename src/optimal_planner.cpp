@@ -1851,7 +1851,7 @@ std::tuple<Eigen::Vector2d, double, double> TebOptimalPlanner::findModifiedPose(
 {
     const auto& info = *costmap_info_;
     const auto& df = *distance_field_;
-    const double max_dist = 0.3;
+    const double max_dist = 0.4;
 
     Eigen::Vector2d boundary = getBoundaryPointFromCollision(coll_pt);
     double boundary_val = distanceFieldAt(boundary.x(), boundary.y());
@@ -1874,7 +1874,7 @@ std::tuple<Eigen::Vector2d, double, double> TebOptimalPlanner::findModifiedPose(
         if (n.norm() == 0.0)
             return {coll_pt, coll_val, coll_idx};
     }
-    else if (coll_val < 0.30)
+    else if (coll_val < 0.40)
     {
         // case: Boundary value != 0
         n = computePushDirection(coll_pt, boundary, max_dist);
@@ -2414,7 +2414,7 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
   // }
 
   const double min_length = 0.05;
-  const double min_dist_thresh = 0.3;
+  const double min_dist_thresh = 0.4;
 
   // Initialize priority queue with all segments
   std::priority_queue<Segment, std::vector<Segment>, SegmentCompare> pq;

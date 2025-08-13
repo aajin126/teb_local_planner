@@ -158,7 +158,8 @@ public:
     */
   uint32_t computeVelocityCommands(const geometry_msgs::PoseStamped& pose, const geometry_msgs::TwistStamped& velocity,
                                    geometry_msgs::TwistStamped &cmd_vel, std::string &message);
-
+  
+  void setLogFile(const std::string& path) { log_filename_ = path; }
   /**
     * @brief  Check if the goal pose has been achieved
     * 
@@ -507,7 +508,7 @@ private:
   double ROBOT_RADIUS = 0.3;
   int depth = 0;
   int max_depth = 10;
-
+  std::string log_filename_; 
 
   // flags
   bool initialized_; //!< Keeps track about the correct initialization of this class

@@ -202,7 +202,7 @@ void TebLocalPlannerROS::initialize(std::string name, tf2_ros::Buffer* tf, costm
     double controller_frequency = 5;
     nh_move_base.param("controller_frequency", controller_frequency, controller_frequency);
     failure_detector_.setBufferLength(std::round(cfg_.recovery.oscillation_filter_duration*controller_frequency));
-    
+
     // set initialized flag
     initialized_ = true;
 
@@ -246,15 +246,20 @@ bool TebLocalPlannerROS::computeVelocityCommands(geometry_msgs::Twist& cmd_vel)
 
   // 경과 시간 계산 (마이크로초 단위)
   auto duration = std::chrono::duration<double, std::milli>(end - start).count();
-  
+
+  ros::NodeHandle nh_log("~/");
+  nh_log.getParam("log_filename", log_filename_);
+
   // 파일에 저장
-  std::ofstream outFile("/home/glab/execution_time.txt", std::ios::app); // 파일을 append 모드로 열기
-  if (outFile.is_open()) {
+  if (!log_filename_.empty()) {
+    std::ofstream outFile(log_filename_, std::ios::app);
+    if (outFile.is_open()) {
       outFile << "Execution time: " << duration << " ms" << std::endl;
-      outFile.close();
-  } else {
-      std::cerr << "Failed to open file for writing." << std::endl;
+    } else {
+      ROS_WARN_STREAM("Failed to open log file: " << log_filename_);
+    }
   }
+
   
   // 콘솔 출력
   //ROS_INFO("Execution time: %f ms \n", duration);
