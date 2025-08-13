@@ -257,7 +257,7 @@ bool TebLocalPlannerROS::computeVelocityCommands(geometry_msgs::Twist& cmd_vel)
   }
   
   // 콘솔 출력
-  ROS_INFO("Execution time: %f ms \n", duration);
+  //ROS_INFO("Execution time: %f ms \n", duration);
   cmd_vel = cmd_vel_stamped.twist;
 
   return outcome == mbf_msgs::ExePathResult::SUCCESS;
@@ -455,7 +455,6 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
     costmap_2d::calculateMinAndMaxDistances(footprint_spec_, robot_inscribed_radius_, robot_circumscribed_radius);
   }
 
-  ROS_INFO("feasibility check");
   bool feasible = planner_->isTrajectoryFeasible(costmap_model_.get(), footprint_spec_, robot_inscribed_radius_, robot_circumscribed_radius, cfg_.trajectory.feasibility_check_no_poses, cfg_.trajectory.feasibility_check_lookahead_distance);
   if (!feasible)
   {
@@ -472,7 +471,6 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
     return mbf_msgs::ExePathResult::NO_VALID_CMD;
   }
   // Now visualize everything
-  ROS_INFO("visualization");
   planner_->visualize();
   visualization_->publishObstacles(obstacles_, costmap_->getResolution());
   visualization_->publishCustomViaPoints(via_points_);
@@ -1355,7 +1353,7 @@ void TebLocalPlannerROS::saturateVelocity(double& vx, double& vy, double& omega,
     vy *= max_vel_trans_ratio;
   }
 
-  ROS_INFO("Saturate Vel :x : %lf, theta : %lf", vx, omega);
+  //ROS_INFO("Saturate Vel :x : %lf, theta : %lf", vx, omega);
 }
      
      

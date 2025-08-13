@@ -1368,7 +1368,7 @@ void TebOptimalPlanner::computeCurrentCost(double obst_cost_scale, double viapoi
       continue; // skip these edges if alternative_time_cost is active
     }
     cost_ += cur_cost;
-    ROS_INFO("cost : %d", cost_);
+    //ROS_INFO("cost : %d", cost_);
   }
 
   // delete temporary created graph
@@ -1414,7 +1414,7 @@ void TebOptimalPlanner::extractVelocity(const PoseSE2& pose1, const PoseSE2& pos
   double orientdiff = g2o::normalize_theta(pose2.theta() - pose1.theta());
   omega = orientdiff/dt;
 
-  ROS_INFO("Extract Vel : Pose1(%lf, %lf, %lf), Pose2(%lf, %lf, %lf), Vel (x : %lf, theta : %lf)", pose1.x(), pose1.y(), pose1.theta(), pose2.x(), pose2.y(), pose2.theta(), vx, omega);
+  //ROS_INFO("Extract Vel : Pose1(%lf, %lf, %lf), Pose2(%lf, %lf, %lf), Vel (x : %lf, theta : %lf)", pose1.x(), pose1.y(), pose1.theta(), pose2.x(), pose2.y(), pose2.theta(), vx, omega);
 }
 
 bool TebOptimalPlanner::getVelocityCommand(double& vx, double& vy, double& omega, int look_ahead_poses) const
@@ -1447,7 +1447,7 @@ bool TebOptimalPlanner::getVelocityCommand(double& vx, double& vy, double& omega
     return false;
   }
 
-  ROS_INFO("look ahead poses : %d", look_ahead_poses);
+  //ROS_INFO("look ahead poses : %d", look_ahead_poses);
 	  
   // Get velocity from the first two configurations
   extractVelocity(teb_.Pose(0), teb_.Pose(look_ahead_poses), dt, vx, vy, omega);
@@ -2429,8 +2429,8 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
   // Process until all segments are handled
   while (!pq.empty()) {
 
-    ROS_INFO("teb pose size : %d", teb().sizePoses());
-    ROS_INFO("time diff size : %d", teb().sizeTimeDiffs());
+    // ROS_INFO("teb pose size : %d", teb().sizePoses());
+    // ROS_INFO("time diff size : %d", teb().sizeTimeDiffs());
     Segment seg = pq.top();
     pq.pop();
 
