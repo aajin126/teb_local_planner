@@ -2297,13 +2297,13 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
 
     if(isRotating(start, end) || isBackward(start, end))
     {
-      double dtheta = std::fabs(normalizeTheta(start.theta() - end.theta()));
-      double min_time = std::max(minTime_for_lin(computeArcLength(start, end), cfg_->robot.max_vel_x, cfg_->robot.acc_lim_x), minTime_for_rot(dtheta, cfg_->robot.max_vel_theta, cfg_->robot.acc_lim_theta));
+      // double dtheta = std::fabs(normalizeTheta(start.theta() - end.theta()));
+      // double min_time = std::max(minTime_for_lin(computeArcLength(start, end), cfg_->robot.max_vel_x, cfg_->robot.acc_lim_x), minTime_for_rot(dtheta, cfg_->robot.max_vel_theta, cfg_->robot.acc_lim_theta));
 
-      if (min_time > dt)
-      {
-        teb().TimeDiff(seg.idx) = min_time;
-      }
+      // if (min_time > dt)
+      // {
+      //   teb().TimeDiff(seg.idx) = min_time;
+      // }
 
       continue;
     }
@@ -2464,29 +2464,29 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
       //   }
       // }            
 
-      double dtheta1 = std::fabs(normalizeTheta(teb().Pose(seg.idx + 1).theta() - teb().Pose(seg.idx).theta()));
-      double min_time2;
-      if (seg.idx + 2 < teb().sizePoses())
-      {
-        double dtheta2 = std::fabs(normalizeTheta(teb().Pose(seg.idx + 2).theta() - teb().Pose(seg.idx + 1).theta()));
-        min_time2 = minTime_for_rot(dtheta2, cfg_->robot.max_vel_theta, cfg_->robot.acc_lim_theta);
-      } 
-      else
-      {
-        min_time2 = -1.0;
-      }
+      // double dtheta1 = std::fabs(normalizeTheta(teb().Pose(seg.idx + 1).theta() - teb().Pose(seg.idx).theta()));
+      // double min_time2;
+      // if (seg.idx + 2 < teb().sizePoses())
+      // {
+      //   double dtheta2 = std::fabs(normalizeTheta(teb().Pose(seg.idx + 2).theta() - teb().Pose(seg.idx + 1).theta()));
+      //   min_time2 = minTime_for_rot(dtheta2, cfg_->robot.max_vel_theta, cfg_->robot.acc_lim_theta);
+      // } 
+      // else
+      // {
+      //   min_time2 = -1.0;
+      // }
 
-      double min_time1 = minTime_for_rot(dtheta1, cfg_->robot.max_vel_theta, cfg_->robot.acc_lim_theta);
+      // double min_time1 = minTime_for_rot(dtheta1, cfg_->robot.max_vel_theta, cfg_->robot.acc_lim_theta);
       
-      if (min_time1 > teb().TimeDiff(seg.idx))
-      {
-        teb().TimeDiff(seg.idx) = min_time1;
-      }
+      // if (min_time1 > teb().TimeDiff(seg.idx))
+      // {
+      //   teb().TimeDiff(seg.idx) = min_time1;
+      // }
 
-      if (min_time2 > teb().TimeDiff(seg.idx+1))
-      {
-        teb().TimeDiff(seg.idx + 1) = min_time2;
-      }
+      // if (min_time2 > teb().TimeDiff(seg.idx+1))
+      // {
+      //   teb().TimeDiff(seg.idx + 1) = min_time2;
+      // }
 
       // Adjust indices of the rest of the queue
       std::vector<Segment> temp;
