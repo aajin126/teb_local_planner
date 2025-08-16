@@ -186,6 +186,8 @@ void TebLocalPlannerROS::initialize(std::string name, tf2_ros::Buffer* tf, costm
     double controller_frequency = 5;
     nh_move_base.param("controller_frequency", controller_frequency, controller_frequency);
     failure_detector_.setBufferLength(std::round(cfg_.recovery.oscillation_filter_duration*controller_frequency));
+
+    private_nh_.getParam("log_filename", log_filename_);
     
     // set initialized flag
     initialized_ = true;
