@@ -1862,8 +1862,8 @@ std::tuple<Eigen::Vector2d, double, double> TebOptimalPlanner::findModifiedPose(
     // log << "  World Coord: (" << coll_pt.x() << ", " << coll_pt.y() << ")\n";
     // log << "  Distance: " << coll_val << "\n";
 
-    visualization_->visualizetwoPoint({boundary.x(),boundary.y()}, {coll_pt.x(),coll_pt.y()});
-    visualization_->visualizeEndPoints(p2, p3);
+    //visualization_->visualizetwoPoint({boundary.x(),boundary.y()}, {coll_pt.x(),coll_pt.y()});
+    //visualization_->visualizeEndPoints(p2, p3);
     //std::cin.get();
 
     Eigen::Vector2d n;
@@ -1885,7 +1885,7 @@ std::tuple<Eigen::Vector2d, double, double> TebOptimalPlanner::findModifiedPose(
     auto line = bresenhamLineWorld(boundary, pt_fwd);
     auto result = climbLocalMax(line, max_dist);
 
-    visualization_->visualizeLine({boundary.x(),boundary.y()}, {pt_fwd.x(),pt_fwd.y()});
+    //visualization_->visualizeLine({boundary.x(),boundary.y()}, {pt_fwd.x(),pt_fwd.y()});
     //std::cin.get();
 
     Eigen::Vector2i bc = line[result.first];
@@ -1904,12 +1904,12 @@ std::tuple<Eigen::Vector2d, double, double> TebOptimalPlanner::findModifiedPose(
     // log << "  World Coord: (" << best_pt.x() << ", " << best_pt.y() << ")\n";
     // log << "  Chosen Distance: " << result.second << "\n";
 
-    std_msgs::ColorRGBA blue;
-    blue.r = 0.0;
-    blue.g = 0.0;
-    blue.b = 1.0;
-    blue.a = 1.0;
-    visualization_->publishArrow(coll_pt, best_pt, blue);
+    // std_msgs::ColorRGBA blue;
+    // blue.r = 0.0;
+    // blue.g = 0.0;
+    // blue.b = 1.0;
+    // blue.a = 1.0;
+    // visualization_->publishArrow(coll_pt, best_pt, blue);
     //std::cin.get();
 
     return {best_pt, result.second, best_idx};
