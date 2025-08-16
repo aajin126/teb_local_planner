@@ -43,11 +43,6 @@
 
 #include <boost/algorithm/string.hpp>
 
-#include <fstream>
-#include <sstream>
-#include <ctime>  // for std::time_t, std::strftime
-#include <iomanip> // for std::put_time
-
 // MBF return codes
 #include <mbf_msgs/ExePathResult.h>
 
@@ -61,9 +56,6 @@
 #include "g2o/core/optimization_algorithm_levenberg.h"
 #include "g2o/solvers/csparse/linear_solver_csparse.h"
 #include "g2o/solvers/cholmod/linear_solver_cholmod.h"
-
-#define SDT_DEAD_RECKONING_IMPLEMENTATION
-#include <teb_local_planner/sdt_dead_reckoning.h>
 
 
 // register this planner both as a BaseLocalPlanner and as a MBF's CostmapController plugin
@@ -118,15 +110,7 @@ void TebLocalPlannerROS::initialize(std::string name, tf2_ros::Buffer* tf, costm
         
     // create robot footprint/contour model for optimization
     cfg_.robot_model = getRobotFootprintFromParamServer(nh, cfg_);
-
-    // init other variables
-    tf_ = tf;
-    costmap_ros_ = costmap_ros;
-    costmap_ = costmap_ros_->getCostmap(); // locking should be done in MoveBase.
-
-    if (costmap_info_.costmap_data == nullptr)
-       updateSignedDistanceField();
-
+    
     // create the planner instance
     if (cfg_.hcp.enable_homotopy_class_planning)
     {
@@ -135,22 +119,21 @@ void TebLocalPlannerROS::initialize(std::string name, tf2_ros::Buffer* tf, costm
     }
     else
     {
-      planner_ = PlannerInterfacePtr(new TebOptimalPlanner(cfg_, &obstacles_, visualization_, &via_points_, &distance_field_, &costmap_info_, &px_out_, &py_out_));
+      planner_ = PlannerInterfacePtr(new TebOptimalPlanner(cfg_, &obstacles_, visualization_, &via_points_));
       ROS_INFO("Parallel planning in distinctive topologies disabled.");
     }
-
-//    // init other variables
-//    tf_ = tf;
-//    costmap_ros_ = costmap_ros;
-//    costmap_ = costmap_ros_->getCostmap(); // locking should be done in MoveBase.
+    
+    // init other variables
+    tf_ = tf;
+    costmap_ros_ = costmap_ros;
+    costmap_ = costmap_ros_->getCostmap(); // locking should be done in MoveBase.
     
     costmap_model_ = boost::make_shared<base_local_planner::CostmapModel>(*costmap_);
 
     global_frame_ = costmap_ros_->getGlobalFrameID();
-
     cfg_.map_frame = global_frame_; // TODO
     robot_base_frame_ = costmap_ros_->getBaseFrameID();
-   
+
     //Initialize a costmap to polygon converter
     if (!cfg_.obstacles.costmap_converter_plugin.empty())
     {
@@ -165,7 +148,7 @@ void TebLocalPlannerROS::initialize(std::string name, tf2_ros::Buffer* tf, costm
         costmap_converter_->setCostmap2D(costmap_);
         
         costmap_converter_->startWorker(ros::Rate(cfg_.obstacles.costmap_converter_rate), costmap_, cfg_.obstacles.costmap_converter_spin_thread);
-        ROS_INFO_STREAM("Costmap conversion plugin " << cfg_.obstacles.costmap_converter_plugin << " loaded.");
+        ROS_INFO_STREAM("Costmap conversion plugin " << cfg_.obstacles.costmap_converter_plugin << " loaded.");        
       }
       catch(pluginlib::PluginlibException& ex)
       {
@@ -173,9 +156,10 @@ void TebLocalPlannerROS::initialize(std::string name, tf2_ros::Buffer* tf, costm
         costmap_converter_.reset();
       }
     }
-    else
+    else 
       ROS_INFO("No costmap conversion plugin specified. All occupied costmap cells are treaten as point obstacles.");
-
+  
+    
     // Get footprint of the robot and minimum and maximum distance from the center of the robot to its footprint vertices.
     footprint_spec_ = costmap_ros_->getRobotFootprint();
     costmap_2d::calculateMinAndMaxDistances(footprint_spec_, robot_inscribed_radius_, robot_circumscribed_radius);    
@@ -202,11 +186,6 @@ void TebLocalPlannerROS::initialize(std::string name, tf2_ros::Buffer* tf, costm
     double controller_frequency = 5;
     nh_move_base.param("controller_frequency", controller_frequency, controller_frequency);
     failure_detector_.setBufferLength(std::round(cfg_.recovery.oscillation_filter_duration*controller_frequency));
-
-    private_nh_ = ros::NodeHandle("~/" + name);
-
-    // 초기값 한 번 읽어두기 (없어도 됨)
-    private_nh_.getParam("log_filename", log_filename_);
     
     // set initialized flag
     initialized_ = true;
@@ -219,6 +198,8 @@ void TebLocalPlannerROS::initialize(std::string name, tf2_ros::Buffer* tf, costm
   }
 }
 
+
+
 bool TebLocalPlannerROS::setPlan(const std::vector<geometry_msgs::PoseStamped>& orig_global_plan)
 {
   // check if plugin is initialized
@@ -227,23 +208,27 @@ bool TebLocalPlannerROS::setPlan(const std::vector<geometry_msgs::PoseStamped>& 
     ROS_ERROR("teb_local_planner has not been initialized, please call initialize() before using this planner");
     return false;
   }
-  
+
   // store the global plan
   global_plan_.clear();
   global_plan_ = orig_global_plan;
 
+  // we do not clear the local planner here, since setPlan is called frequently whenever the global planner updates the plan.
+  // the local planner checks whether it is required to reinitialize the trajectory or not within each velocity computation step.  
+            
+  // reset goal_reached_ flag
   goal_reached_ = false;
   
   return true;
 }
 
+
 bool TebLocalPlannerROS::computeVelocityCommands(geometry_msgs::Twist& cmd_vel)
 {
-  ROS_DEBUG("computeVelocityCommands");
   std::string dummy_message;
   geometry_msgs::PoseStamped dummy_pose;
   geometry_msgs::TwistStamped dummy_velocity, cmd_vel_stamped;
-
+ 
   auto start = std::chrono::high_resolution_clock::now();
   uint32_t outcome = computeVelocityCommands(dummy_pose, dummy_velocity, cmd_vel_stamped, dummy_message);
   // 시간 측정 종료
@@ -263,10 +248,7 @@ bool TebLocalPlannerROS::computeVelocityCommands(geometry_msgs::Twist& cmd_vel)
     }
   }
 
-  // 콘솔 출력
-  //ROS_INFO("Execution time: %f ms \n", duration);
   cmd_vel = cmd_vel_stamped.twist;
-
   return outcome == mbf_msgs::ExePathResult::SUCCESS;
 }
 
@@ -302,10 +284,10 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
   robot_vel_.linear.y = robot_vel_tf.pose.position.y;
   robot_vel_.angular.z = tf2::getYaw(robot_vel_tf.pose.orientation);
   
-  // 1. prune global plan to cut off parts of the past (spatially before the robot)
+  // prune global plan to cut off parts of the past (spatially before the robot)
   pruneGlobalPlan(*tf_, robot_pose, global_plan_, cfg_.trajectory.global_plan_prune_distance);
 
-  // 2. Transform global plan to the frame of interest (w.r.t. the local costmap)
+  // Transform global plan to the frame of interest (w.r.t. the local costmap)
   std::vector<geometry_msgs::PoseStamped> transformed_plan;
   int goal_idx;
   geometry_msgs::TransformStamped tf_plan_to_global;
@@ -317,29 +299,24 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
     return mbf_msgs::ExePathResult::INTERNAL_ERROR;
   }
 
-  // 3. update via-points container
+  // update via-points container
   if (!custom_via_points_active_)
-  {
     updateViaPointsContainer(transformed_plan, cfg_.trajectory.global_plan_viapoint_sep);
-    // updateCustomViaPointsContainer(transformed_plan, *costmap_);
-  }
-  else
-    updateCustomViaPointsContainer(transformed_plan, *costmap_);
 
   nav_msgs::Odometry base_odom;
   odom_helper_.getOdom(base_odom);
 
-  // 4. check if global goal is reached
+  // check if global goal is reached
   geometry_msgs::PoseStamped global_goal;
   tf2::doTransform(global_plan_.back(), global_goal, tf_plan_to_global);
   double dx = global_goal.pose.position.x - robot_pose_.x();
   double dy = global_goal.pose.position.y - robot_pose_.y();
   double delta_orient = g2o::normalize_theta( tf2::getYaw(global_goal.pose.orientation) - robot_pose_.theta() );
-  if(fabs(std::sqrt(dx*dx+dy*dy)) < cfg_.goal_tolerance.xy_goal_tolerance)
-    // && fabs(delta_orient) < cfg_.goal_tolerance.yaw_goal_tolerance
-    // && (!cfg_.goal_tolerance.complete_global_plan || via_points_.size() == 0)
-    // && (base_local_planner::stopped(base_odom, cfg_.goal_tolerance.theta_stopped_vel, cfg_.goal_tolerance.trans_stopped_vel)
-    //     || cfg_.goal_tolerance.free_goal_vel))
+  if(fabs(std::sqrt(dx*dx+dy*dy)) < cfg_.goal_tolerance.xy_goal_tolerance
+    && fabs(delta_orient) < cfg_.goal_tolerance.yaw_goal_tolerance
+    && (!cfg_.goal_tolerance.complete_global_plan || via_points_.size() == 0)
+    && (base_local_planner::stopped(base_odom, cfg_.goal_tolerance.theta_stopped_vel, cfg_.goal_tolerance.trans_stopped_vel)
+        || cfg_.goal_tolerance.free_goal_vel))
   {
     goal_reached_ = true;
     return mbf_msgs::ExePathResult::SUCCESS;
@@ -386,47 +363,22 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
   
   // Update obstacle container with costmap information or polygons provided by a costmap_converter plugin
   if (costmap_converter_)
-  {
-    ROS_DEBUG("updateObstacleContainerWithCostmapConverter");
     updateObstacleContainerWithCostmapConverter();
-  }
   else
-  {
-    ROS_DEBUG("updateObstacleContainerWithCostmap");
     updateObstacleContainerWithCostmap();
-  }
+  
   // also consider custom obstacles (must be called after other updates, since the container is not cleared)
   updateObstacleContainerWithCustomObstacles();
-
-  // update signed distance field;
-  updateSignedDistanceField();
-
+  
+    
   // Do not allow config changes during the following optimization step
   boost::mutex::scoped_lock cfg_lock(cfg_.configMutex());
-
+    
   // Now perform the actual planning
-  // bool success = planner_->plan(robot_pose_, robot_goal_, robot_vel_, cfg_.goal_tolerance.free_goal_vel); // straight line init
-//  auto start = std::chrono::high_resolution_clock::now();
-//  ROS_DEBUG("Start planning");
+//   bool success = planner_->plan(robot_pose_, robot_goal_, robot_vel_, cfg_.goal_tolerance.free_goal_vel); // straight line init
+
+
   bool success = planner_->plan(transformed_plan, &robot_vel_, cfg_.goal_tolerance.free_goal_vel);
-//  // 시간 측정 종료
-//  auto end = std::chrono::high_resolution_clock::now();
-//
-//  // 경과 시간 계산 (마이크로초 단위)
-//  auto duration = std::chrono::duration<double, std::milli>(end - start).count();
-//
-//  // 파일에 저장
-//  std::ofstream outFile("/home/glab/execution_time.txt", std::ios::app); // 파일을 append 모드로 열기
-//  if (outFile.is_open()) {
-//      outFile << "Optimization time: " << duration << " ms" << std::endl;
-//      outFile.close();
-//  } else {
-//      std::cerr << "Failed to open file for writing." << std::endl;
-//  }
-//
-//  // 콘솔 출력
-//  std::cout << "Optimization time: " << duration << " ms" << std::endl;
-  ROS_DEBUG("Plan result: %s", success ? "successful" : "failed");
 
   if (!success)
   {
@@ -440,6 +392,7 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
     return mbf_msgs::ExePathResult::NO_VALID_CMD;
   }
 
+  // Check for divergence
   if (planner_->hasDiverged())
   {
     cmd_vel.twist.linear.x = cmd_vel.twist.linear.y = cmd_vel.twist.angular.z = 0;
@@ -453,7 +406,7 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
     last_cmd_ = cmd_vel.twist;
     return mbf_msgs::ExePathResult::NO_VALID_CMD;
   }
-      
+         
   // Check feasibility (but within the first few states only)
   if(cfg_.robot.is_footprint_dynamic)
   {
@@ -477,11 +430,6 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
     message = "teb_local_planner trajectory is not feasible";
     return mbf_msgs::ExePathResult::NO_VALID_CMD;
   }
-  // Now visualize everything
-  planner_->visualize();
-  visualization_->publishObstacles(obstacles_, costmap_->getResolution());
-  visualization_->publishCustomViaPoints(via_points_);
-  visualization_->publishGlobalPlan(global_plan_);
 
   // Get the velocity command for this sampling interval
   if (!planner_->getVelocityCommand(cmd_vel.twist.linear.x, cmd_vel.twist.linear.y, cmd_vel.twist.angular.z, cfg_.trajectory.control_look_ahead_poses))
@@ -526,9 +474,15 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
   
   // store last command (for recovery analysis etc.)
   last_cmd_ = cmd_vel.twist;
-
+  
+  // Now visualize everything    
+  planner_->visualize();
+  visualization_->publishObstacles(obstacles_, costmap_->getResolution());
+  visualization_->publishViaPoints(via_points_);
+  visualization_->publishGlobalPlan(global_plan_);
   return mbf_msgs::ExePathResult::SUCCESS;
 }
+
 
 bool TebLocalPlannerROS::isGoalReached()
 {
@@ -541,280 +495,7 @@ bool TebLocalPlannerROS::isGoalReached()
   return false;
 }
 
-std::vector<std::pair<geometry_msgs::Point, double>> TebLocalPlannerROS::detectNarrowPassages(const std::vector<geometry_msgs::PoseStamped>& transformed_plan, const costmap_2d::Costmap2D& costmap)
-{
-  std::vector<std::pair<geometry_msgs::Point, double>> medial_axis_point;
 
-  std::vector<geometry_msgs::Point> samples = generateSamples(transformed_plan);
-
-  visualization_->visualizeSamples(samples);
-
-  double obst_radius = 0.4;
-
-  std::vector<geometry_msgs::Point> narrow_points; // Store samples with obstacles
-  std::vector<geometry_msgs::Point> risky_points;
-
-  // 1. costmap info
-  unsigned int map_width = costmap.getSizeInCellsX();
-  unsigned int map_height = costmap.getSizeInCellsY();
-  const unsigned char* costmap_data = costmap.getCharMap();
-  double resolution = costmap.getResolution();
-  double origin_x = costmap.getOriginX();
-  double origin_y = costmap.getOriginY();
-
-  unsigned int padded_width = costmap_info_.map_width + 2;
-  unsigned int padded_height = costmap_info_.map_height + 2;
-
-
-  px_out_.assign(padded_width * padded_height, -1);
-  py_out_.assign(padded_width * padded_height, -1);
-  distance_field_.assign(costmap_info_.map_width * costmap_info_.map_height, std::numeric_limits<float>::infinity());
-
-  sdt_dead_reckoning(costmap_info_.map_width, costmap_info_.map_height,253, costmap_info_.costmap_data, distance_field_.data(), px_out_.data(), py_out_.data());
-
-  for (const auto& sample : samples)
-  {
-    auto obstacles_in_circle = getObstaclePointsInCircle(sample, obst_radius);
-
-    if (obstacles_in_circle)
-    {
-      //visualization_->visualizeNarrowSpace(sample, obst_radius);
-      narrow_points.push_back(sample);
-    }
-  }
-
-  double goal_threshold = 0.3;
-
-  geometry_msgs::Point robot_position;
-  robot_position.x = robot_pose_.x();
-  robot_position.y = robot_pose_.y();
-  double yaw = robot_pose_.theta();  // using theta 
-  // robot direction: (cos(yaw), sin(yaw))
-  double heading_x = cos(yaw);
-  double heading_y = sin(yaw);
-   
-  // 3. Find Medial points 
-  for (const auto& point : narrow_points)
-  {
-    auto medial_result = findMedialBallRadius(point, *costmap_, distance_field_);
-    double medial_radius = medial_result.second;
-    geometry_msgs::Point final_center = medial_result.first;
-
-    // Calculate vector betwen robot and medial point
-    double dx = final_center.x - robot_position.x;
-    double dy = final_center.y - robot_position.y;
-
-    double dot = dx * heading_x + dy * heading_y;
-
-    if (dot < 0)
-      continue;
-
-    double distance_to_goal = euclideanDistance(final_center, transformed_plan.back().pose.position);
-
-    //ROS_INFO("distance to goal : %lf", distance_to_goal);
-
-    // threshold 
-    if (medial_radius < thre && medial_radius >= 0.05) //&& distance_to_goal > goal_threshold
-    {
-      medial_axis_point.emplace_back(final_center, medial_radius);
-      //visualization_->visualizeMedialBall(final_center, medial_radius);
-    }
-
-  }
-  return medial_axis_point;
-}
-int TebLocalPlannerROS::checkAndCount(int mx, int my)
-{
-  if (mx < 0 || my < 0 ||
-      mx >= static_cast<int>(costmap_->getSizeInCellsX()) ||
-      my >= static_cast<int>(costmap_->getSizeInCellsY()))
-    return 0;
-
-  unsigned char cost = costmap_->getCost(mx, my);
-  return (cost == costmap_2d::LETHAL_OBSTACLE || cost == costmap_2d::NO_INFORMATION) ? 1 : 0;
-}
-
-double TebLocalPlannerROS::euclideanDistance(const geometry_msgs::Point& a, const geometry_msgs::Point& b) {
-    double distance = std::hypot(a.x - b.x, a.y - b.y);
-    std::cout << "distance:" << distance << std::endl;
-    return distance;
-}
-
-bool TebLocalPlannerROS::getObstaclePointsInCircle(const geometry_msgs::Point& center, double radius)
-{
-  int min_obstacles = 2;  // narrow하다고 판단하기 위한 최소 장애물 점 개수
-
-  // 중심 좌표를 costmap의 grid index로 변환
-  unsigned int center_mx, center_my;
-  if (!costmap_->worldToMap(center.x, center.y, center_mx, center_my))
-    return false;  // center가 costmap 범위 밖이면 그냥 false
-
-  // 반경을 grid 단위(셀 수)로 변환 (해상도로 나누어 정수화)
-  double resolution = costmap_->getResolution();
-  int grid_radius = std::max(1, static_cast<int>(radius / resolution));
-
-  int obstacleCount = 0;
-
-  // Bresenham의 원 알고리즘을 사용하여 원 둘레상의 셀을 계산
-  int x = grid_radius;
-  int y = 0;
-  int err = 1 - x;  // 초기 결정 변수
-
-  while (y <= x) {
-    // 원의 8분할 대칭 영역에 해당하는 셀들을 검사
-    obstacleCount += checkAndCount(center_mx + x, center_my + y);
-    obstacleCount += checkAndCount(center_mx + y, center_my + x);
-    obstacleCount += checkAndCount(center_mx - x, center_my + y);
-    obstacleCount += checkAndCount(center_mx - y, center_my + x);
-    obstacleCount += checkAndCount(center_mx - x, center_my - y);
-    obstacleCount += checkAndCount(center_mx - y, center_my - x);
-    obstacleCount += checkAndCount(center_mx + x, center_my - y);
-    obstacleCount += checkAndCount(center_mx + y, center_my - x);
-
-    if (obstacleCount >= min_obstacles)
-      return true;  // 충분한 장애물이 있으면 바로 true 반환
-
-    y++;
-    if (err < 0) {
-      err += 2 * y + 1;
-    } else {
-      x--;
-      err += 2 * (y - x + 1);
-    }
-  }
-
-  return (obstacleCount >= min_obstacles);
-}
-
-std::vector<geometry_msgs::Point> TebLocalPlannerROS::generateSamples(
-  const std::vector<geometry_msgs::PoseStamped>& transformed_plan)
-{
-  std::vector<geometry_msgs::Point> samples;
-
-  const size_t step = 5;
-
-  for (size_t i = 0; i < transformed_plan.size(); i += step)
-  {
-    geometry_msgs::Point p = transformed_plan[i].pose.position;
-    samples.push_back(p);
-  }
-
-  if (!transformed_plan.empty() && (transformed_plan.size() - 1) % step != 0)
-  {
-    samples.push_back(transformed_plan.back().pose.position);
-  }
-
-  return samples;
-}
-
-//grid base search
-std::pair<geometry_msgs::Point, double> TebLocalPlannerROS::findMedialBallRadius(
-  const geometry_msgs::Point& point, const costmap_2d::Costmap2D& costmap, const std::vector<float>& distance_field)
-{
-    // 1. costmap info
-    unsigned int map_width = costmap.getSizeInCellsX();
-    unsigned int map_height = costmap.getSizeInCellsY();
-    double resolution = costmap.getResolution();
-    double origin_x = costmap.getOriginX();
-    double origin_y = costmap.getOriginY();
-
-    //각 sample point에 대해 projection 수행
-    geometry_msgs::Point medial_center = performMedialAxisClimb(point, *costmap_, distance_field, resolution, origin_x, origin_y);
-
-    int grid_x = static_cast<int>((medial_center.x - origin_x) / resolution);
-    int grid_y = static_cast<int>((medial_center.y - origin_y) / resolution);
-    int idx = grid_x + grid_y * map_width;
-    double radius = distance_field[idx]* resolution;
-
-    return { medial_center, radius };
-}
-
-geometry_msgs::Point TebLocalPlannerROS::performMedialAxisClimb(
-  const geometry_msgs::Point& start_point,
-  const costmap_2d::Costmap2D& costmap,
-  const std::vector<float>& distance_field,
-  double resolution, double origin_x, double origin_y)
-{
-    unsigned int map_width = costmap.getSizeInCellsX();
-    unsigned int map_height = costmap.getSizeInCellsY();
-
-    // 초기 위치
-    int cur_x = static_cast<int>((start_point.x - origin_x) / resolution);
-    int cur_y = static_cast<int>((start_point.y - origin_y) / resolution);
-    int cur_idx = cur_x + cur_y * map_width;
-    float cur_dist = distance_field[cur_idx];
-
-    // threshold 조건 추가
-    const float threshold = 0.4; // meter 단위
-
-    if (cur_dist * resolution >= threshold)
-    {
-        geometry_msgs::Point medial_center;
-        medial_center.x = origin_x + (cur_x + 0.5) * resolution;
-        medial_center.y = origin_y + (cur_y + 0.5) * resolution;
-        medial_center.z = 0.0;
-        return medial_center;
-    }
-
-    bool moved = true;
-    int max_iterations = 100;
-    int iteration = 0;
-
-    while (moved && iteration < max_iterations)
-    {
-        moved = false;
-        float best_dist = cur_dist;
-        int best_x = cur_x;
-        int best_y = cur_y;
-
-        for (int dy = -1; dy <= 1; dy++) {
-            for (int dx = -1; dx <= 1; dx++) {
-                if (dx == 0 && dy == 0) continue;
-
-                int nx = cur_x + dx;
-                int ny = cur_y + dy;
-                if (nx < 0 || ny < 0 || nx >= static_cast<int>(map_width) || ny >= static_cast<int>(map_height))
-                    continue;
-
-                int n_idx = nx + ny * map_width;
-                float n_dist = distance_field[n_idx];
-
-                if (n_dist * resolution >= threshold) {
-                    // threshold를 만족하면 바로 medial center로 간주하고 return
-                    geometry_msgs::Point medial_center;
-                    medial_center.x = origin_x + (nx + 0.5) * resolution;
-                    medial_center.y = origin_y + (ny + 0.5) * resolution;
-                    medial_center.z = 0.0;
-                    return medial_center;
-                }
-
-                if (n_dist > best_dist) {
-                    best_dist = n_dist;
-                    best_x = nx;
-                    best_y = ny;
-                    moved = true;
-                }
-            }
-        }
-
-        if (!moved)
-            break;
-
-        cur_x = best_x;
-        cur_y = best_y;
-        cur_idx = cur_x + cur_y * map_width;
-        cur_dist = distance_field[cur_idx];
-
-        iteration++;
-    }
-
-    geometry_msgs::Point medial_center;
-    medial_center.x = origin_x + (cur_x + 0.5) * resolution;
-    medial_center.y = origin_y + (cur_y + 0.5) * resolution;
-    medial_center.z = 0.0;
-
-    return medial_center;
-}
 
 void TebLocalPlannerROS::updateObstacleContainerWithCostmap()
 {  
@@ -894,11 +575,9 @@ void TebLocalPlannerROS::updateObstacleContainerWithCustomObstacles()
 {
   // Add custom obstacles obtained via message
   boost::mutex::scoped_lock l(custom_obst_mutex_);
-  ROS_DEBUG("updateObstacleContainerWithCustomObstacles");
 
   if (!custom_obstacle_msg_.obstacles.empty())
   {
-    ROS_DEBUG("Start to updateObstacleContainerWithCustomObstacles");
     // We only use the global header to specify the obstacle coordinate system instead of individual ones
     Eigen::Affine3d obstacle_to_map_eig;
     try 
@@ -987,103 +666,7 @@ void TebLocalPlannerROS::updateViaPointsContainer(const std::vector<geometry_msg
   }
   
 }
-
-void TebLocalPlannerROS::updateCustomViaPointsContainer(const std::vector<geometry_msgs::PoseStamped>& transformed_plan, const costmap_2d::Costmap2D& costmap)
-{
-    // Clear the existing via-points
-    via_points_.clear();
-
-    // Get medial axis points
-    auto medial_axis_points = detectNarrowPassages(transformed_plan, *costmap_);
-    ROS_DEBUG("get medial axis points");
-
-    // Return if no medial axis points are available
-    if (medial_axis_points.empty())
-        return;
-
-    // Create a vector to store the closest plan index for each medial axis point
-    std::vector<std::pair<int, Eigen::Vector2d>> indexed_medial_points;
-
-    // Map each medial axis point to its closest transformed_plan index
-    for (const auto& medial_point_pair : medial_axis_points)
-    {
-        const auto& medial_point = medial_point_pair.first; // geometry_msgs::Point
-        Eigen::Vector2d medial_point_vec(medial_point.x, medial_point.y);
-
-        int closest_plan_index = -1;
-        double min_distance = std::numeric_limits<double>::max();
-
-        for (size_t i = 0; i < transformed_plan.size(); ++i)
-        {
-            const auto& plan_pose = transformed_plan[i];
-            Eigen::Vector2d plan_point_vec(plan_pose.pose.position.x, plan_pose.pose.position.y);
-            double distance = (medial_point_vec - plan_point_vec).squaredNorm();
-
-            if (distance < min_distance)
-            {
-                min_distance = distance;
-                closest_plan_index = i;
-            }
-        }
-
-        // Save the closest plan index and the medial point
-        indexed_medial_points.emplace_back(closest_plan_index, medial_point_vec);
-    }
-
-    // Sort the indexed medial points by the closest plan index
-    std::sort(indexed_medial_points.begin(), indexed_medial_points.end(),
-              [](const std::pair<int, Eigen::Vector2d>& a, const std::pair<int, Eigen::Vector2d>& b) {
-                  return a.first < b.first;
-              });
-
-    // Add sorted medial points to via_points_
-    for (const auto& indexed_point : indexed_medial_points)
-    {
-        via_points_.emplace_back(indexed_point.second);
-    }
-}
-
-void TebLocalPlannerROS::updateSignedDistanceField()
-{
-  if (!costmap_) return;
-
-  ROS_DEBUG("updateSignedDistanceField");
-
-  costmap_info_.map_width = costmap_->getSizeInCellsX();
-  costmap_info_.map_height = costmap_->getSizeInCellsY();
-  costmap_info_.resolution = costmap_->getResolution();
-  costmap_info_.origin_x = costmap_->getOriginX();
-  costmap_info_.origin_y = costmap_->getOriginY();
-  costmap_info_.costmap_data = costmap_->getCharMap();
-
-//  std::ofstream fout("/home/glab/costmap_data.txt");
-//
-//  if (fout.is_open())
-//  {
-//    for (unsigned int y = 0; y < costmap_info_.map_height; ++y)
-//    {
-//      for (unsigned int x = 0; x < costmap_info_.map_width; ++x)
-//      {
-//        unsigned int index = x + y * costmap_info_.map_width;
-//         fout << static_cast<int>(costmap_info_.costmap_data[index]) << " ";
-//      }
-//      fout << "\n";
-//    }
-//    fout.close();
-//  }
-//  else
-//  {
-//    ROS_WARN("Failed to open file to save costmap data");
-//  }
-  px_out_.assign(costmap_info_.map_width  * costmap_info_.map_height, -1);
-  py_out_.assign(costmap_info_.map_width  * costmap_info_.map_height, -1);
-  distance_field_.assign(costmap_info_.map_width * costmap_info_.map_height, std::numeric_limits<float>::infinity());
-
-  sdt_dead_reckoning(costmap_info_.map_width, costmap_info_.map_height, 253, costmap_info_.costmap_data, distance_field_.data(), px_out_.data(), py_out_.data());
-
-  ROS_DEBUG("Finishing update distance map");
-}
-
+      
 Eigen::Vector2d TebLocalPlannerROS::tfPoseToEigenVector2dTransRot(const tf::Pose& tf_vel)
 {
   Eigen::Vector2d vel;
@@ -1092,9 +675,9 @@ Eigen::Vector2d TebLocalPlannerROS::tfPoseToEigenVector2dTransRot(const tf::Pose
   return vel;
 }
       
+      
 bool TebLocalPlannerROS::pruneGlobalPlan(const tf2_ros::Buffer& tf, const geometry_msgs::PoseStamped& global_pose, std::vector<geometry_msgs::PoseStamped>& global_plan, double dist_behind_robot)
 {
-  ROS_DEBUG("Prune Global Plan");
   if (global_plan.empty())
     return true;
   
@@ -1102,7 +685,7 @@ bool TebLocalPlannerROS::pruneGlobalPlan(const tf2_ros::Buffer& tf, const geomet
   {
     // transform robot pose into the plan frame (we do not wait here, since pruning not crucial, if missed a few times)
     geometry_msgs::TransformStamped global_to_plan_transform = tf.lookupTransform(global_plan.front().header.frame_id, global_pose.header.frame_id, ros::Time(0));
-    geometry_msgs::PoseStamped robot; 
+    geometry_msgs::PoseStamped robot;
     tf2::doTransform(global_pose, robot, global_to_plan_transform);
     
     double dist_thresh_sq = dist_behind_robot*dist_behind_robot;
@@ -1134,7 +717,8 @@ bool TebLocalPlannerROS::pruneGlobalPlan(const tf2_ros::Buffer& tf, const geomet
     return false;
   }
   return true;
-}      
+}
+      
 
 bool TebLocalPlannerROS::transformGlobalPlan(const tf2_ros::Buffer& tf, const std::vector<geometry_msgs::PoseStamped>& global_plan,
                   const geometry_msgs::PoseStamped& global_pose, const costmap_2d::Costmap2D& costmap, const std::string& global_frame, double max_plan_length,
@@ -1178,8 +762,6 @@ bool TebLocalPlannerROS::transformGlobalPlan(const tf2_ros::Buffer& tf, const st
     bool robot_reached = false;
     for(int j=0; j < (int)global_plan.size(); ++j)
     {
-      ROS_DEBUG("global_plan size : %d", global_plan.size());
-
       double x_diff = robot_pose.pose.position.x - global_plan[j].pose.position.x;
       double y_diff = robot_pose.pose.position.y - global_plan[j].pose.position.y;
       double new_sq_dist = x_diff * x_diff + y_diff * y_diff;
@@ -1192,12 +774,7 @@ bool TebLocalPlannerROS::transformGlobalPlan(const tf2_ros::Buffer& tf, const st
         sq_dist = new_sq_dist;
         i = j;
         if (sq_dist < 0.05)      // 2.5 cm to the robot; take the immediate local minima; if it's not the global
-        {
-          robot_reached = true;  // minima, probably means that there's a loop in the path, and so we prefer this'
-          ROS_DEBUG("find cloest pose robot_pose : (%d, %d), global_plan : (%d, %d)", robot_pose.pose.position.x, robot_pose.pose.position.y, global_plan[j].pose.position.x, global_plan[j].pose.position.y);
-        }
-
-
+          robot_reached = true;  // minima, probably means that there's a loop in the path, and so we prefer this
       }
     }
     
@@ -1262,11 +839,13 @@ bool TebLocalPlannerROS::transformGlobalPlan(const tf2_ros::Buffer& tf, const st
 
     return false;
   }
-  
-  ROS_DEBUG("Successfully transform global plan");
+
   return true;
 }
 
+    
+      
+      
 double TebLocalPlannerROS::estimateLocalGoalOrientation(const std::vector<geometry_msgs::PoseStamped>& global_plan, const geometry_msgs::PoseStamped& local_goal,
               int current_goal_idx, const geometry_msgs::TransformStamped& tf_plan_to_global, int moving_average_length) const
 {
@@ -1359,8 +938,6 @@ void TebLocalPlannerROS::saturateVelocity(double& vx, double& vy, double& omega,
     vx *= max_vel_trans_ratio;
     vy *= max_vel_trans_ratio;
   }
-
-  //ROS_INFO("Saturate Vel :x : %lf, theta : %lf", vx, omega);
 }
      
      
@@ -1471,7 +1048,6 @@ void TebLocalPlannerROS::customObstacleCB(const costmap_converter::ObstacleArray
 void TebLocalPlannerROS::customViaPointsCB(const nav_msgs::Path::ConstPtr& via_points_msg)
 {
   ROS_INFO_ONCE("Via-points received. This message is printed once.");
-
   if (cfg_.trajectory.global_plan_viapoint_sep > 0)
   {
     ROS_WARN("Via-points are already obtained from the global plan (global_plan_viapoint_sep>0)."
@@ -1486,7 +1062,6 @@ void TebLocalPlannerROS::customViaPointsCB(const nav_msgs::Path::ConstPtr& via_p
   {
     via_points_.emplace_back(pose.pose.position.x, pose.pose.position.y);
   }
-
   custom_via_points_active_ = !via_points_.empty();
 }
      
