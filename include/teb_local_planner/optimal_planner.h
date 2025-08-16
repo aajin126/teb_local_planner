@@ -577,11 +577,6 @@ public:
   void getFullTrajectory(std::vector<TrajectoryPointMsg>& trajectory) const;
 
   double computeArcLength(const PoseSE2& p1, const PoseSE2& p2);
-  std::pair<Eigen::Vector2d, double> findPerpMedialAxis(const Eigen::Vector2d& coll_pt, const Eigen::Vector2d& p2, const Eigen::Vector2d& p3, std::ostream& log, double max_iterations = 100);
-
-  SegmentRefineResult bisectSegmentLocal(PoseSE2& p_start, PoseSE2& p_end, double dt,
-    base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
-    double inscribed_radius, double circumscribed_radius, bool is_root, int depth, std::ostream& log);
 
   std::pair<double, double> estimateTheta(const Eigen::Vector2d& p1, const Eigen::Vector2d& p2, const Eigen::Vector2d& p3);
 
@@ -607,8 +602,7 @@ public:
   const DistanceMapInfo& costmap_info);
   PoseSE2 interpolatePose(const PoseSE2& A, const PoseSE2& B, double frac);
   Eigen::Vector2d performMedialAxisClimb(const Eigen::Vector2d& start_point, const std::vector<float>& distance_field, unsigned int map_width, unsigned int map_height, double resolution, double origin_x, double origin_y);
-  std::pair<Eigen::Vector2d, double> findPenetration(const Eigen::Vector2d& coll_pt, const Eigen::Vector2d& p2, const Eigen::Vector2d& p3,std::ostream& log,double max_iterations= 100);
-  std::pair<Eigen::Vector2d, double> findMedialAxisFromPenetration(const Eigen::Vector2d& coll_pt, const Eigen::Vector2d& p2, const Eigen::Vector2d& p3, std::ostream& log, double max_iterations= 100);
+
   double distanceFieldAt(double wx, double wy) const;
   double distanceFieldAtGrid(double wx, double wy) const;
   double euclideanDistance(const PoseSE2& p1, const PoseSE2& p2);
@@ -634,7 +628,7 @@ public:
   Eigen::Vector2d estimateNormal(const Eigen::Vector2d& pt);
   std::vector<Eigen::Vector2i> bresenhamLineWorld(const Eigen::Vector2d& from, const Eigen::Vector2d& to);
   std::pair<int, double> climbLocalMax(const std::vector<Eigen::Vector2i>& line, double max_dist, double max_iterations = 100);
-  std::tuple<Eigen::Vector2d, double, double> findModifiedPose(const Eigen::Vector2d& coll_pt, const Eigen::Vector2d& p2, const Eigen::Vector2d& p3, std::ostream& log, double max_iterations= 100);
+  std::tuple<Eigen::Vector2d, double, double> findModifiedPose(const Eigen::Vector2d& coll_pt, const Eigen::Vector2d& p2, const Eigen::Vector2d& p3, double max_iterations= 100);
 
   void optimizeOrientations(const std::vector<Pose2D>& positions, std::vector<double>& thetas);
   bool violatesArcConstraint(const PoseSE2& sk, const PoseSE2& sk1);

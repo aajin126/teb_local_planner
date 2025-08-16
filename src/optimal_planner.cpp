@@ -1597,154 +1597,6 @@ Eigen::Vector2d TebOptimalPlanner::getModifiedPosition(const Eigen::Vector2d pos
   return new_nearest;
 }
 
-std::pair<Eigen::Vector2d, double> TebOptimalPlanner::findPerpMedialAxis(const Eigen::Vector2d& coll_pt,const Eigen::Vector2d& p2, const Eigen::Vector2d& p3, std::ostream& log, double max_iterations)
-{
-    const auto& df   = *distance_field_;
-    const auto& info = *costmap_info_;
-
-    // 1) Compute perpendicular direction n
-    Eigen::Vector2d d = p3 - p2;
-    Eigen::Vector2d n(d.y(), -d.x());
-    if (n.norm() < 1e-6) {
-      double v = distanceFieldAt(coll_pt.x(), coll_pt.y()) ;
-      return { coll_pt, v };
-    }
-    n.normalize();
-    const double max_dist   = 0.4;
-
-    // 3) Bresenham helper unchanged
-    auto bresenhamLine = [&](int x0, int y0, int x1, int y1){
-      std::vector<Eigen::Vector2i> cells;
-      int dx =  std::abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
-      int dy = -std::abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
-      int err = dx + dy;
-      int x = x0, y = y0;
-      while (true) {
-        cells.emplace_back(x, y);
-        if (x == x1 && y == y1) break;
-        int e2 = 2 * err;
-        if (e2 >= dy) { err += dy; x += sx; }
-        if (e2 <= dx) { err += dx; y += sy; }
-      }
-      return cells;
-    };
-
-    // 4) Define endpoint at physical distance max_dist
-    int cx = int((coll_pt.x() - info.origin_x) / info.resolution);
-    int cy = int((coll_pt.y() - info.origin_y) / info.resolution);
-
-    // 4.1) Compute world coordinates of endpoint at max_dist
-    Eigen::Vector2d end_pt = coll_pt + n * max_dist;
-
-    // 4.2) Convert endpoint to grid indices
-    int ex = int((end_pt.x() - info.origin_x) / info.resolution);
-    int ey = int((end_pt.y() - info.origin_y) / info.resolution);
-
-    // 4.4) Generate Bresenham lines in ± directions
-    auto plusLine  = bresenhamLine(cx, cy, ex, ey);
-    //visualization_->visualizeEndPoints(p2, p3);
-
-    int mx = cx - (ex - cx);
-    int my = cy - (ey - cy);
-    auto minusLine = bresenhamLine(cx, cy, mx, my);
-    Eigen::Vector2d minus_pt(info.origin_x + (mx + 0.5) * info.resolution, info.origin_y + (my + 0.5) * info.resolution);
-    //visualization_->visualizeLine({minus_pt.x(),minus_pt.y()}, {end_pt.x(),end_pt.y()});
-
-    // 5) Perform 1D hill-climbing along the line in both directions
-//    auto climbOnLine = [&](const std::vector<Eigen::Vector2i>& line) {
-//      int cur = 0;
-//      double cur_val = df[line[cur].x() + line[cur].y() * info.map_width]*info.resolution;
-//      for (int it = 0; it < max_iterations; ++it) {
-//        int nxt = cur + 1;
-//        if (nxt >= (int)line.size()) break;
-//        double nxt_val = df[line[nxt].x() + line[nxt].y() * info.map_width]*info.resolution;
-//        if (nxt_val >= max_dist) {
-//          cur = nxt; cur_val = nxt_val;
-//          break;
-//        }
-//        if (nxt_val > cur_val) {
-//          cur = nxt; cur_val = nxt_val;
-//        } else {
-//          break;
-//        }
-//      }
-//      return std::make_pair(cur, cur_val);
-//    };
-
-    auto climbOnLine = [&](const std::vector<Eigen::Vector2i>& line) {
-      int best_idx = 0;
-      double best_val = df[line[0].x() + line[0].y() * info.map_width] * info.resolution;
-      for (size_t i = 1; i < line.size(); ++i)
-      {
-          double val = df[line[i].x() + line[i].y() * info.map_width] * info.resolution;
-          if (val > best_val)
-          {
-              best_val = val;
-              best_idx = i;
-              if (val >= max_dist)
-                  break;
-          }
-      }
-      return std::make_pair(best_idx, best_val);
-    };
-
-    auto pos = climbOnLine(plusLine);
-    auto neg = climbOnLine(minusLine);
-
-    // 6) Choose local maxima
-    const auto& chosenLine = (pos.second > neg.second) ? plusLine  : minusLine;
-    const auto& chosenRes  = (pos.second > neg.second) ? pos.second : neg.second;
-    int chosenIdx = (pos.second > neg.second) ? pos.first  : neg.first;
-
-    // 7) Convert the chosen cell back to world coordinates
-    Eigen::Vector2i bc = chosenLine[chosenIdx];
-    Eigen::Vector2d best_pt( info.origin_x + (bc.x() + 0.5) * info.resolution, info.origin_y + (bc.y() + 0.5) * info.resolution);
-
-  //  log << "[Plus Line Distances]\n";
-  //  for (size_t i = 0; i < plusLine.size(); ++i)
-  //  {
-  //    const auto& cell = plusLine[i];
-  //    double val = df[cell.x() + cell.y() * info.map_width] * info.resolution;
-  //    double wx = info.origin_x + (cell.x() + 0.5) * info.resolution;
-  //    double wy = info.origin_y + (cell.y() + 0.5) * info.resolution;
-  //    log << "  idx " << i << ": (" << wx << ", " << wy << ") → dist = " << val << "\n";
-  //  }
-
-   // Log all distance values along minusLine
-  //  log << "[Minus Line Distances]\n";
-  //  for (size_t i = 0; i < minusLine.size(); ++i)
-  //  {
-  //    const auto& cell = minusLine[i];
-  //    double val = df[cell.x() + cell.y() * info.map_width] * info.resolution;
-  //    double wx = info.origin_x + (cell.x() + 0.5) * info.resolution;
-  //    double wy = info.origin_y + (cell.y() + 0.5) * info.resolution;
-  //    log << "  idx " << i << ": (" << wx << ", " << wy << ") → dist = " << val << "\n";
-  //  }
-
-   // Log the chosen result
-  //  std::string chosenDir = (pos.second > neg.second) ? "PLUS" : "MINUS";
-  //  log << "[Chosen Point]\n";
-  //  log << "  Direction: " << chosenDir << "\n";
-  //  log << "  Index: " << chosenIdx << "\n";
-  //  log << "  World Coord: (" << best_pt.x() << ", " << best_pt.y() << ")\n";
-  //  log << "  Distance: " << chosenRes << "\n";
-
-    //visualization_->visualizeEndPoints(p2, p3);
-    //visualization_->visualizetwoPoint({best_pt.x(),best_pt.y()}, {coll_pt.x(),coll_pt.y()});
-    // std_msgs::ColorRGBA green;
-    // green.r = 0.0;
-    // green.g = 1.0;
-    // green.b = 0.0;
-    // green.a = 1.0;
-    //visualization_->publishArrow(coll_pt, best_pt, green);
-    //std::cin.get();
-    //visualization_->visualizeMedialPoint(best_pt, chosenRes);
-  //  log << "findPerpMedialAxis → (" << best_pt.x() << ", " << best_pt.y()
-  //      << "), dist=" << chosenRes << "\n";
-
-    return { best_pt, chosenRes };
-}
-
 
 // 1. Compute closest boundary
 Eigen::Vector2d TebOptimalPlanner::getBoundaryPointFromCollision(const Eigen::Vector2d& pt)
@@ -1847,7 +1699,7 @@ std::pair<int, double> TebOptimalPlanner::climbLocalMax(const std::vector<Eigen:
 }
 
 
-std::tuple<Eigen::Vector2d, double, double> TebOptimalPlanner::findModifiedPose(const Eigen::Vector2d& coll_pt, const Eigen::Vector2d& p2, const Eigen::Vector2d& p3, std::ostream& log, double max_iterations)
+std::tuple<Eigen::Vector2d, double, double> TebOptimalPlanner::findModifiedPose(const Eigen::Vector2d& coll_pt, const Eigen::Vector2d& p2, const Eigen::Vector2d& p3, double max_iterations)
 {
     const auto& info = *costmap_info_;
     const auto& df = *distance_field_;
@@ -2276,7 +2128,7 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
   const auto& info = *costmap_info_;
   const auto& df   = *distance_field_;
   safe_points_.clear();
-  std::ofstream outFile("/home/glab/bisection_log.txt", std::ios::app);
+  //std::ofstream outFile("/home/glab/bisection_log.txt", std::ios::app);
   // for (size_t idx = 0; idx < teb().sizePoses(); ++idx)
   // {
   //   if (outFile.is_open())
@@ -2329,7 +2181,7 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
     double dist = distanceFieldAt(teb().Pose(i).x(), teb().Pose(i).y());
     if (c == -1){
       visualization_->publishInfeasibleRobotPose(teb().Pose(i), *cfg_->robot_model, footprint_spec);
-      auto [mp, r, index] = findModifiedPose(Eigen::Vector2d(p.x(), p.y()), Eigen::Vector2d(teb().Pose(i-1).x(), teb().Pose(i-1).y()) , Eigen::Vector2d(p.x(), p.y()), outFile);
+      auto [mp, r, index] = findModifiedPose(Eigen::Vector2d(p.x(), p.y()), Eigen::Vector2d(teb().Pose(i-1).x(), teb().Pose(i-1).y()) , Eigen::Vector2d(p.x(), p.y()));
 
       //Modify Pose
       teb().Pose(i).x() = mp.x();
@@ -2474,7 +2326,7 @@ bool TebOptimalPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* c
 
       if (distanceFieldAt(pm.x(), pm.y()) < min_dist_thresh) 
       {
-        auto [mp, r, index] = findModifiedPose( Eigen::Vector2d(pm.x(), pm.y()), Eigen::Vector2d(start.x(), start.y()), Eigen::Vector2d(end.x(), end.y()), outFile);
+        auto [mp, r, index] = findModifiedPose( Eigen::Vector2d(pm.x(), pm.y()), Eigen::Vector2d(start.x(), start.y()), Eigen::Vector2d(end.x(), end.y()));
 
         if (index >= 0) { 
           auto it = std::find(idx_hist.begin(), idx_hist.end(), index);
