@@ -187,6 +187,7 @@ void TebLocalPlannerROS::initialize(std::string name, tf2_ros::Buffer* tf, costm
     nh_move_base.param("controller_frequency", controller_frequency, controller_frequency);
     failure_detector_.setBufferLength(std::round(cfg_.recovery.oscillation_filter_duration*controller_frequency));
 
+    private_nh_ = ros::NodeHandle("~/" + name);
     private_nh_.getParam("log_filename", log_filename_);
     
     // set initialized flag
@@ -1242,5 +1243,4 @@ double TebLocalPlannerROS::getNumberFromXMLRPC(XmlRpc::XmlRpcValue& value, const
 }
 
 } // end namespace teb_local_planner
-
 
