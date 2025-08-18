@@ -438,6 +438,8 @@ private:
   // external objects (store weak pointers)
   costmap_2d::Costmap2DROS* costmap_ros_; //!< Pointer to the costmap ros wrapper, received from the navigation stack
   costmap_2d::Costmap2D* costmap_; //!< Pointer to the 2d costmap (obtained from the costmap ros wrapper)
+  bool first_plan_locked_ = false;
+  std::vector<geometry_msgs::PoseStamped> first_plan_;
 
   // Create an instance of NarrowPassageDetector
   double thre = 0.6;  // 임계값 설정
