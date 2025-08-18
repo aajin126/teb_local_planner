@@ -205,26 +205,24 @@ void TebLocalPlannerROS::initialize(std::string name, tf2_ros::Buffer* tf, costm
 
 bool TebLocalPlannerROS::setPlan(const std::vector<geometry_msgs::PoseStamped>& orig_global_plan)
 {
-  // check if plugin is initialized
-  if(!initialized_)
-  {
+  if (!initialized_) {
     ROS_ERROR("teb_local_planner has not been initialized, please call initialize() before using this planner");
     return false;
   }
 
-  // store the global plan
-  global_plan_.clear();
-  global_plan_ = orig_global_plan;
+  // 처음 들어온 plan만 고정
+  if (!first_plan_locked_) {
+    first_plan_ = orig_global_plan;
+    first_plan_locked_ = true;
+  }
 
-  // we do not clear the local planner here, since setPlan is called frequently whenever the global planner updates the plan.
-  // the local planner checks whether it is required to reinitialize the trajectory or not within each velocity computation step.  
-            
-  // reset goal_reached_ flag
+  // 항상 고정본을 사용
+  global_plan_.clear();
+  global_plan_ = first_plan_;
+
   goal_reached_ = false;
-  
   return true;
 }
-
 
 bool TebLocalPlannerROS::computeVelocityCommands(geometry_msgs::Twist& cmd_vel)
 {
@@ -492,6 +490,8 @@ bool TebLocalPlannerROS::isGoalReached()
 {
   if (goal_reached_)
   {
+    first_plan_locked_ = false;
+    first_plan_.clear();
     ROS_INFO("GOAL Reached!");
     planner_->clearPlanner();
     return true;
